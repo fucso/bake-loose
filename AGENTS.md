@@ -47,9 +47,11 @@
   - 不定形な調理パラメーターを格納するためのJSONB型を積極的に活用
 
 #### フロントエンド
-- Next.js (React) / TypeScript
-  - Web開発のデファクトスタンダード
-  - モバイルPWAによるネイティブ体験の実現
+- Vite + React / TypeScript
+  - 高速な開発体験とシンプルな構成
+  - React Router によるクライアントサイドルーティング
+  - Apollo Client または urql による GraphQL 連携
+  - モバイルPWAによるネイティブ体験の実現 (Workbox)
 - UI/UX
   - Tailwind CSS / shadcn/ui
   - 迅速なUI構築とモダンなデザインキャッチアップ
@@ -142,7 +144,7 @@
 #### D. データフローの例
 
 ユーザーが新しい試行を記録する場合の流れ:
-1. フロントエンド(Next.js)がGraphQL mutationを送信
+1. フロントエンド(React SPA)がGraphQL mutationを送信
 2. GraphQLリゾルバーがRecordTrialUseCaseを呼び出す
 3. ユースケースがTrial::record_trialアクションを実行
 4. バリデーション成功後TrialRepositoryで永続化
