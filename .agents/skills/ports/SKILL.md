@@ -347,7 +347,88 @@ pub trait UnitOfWork: Send + Sync {
 - トランザクション境界の**決定**は use_case 層の責務
 - ただし use_case 層が DB 固有の知識を持つことは避けるため、トランザクション操作は ports 層のトレイト経由で抽象化する
 - 個々のリポジトリトレイトにトランザクション操作を含めない
-- 必要な場合は UnitOfWork などの専用トレイトを ports 層で定義
+- UnitOfWork トレイトを ports 層で定義する（次のセクション参照）
+
+---
+
+## UnitOfWork パターン
+
+### トランザクション境界の抽象化
+
+複数リポジトリを跨ぐトランザクション管理には **UnitOfWork パターン** を採用する。
+UnitOfWork トレイトは **ports 層で定義** し、**repository 層で実装** する。
+
+```
+use_case 層: UnitOfWork を引数として受け取り、トランザクション境界を決定
+    ↓
+ports 層: UnitOfWork トレイトを定義（抽象）
+    ↓
+repository 層: UnitOfWork トレイトを実装（具体）
+```
+
+### トレイト定義
+
+```rust
+// backend/src/ports/unit_of_work.rs
+
+use async_trait::async_trait;
+use crate::ports::error::RepositoryError;
+use crate::ports::project_repository::ProjectRepository;
+use crate::ports::trial_repository::TrialRepository;
+use crate::ports::feedback_repository::FeedbackRepository;
+
+/// トランザクション境界を管理するトレイト
+#[async_trait]
+pub trait UnitOfWork: Send + Sync {
+    type ProjectRepo: ProjectRepository;
+    type TrialRepo: TrialRepository;
+    type FeedbackRepo: FeedbackRepository;
+
+    /// プロジェクトリポジトリを取得
+    fn project_repository(&mut self) -> &mut Self::ProjectRepo;
+
+    /// 試行リポジトリを取得
+    fn trial_repository(&mut self) -> &mut Self::TrialRepo;
+
+    /// フィードバックリポジトリを取得
+    fn feedback_repository(&mut self) -> &mut Self::FeedbackRepo;
+
+    /// トランザクションをコミット
+    async fn commit(&mut self) -> Result<(), RepositoryError>;
+
+    /// トランザクションをロールバック（明示的に呼び出す場合）
+    async fn rollback(&mut self) -> Result<(), RepositoryError>;
+}
+```
+
+### 設計のポイント
+
+| 項目 | 説明 |
+|------|------|
+| Associated Type | 各リポジトリの具体型を実装側（repository層）で決定 |
+| `&mut self` | トランザクション状態の変更を許可 |
+| `commit` / `rollback` | 明示的なトランザクション制御 |
+| `begin` なし | UnitOfWork 生成時にトランザクション開始済みとする |
+
+### ファイル配置
+
+```
+backend/src/ports/
+├── project_repository.rs
+├── trial_repository.rs
+├── feedback_repository.rs
+├── unit_of_work.rs          # UnitOfWork トレイト
+└── error.rs
+```
+
+### UnitOfWork を使う理由
+
+| 観点 | メリット |
+|------|---------|
+| 一貫性 | 複数リポジトリの操作を1トランザクションで管理 |
+| 明確性 | トランザクション境界がコード上で明確 |
+| テスト容易性 | モック化してトランザクション動作を検証可能 |
+| 責務分離 | use_case層はフロー制御、UnitOfWork はトランザクション管理 |
 
 ---
 

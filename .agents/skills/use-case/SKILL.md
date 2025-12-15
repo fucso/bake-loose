@@ -139,32 +139,11 @@ pub async fn execute<U: UnitOfWork>(
 ### UnitOfWork パターン
 
 トランザクション管理には **UnitOfWork パターン** を採用する。
+UnitOfWork トレイトは **ports 層で定義** されている（詳細は [ports/SKILL.md](../ports/SKILL.md#unitofwork-パターン) を参照）。
 
 ```rust
-// ports/unit_of_work.rs
-
-/// トランザクション境界を管理するトレイト
-#[async_trait]
-pub trait UnitOfWork: Send + Sync {
-    type ProjectRepo: ProjectRepository;
-    type TrialRepo: TrialRepository;
-    type FeedbackRepo: FeedbackRepository;
-
-    /// プロジェクトリポジトリを取得
-    fn project_repository(&mut self) -> &mut Self::ProjectRepo;
-
-    /// 試行リポジトリを取得
-    fn trial_repository(&mut self) -> &mut Self::TrialRepo;
-
-    /// フィードバックリポジトリを取得
-    fn feedback_repository(&mut self) -> &mut Self::FeedbackRepo;
-
-    /// トランザクションをコミット
-    async fn commit(&mut self) -> Result<(), RepositoryError>;
-
-    /// トランザクションをロールバック（明示的に呼び出す場合）
-    async fn rollback(&mut self) -> Result<(), RepositoryError>;
-}
+// ports 層で定義されたトレイトを使用
+use crate::ports::unit_of_work::UnitOfWork;
 ```
 
 **UnitOfWork を使う理由:**

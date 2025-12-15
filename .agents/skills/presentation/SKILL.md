@@ -90,7 +90,7 @@ pub fn build_schema(/* 依存性 */) -> AppSchema {
 ```rust
 // backend/src/presentation/graphql/types/project.rs
 
-use async_graphql::{Object, SimpleObject, ID};
+use async_graphql::{Object, Enum, ID};
 use crate::domain::models::project::{Project as DomainProject, ProjectStatus as DomainStatus};
 
 /// GraphQL の Project 型
@@ -122,7 +122,7 @@ impl Project {
 }
 
 /// GraphQL の ProjectStatus 列挙型
-#[derive(SimpleObject, Clone, Copy)]
+#[derive(Enum, Clone, Copy, Eq, PartialEq)]
 pub enum ProjectStatus {
     Active,
     Archived,

@@ -243,15 +243,30 @@ impl ProjectRepository for PgProjectRepository {
 
 ### リポジトリエラー
 
-リポジトリ層のエラーは ports 層で定義された `RepositoryError` を使用する：
+リポジトリ層のエラーは **ports 層で定義された `RepositoryError` をそのまま使用する**（再定義しない）：
 
 ```rust
-// ports 層で定義（repository 層で使用）
-#[derive(Debug, Clone)]
+// ports 層の定義を使用
+use crate::ports::error::RepositoryError;
+```
+
+ports 層での定義（参照）:
+
+```rust
+/// リポジトリ操作で発生するエラー
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RepositoryError {
-    NotFound,
-    Database(String),
-    Serialization(String),
+    /// データが見つからない（期待していた場合）
+    NotFound { entity: String, id: String },
+
+    /// 一意性制約違反（重複）
+    Conflict { entity: String, field: String },
+
+    /// 接続エラー
+    Connection,
+
+    /// その他の内部エラー
+    Internal { message: String },
 }
 ```
 
@@ -261,8 +276,16 @@ pub enum RepositoryError {
 impl From<sqlx::Error> for RepositoryError {
     fn from(e: sqlx::Error) -> Self {
         match e {
-            sqlx::Error::RowNotFound => RepositoryError::NotFound,
-            _ => RepositoryError::Database(e.to_string()),
+            sqlx::Error::RowNotFound => RepositoryError::NotFound {
+                entity: "unknown".to_string(),
+                id: "unknown".to_string(),
+            },
+            sqlx::Error::PoolTimedOut | sqlx::Error::PoolClosed => {
+                RepositoryError::Connection
+            }
+            _ => RepositoryError::Internal {
+                message: e.to_string(),
+            },
         }
     }
 }
