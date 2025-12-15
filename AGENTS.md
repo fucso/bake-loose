@@ -213,3 +213,65 @@ flowchart LR
 5. 結果をGraphQL経由でフロントエンドに返す
 
 この多層構造によりドメインロジックを中心に据えつつ各層の責務を明確に分離したアプリケーションを構築する
+
+---
+
+### 4. データベースマイグレーション
+
+#### ディレクトリ構成
+
+```
+backend/migrations/
+├── 20240101000000_create_projects.sql
+├── 20240101000001_create_trials.sql
+└── 20240101000002_create_feedbacks.sql
+```
+
+#### ファイル命名規則
+
+`{タイムスタンプ}_{操作}_{対象}.sql` の形式を使用する。
+
+| 操作 | 例 |
+|------|-----|
+| create | `create_projects.sql` |
+| add | `add_column_to_projects.sql` |
+| drop | `drop_unused_column.sql` |
+| alter | `alter_trials_parameters.sql` |
+
+#### マイグレーションファイル例
+
+```sql
+-- 20240101000000_create_projects.sql
+
+CREATE TABLE projects (
+    id UUID PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    goal TEXT,
+    status VARCHAR(20) NOT NULL DEFAULT 'Active',
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_projects_status ON projects(status);
+CREATE UNIQUE INDEX idx_projects_name ON projects(name);
+```
+
+#### SQLx CLI コマンド
+
+```bash
+# マイグレーション作成
+sqlx migrate add <migration_name>
+
+# マイグレーション実行
+sqlx migrate run
+
+# マイグレーション状態確認
+sqlx migrate info
+```
+
+#### 注意事項
+
+- マイグレーションファイルは一度適用したら変更しない
+- 変更が必要な場合は新しいマイグレーションファイルを作成する
+- 本番環境に適用する前に必ずローカルでテストする

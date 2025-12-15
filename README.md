@@ -209,3 +209,34 @@ flowchart LR
 ```
 
 詳細は [AGENTS.md](./AGENTS.md) を参照。
+
+## データベースマイグレーション
+
+### ディレクトリ構成
+
+```
+backend/migrations/
+├── 20240101000000_create_projects.sql
+├── 20240101000001_create_trials.sql
+└── 20240101000002_create_feedbacks.sql
+```
+
+### SQLx CLI コマンド
+
+```bash
+# マイグレーション作成
+sqlx migrate add <migration_name>
+
+# マイグレーション実行
+sqlx migrate run
+
+# マイグレーション状態確認
+sqlx migrate info
+```
+
+### Docker 環境での実行
+
+```bash
+# コンテナ内でマイグレーション実行
+docker compose exec backend sqlx migrate run
+```
