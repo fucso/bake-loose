@@ -1,3 +1,5 @@
+mod infrastructure;
+
 use axum::{
     routing::get,
     Json, Router,
