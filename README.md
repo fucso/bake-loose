@@ -71,19 +71,24 @@ docker compose up --build
 
 ```
 bake-loose/
-├── compose.yaml          # Docker Compose 設定
+├── compose.yaml
 ├── backend/
-│   ├── Dockerfile        # Rust 開発環境
+│   ├── Dockerfile
 │   ├── Cargo.toml
 │   └── src/
-│       └── main.rs       # Axum サーバー
+│       ├── main.rs
+│       ├── lib.rs
+│       ├── domain/           # モデル・アクション（純粋）
+│       ├── use_case/         # ビジネスフロー
+│       ├── ports/            # リポジトリトレイト
+│       ├── repository/       # ports実装（SQL・スキーマ）
+│       ├── infrastructure/   # DB接続
+│       └── presentation/     # GraphQL
 └── frontend/
-    ├── Dockerfile        # Node.js 開発環境
+    ├── Dockerfile
     ├── package.json
-    ├── vite.config.ts
     └── src/
-        ├── main.tsx
-        └── App.tsx
+        └── ...
 ```
 
 ### 開発サーバーの起動
@@ -170,20 +175,37 @@ docker compose exec frontend pnpm lint
 
 ## アーキテクチャ
 
-ドメインモデルとそのアクション(振る舞い)を最重要なリソースと定義したアーキテクチャを採用。
+ドメインモデルを中心に据え、外側のレイヤーに依存しない設計を採用。
 
 ### レイヤー構成
 
-```
-┌─────────────────────────────────────┐
-│  Presentation (GraphQL Resolvers)   │
-├─────────────────────────────────────┤
-│  Use Case (Application Services)    │
-├─────────────────────────────────────┤
-│  Domain (Models & Actions)          │
-├─────────────────────────────────────┤
-│  Infrastructure (Repositories)      │
-└─────────────────────────────────────┘
+| 層 | 責務 |
+|----|------|
+| **presentation** | GraphQLリゾルバー |
+| **use_case** | ビジネスフローのオーケストレーション |
+| **ports** | リポジトリトレイト（境界の抽象化） |
+| **repository** | portsの実装（SQL・スキーマ） |
+| **infrastructure** | DB接続など純粋な技術機能 |
+| **domain** | モデルとアクション（純粋なビジネスロジック） |
+
+### 呼び出しの流れ（実行時）
+
+```mermaid
+flowchart LR
+    presentation --> use_case --> ports --> repository --> infrastructure
+    use_case --> domain
 ```
 
-ドメイン層を中心に据え、外側のレイヤーに依存しない設計を採用しています。
+### 依存の方向（コンパイル時）
+
+```mermaid
+flowchart LR
+    presentation --> use_case
+    use_case --> ports
+    use_case --> domain
+    ports --> domain
+    repository --> infrastructure
+    repository --> ports
+```
+
+詳細は [AGENTS.md](./AGENTS.md) を参照。

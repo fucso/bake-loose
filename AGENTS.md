@@ -127,21 +127,83 @@
     - 成功ならTrialRepositoryで永続化しProjectに紐づける
     - 必要に応じて他の集約への影響を処理
 
-#### C. プレゼンテーション層とインフラ層
+#### C. 各層の責務
 
-- プレゼンテーション層(GraphQL)
-  - ユースケースを呼び出す薄い層として実装
-  - リゾルバーはユースケースを呼び出すだけ
-  - 階層的データ構造(Project → Trial → Feedback)を効率的に取得
-  - 入力のバリデーションとエラーハンドリング
+| 層 | ディレクトリ | 責務 |
+|----|-------------|------|
+| **presentation** | `src/presentation/` | GraphQLリゾルバー。ユースケースを呼び出す薄い層 |
+| **use_case** | `src/use_case/` | ビジネスフローのオーケストレーション |
+| **ports** | `src/ports/` | リポジトリのトレイト定義（境界の抽象化） |
+| **repository** | `src/repository/` | portsの実装。DBスキーマ・SQL・変換ロジック |
+| **infrastructure** | `src/infrastructure/` | DB接続など純粋な技術機能 |
+| **domain** | `src/domain/` | モデルとアクション（純粋なビジネスロジック） |
 
-- インフラ層(リポジトリ)
-  - 集約ごとにリポジトリ(ProjectRepository, TrialRepository, FeedbackRepository)を定義
-  - ドメインモデルとDB層の変換ロジックを隠蔽
-  - PostgreSQLのJSONB型を活用して不定形パラメーターを柔軟に格納
-  - RustのSQLxでコンパイル時にSQLの型チェック
+#### D. バックエンドディレクトリ構成
 
-#### D. データフローの例
+```
+backend/src/
+├── main.rs
+├── lib.rs
+│
+├── domain/
+│   ├── models/
+│   │   ├── project.rs
+│   │   └── ...
+│   └── actions/
+│       └── ...
+│
+├── use_case/
+│   ├── project/
+│   │   ├── create_project.rs
+│   │   └── ...
+│   └── ...
+│
+├── ports/
+│   ├── project_repository.rs
+│   └── ...
+│
+├── repository/
+│   ├── project_repo.rs
+│   └── ...
+│
+├── infrastructure/
+│   └── database.rs
+│
+└── presentation/
+    └── graphql/
+        ├── schema.rs
+        └── ...
+```
+
+#### E. 呼び出しの流れ（実行時）
+
+```mermaid
+flowchart LR
+    A[presentation] --> B[use_case]
+    B --> C[ports]
+    C --> D[repository]
+    D --> E[infrastructure]
+    B --> F[domain]
+```
+
+#### F. 依存の方向（コンパイル時）
+
+```mermaid
+flowchart LR
+    presentation --> use_case
+    use_case --> ports
+    use_case --> domain
+    ports --> domain
+    repository --> infrastructure
+    repository --> ports
+```
+
+**ポイント:**
+- `domain` は何にも依存しない（最内側）
+- `ports` はトレイト定義、`repository` がその実装
+- `use_case` は `ports` 経由で永続化（具体実装を知らない）
+
+#### G. データフローの例
 
 ユーザーが新しい試行を記録する場合の流れ:
 1. フロントエンド(React SPA)がGraphQL mutationを送信
