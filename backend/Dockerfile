@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
 
 # 開発用ツール
 RUN cargo install cargo-watch
+RUN cargo install sqlx-cli --no-default-features --features postgres
 
 # ソースコードはボリュームマウントされる
 # ホットリロードで起動
