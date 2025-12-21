@@ -35,16 +35,16 @@ argument-hint: [task spec path]
 
 ### 2. 関連ドキュメントの参照
 
-タスクの対象レイヤーに応じて、対応するスキルドキュメントを参照する:
+タスクの対象レイヤーに応じて、対応するコーディングルールを参照する:
 
-| 対象レイヤー | 参照するスキル |
+| 対象レイヤー | 参照するルール |
 |--------------|----------------|
-| domain | `.claude/skills/domain/SKILL.md` |
-| ports | `.claude/skills/ports/SKILL.md` |
-| use_case | `.claude/skills/use-case/SKILL.md` |
-| repository | `.claude/skills/repository/SKILL.md` |
-| infrastructure | `.claude/skills/infrastructure/SKILL.md` |
-| presentation | `.claude/skills/presentation/SKILL.md` |
+| domain | `.claude/rules/domain.md` |
+| ports | `.claude/rules/ports.md` |
+| use_case | `.claude/rules/use-case.md` |
+| repository | `.claude/rules/repository.md` |
+| infrastructure | `.claude/rules/infrastructure.md` |
+| presentation | `.claude/rules/presentation.md` |
 
 ### 3. Feature 仕様の確認
 
@@ -149,6 +149,68 @@ argument-hint: [task spec path]
 ### 次のタスク
 {依存関係から次に実装すべきタスクがあれば提示}
 ```
+
+### Phase 5: 完了レポートの出力
+
+実装完了後、タスクディレクトリ配下に `report.md` を作成する。
+このレポートは次のタスクへの引き継ぎ情報として活用される。
+
+**出力先**: `.agents/features/{feature-id}/tasks/{task-name}/report.md`
+
+**レポートテンプレート**:
+
+```markdown
+# Task Report: {タスク名}
+
+> 実施日時: {YYYY-MM-DD HH:MM}
+> 依存タスク: {依存タスク名（あれば）}
+
+## 実施内容
+
+### 変更ファイル
+
+| ファイル | 操作 | 概要 |
+|----------|------|------|
+| {パス} | 新規/修正 | {概要} |
+
+## ビルド・テスト結果
+
+### cargo check
+
+```
+{cargo check の出力（警告含む）}
+```
+
+### cargo test（実施した場合）
+
+```
+{cargo test の出力}
+```
+
+## エビデンス
+
+{マイグレーション結果、API レスポンス、DB クエリ結果など、
+タスクの成果を示す実行結果を記載}
+
+## 先送り事項
+
+{現時点で解決していない警告やTODO、後続タスクで対応すべき事項}
+
+例:
+- [ ] `create_pool` 関数が未使用（09-integration で使用予定）
+- [ ] エラーハンドリングの改善（別タスクで対応）
+
+## 次タスクへの申し送り
+
+{後続タスクの実装者が知っておくべき情報}
+```
+
+**レポート作成のポイント**:
+
+1. **エビデンスは具体的に**: SQLの実行結果、テーブル構造、APIレスポンスなど、タスク完了を証明できる情報を記載
+2. **警告は明示的に**: コンパイル警告や lint 警告は省略せずに記載し、後続タスクで解消予定かどうかを明記
+3. **先送り事項は理由付き**: なぜ今対応しないのか、いつ対応予定かを記載
+4. **次タスクへの配慮**: 後続タスク実装者が混乱しないよう、現状の制約や注意点を伝える
 
 ---
 
