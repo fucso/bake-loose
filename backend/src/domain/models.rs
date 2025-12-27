@@ -1,0 +1,3 @@
+//! ドメインモデル
+
+pub mod project;

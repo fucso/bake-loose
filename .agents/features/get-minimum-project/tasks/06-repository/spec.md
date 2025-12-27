@@ -36,7 +36,8 @@ SQLx の `FromRow` を使用してクエリ結果をマッピングする構造�
 ### ドメインモデルへの変換
 
 `From<ProjectRow> for Project` を実装:
-- `Project::reconstruct()` を使用して復元
+- `Project::from_raw()` を使用して構築
+- 例: `Project::from_raw(ProjectId(row.id), row.name)`
 
 ### PgProjectRepository
 
