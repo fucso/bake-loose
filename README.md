@@ -240,3 +240,25 @@ sqlx migrate info
 # コンテナ内でマイグレーション実行
 docker compose exec backend sqlx migrate run
 ```
+
+## テスト
+
+### テスト用データベース
+
+テストは開発用DBとは別の `bakeloose_test` データベースを使用します。テスト用DBは `docker compose up` 時に自動作成されます。
+
+#### テスト用DBにマイグレーションを実行
+
+```bash
+docker compose exec backend bash -c "DATABASE_URL=\$TEST_DATABASE_URL sqlx migrate run"
+```
+
+### テストの実行
+
+```bash
+# 全テスト実行
+docker compose exec backend cargo test
+
+# 特定のテストを実行
+docker compose exec backend cargo test repository::project_repo::tests
+```

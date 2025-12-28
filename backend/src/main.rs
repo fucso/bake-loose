@@ -1,6 +1,7 @@
 mod domain;
 mod infrastructure;
 mod ports;
+mod repository;
 
 use axum::{
     routing::get,
