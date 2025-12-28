@@ -5,7 +5,7 @@ use sqlx::PgPool;
 
 use crate::domain::models::project::{Project, ProjectId};
 use crate::ports::error::RepositoryError;
-use crate::ports::project_repository::ProjectRepository;
+use crate::ports::project_repository::{ProjectRepository, ProjectSort};
 
 use super::models::ProjectRow;
 
@@ -34,8 +34,11 @@ impl ProjectRepository for PgProjectRepository {
             })
     }
 
-    async fn find_all(&self) -> Result<Vec<Project>, RepositoryError> {
-        sqlx::query_as::<_, ProjectRow>("SELECT * FROM projects ORDER BY created_at DESC")
+    async fn find_all(&self, sort: ProjectSort) -> Result<Vec<Project>, RepositoryError> {
+        // カラム名は enum から取得するので SQL インジェクションの心配なし
+        let query = format!("SELECT * FROM projects {}", sort.to_order_by_clause());
+
+        sqlx::query_as::<_, ProjectRow>(&query)
             .fetch_all(&self.pool)
             .await
             .map(|rows| rows.into_iter().map(Project::from).collect())
@@ -48,6 +51,7 @@ impl ProjectRepository for PgProjectRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ports::{ProjectSortColumn, SortDirection};
     use sqlx::PgPool;
     use uuid::Uuid;
 
@@ -124,7 +128,48 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_find_all_returns_projects_ordered_by_created_at_desc() {
+    async fn test_find_all_with_name_asc() {
+        let pool = get_test_pool().await;
+        let repo = PgProjectRepository::new(pool.clone());
+
+        // テストデータ作成（名前順の確認）
+        let test_id1 = Uuid::new_v4();
+        let test_id2 = Uuid::new_v4();
+        let test_id3 = Uuid::new_v4();
+        insert_test_project(&pool, test_id1, "チーズケーキ").await;
+        insert_test_project(&pool, test_id2, "アップルパイ").await;
+        insert_test_project(&pool, test_id3, "バゲット").await;
+
+        // テスト実行
+        let sort = ProjectSort::new(ProjectSortColumn::Name, SortDirection::Asc);
+        let result = repo.find_all(sort).await;
+
+        // 検証
+        assert!(result.is_ok());
+        let projects = result.unwrap();
+
+        // 投入したデータのみでフィルタ
+        let test_projects: Vec<_> = projects
+            .iter()
+            .filter(|p| {
+                p.id().0 == test_id1 || p.id().0 == test_id2 || p.id().0 == test_id3
+            })
+            .collect();
+        assert_eq!(test_projects.len(), 3);
+
+        // name ASC順: アップルパイ, チーズケーキ, バゲット
+        assert_eq!(test_projects[0].name(), "アップルパイ");
+        assert_eq!(test_projects[1].name(), "チーズケーキ");
+        assert_eq!(test_projects[2].name(), "バゲット");
+
+        // クリーンアップ
+        delete_test_project(&pool, test_id1).await;
+        delete_test_project(&pool, test_id2).await;
+        delete_test_project(&pool, test_id3).await;
+    }
+
+    #[tokio::test]
+    async fn test_find_all_with_created_at_desc() {
         let pool = get_test_pool().await;
         let repo = PgProjectRepository::new(pool.clone());
 
@@ -137,7 +182,8 @@ mod tests {
         insert_test_project(&pool, test_id2, "プロジェクト2").await;
 
         // テスト実行
-        let result = repo.find_all().await;
+        let sort = ProjectSort::new(ProjectSortColumn::CreatedAt, SortDirection::Desc);
+        let result = repo.find_all(sort).await;
 
         // 検証
         assert!(result.is_ok());

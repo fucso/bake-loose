@@ -4,5 +4,3 @@
 
 pub mod models;
 pub mod project_repo;
-
-pub use project_repo::PgProjectRepository;

@@ -2,6 +2,7 @@ mod domain;
 mod infrastructure;
 mod ports;
 mod repository;
+mod use_case;
 
 use axum::{
     routing::get,
