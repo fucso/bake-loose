@@ -54,6 +54,36 @@ impl From<ProjectRow> for Project {
 }
 ```
 
+## SortColumn の実装
+
+ports層で定義された `{Model}SortColumn` に対して、DBカラム名へのマッピングを実装する:
+
+```rust
+// src/repository/models/project_row.rs
+
+use crate::ports::project_repository::ProjectSortColumn;
+use crate::ports::sort::SortColumn;
+
+impl SortColumn for ProjectSortColumn {
+    fn as_sql_column(&self) -> &'static str {
+        match self {
+            Self::Name => "name",
+            Self::CreatedAt => "created_at",
+            Self::UpdatedAt => "updated_at",
+        }
+    }
+}
+```
+
+リポジトリでは `Sort<C>` の `to_order_by_clause()` を使用してSQLを生成:
+
+```rust
+async fn find_all(&self, sort: ProjectSort) -> Result<Vec<Project>, RepositoryError> {
+    let query = format!("SELECT * FROM projects {}", sort.to_order_by_clause());
+    // ...
+}
+```
+
 ## リポジトリ実装
 
 ```rust

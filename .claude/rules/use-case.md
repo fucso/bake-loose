@@ -9,7 +9,7 @@
 
 **やること**:
 - ドメインアクションの呼び出し
-- ports経由の永続化
+- UnitOfWork経由でのリポジトリアクセス
 - DB問い合わせが必要な検証
 - トランザクション境界の管理
 
@@ -18,6 +18,7 @@
 - 直接的なDB操作
 - ユーザー向けメッセージの生成
 - SQLの記述
+- 個別のリポジトリを直接引数として受け取る
 
 ## ファイル配置
 
@@ -95,7 +96,11 @@ sqlx::query("INSERT INTO ...").execute(pool).await?;
 let project = create_project::run(command)?;
 if repository.exists_by_name(&project.name()).await? { ... }
 
+// ❌ リポジトリを個別に引数で受け取る
+pub async fn execute(repo: &impl ProjectRepository, input: Input) -> Result<...> { ... }
+
 // ✅ ドメインアクションに委譲、UnitOfWork経由、DB検証を先に
+pub async fn execute<U: UnitOfWork>(uow: &U, input: Input) -> Result<...> { ... }
 ```
 
 ## チェックリスト
