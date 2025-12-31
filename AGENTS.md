@@ -143,6 +143,7 @@
 ```
 backend/src/
 ├── main.rs
+├── lib.rs
 │
 ├── domain.rs
 ├── domain/
