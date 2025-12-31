@@ -350,9 +350,6 @@ docker compose exec backend bash -c "cargo fmt"
 # フォーマットチェック（ファイル変更なし）
 docker compose exec backend bash -c "cargo fmt -- --check"
 
-# Lint
-docker compose exec backend bash -c "cargo clippy"
-
 # Lint（警告をエラー扱い）
 docker compose exec backend bash -c "cargo clippy -- -D warnings"
 ```

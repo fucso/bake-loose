@@ -1,4 +1,4 @@
 //! Project に関する GraphQL テスト
 
-pub mod project;
-pub mod projects;
+pub mod get;
+pub mod list;
