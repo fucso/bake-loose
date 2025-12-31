@@ -2,50 +2,37 @@
 //!
 //! 単一プロジェクト取得クエリのリクエストレベルテスト。
 
-use serial_test::serial;
+use serde_json::json;
+use sqlx::PgPool;
 
-use crate::graphql::request::{assert_no_errors, execute_graphql, get_data};
-use crate::graphql::test_data::project::{delete_test_project, insert_test_project};
+use crate::graphql::schema::execute_graphql;
 
-#[tokio::test]
-#[serial]
-async fn test_returns_null_when_not_found() {
-    let json = execute_graphql(
+#[sqlx::test(migrations = "./migrations")]
+async fn test_returns_null_when_not_found(pool: PgPool) {
+    let data = execute_graphql(
+        pool,
         r#"{ project(id: "00000000-0000-0000-0000-000000000000") { id name } }"#,
     )
     .await;
 
-    assert_no_errors(&json);
-
-    let data = get_data(&json);
-    assert!(
-        data["project"].is_null(),
-        "project should be null for non-existent ID: {:?}",
-        json
-    );
+    assert_eq!(data, json!({ "project": null }));
 }
 
-#[tokio::test]
-#[serial]
-async fn test_returns_project() {
-    // テストデータ投入
-    let project = insert_test_project("test_project").await;
-    let other_project = insert_test_project("other_project").await;
-
-    // クエリ実行
-    let json = execute_graphql(&format!(
-        r#"{{ project(id: "{}") {{ id name }} }}"#,
-        project.id.0
-    ))
+#[sqlx::test(migrations = "./migrations", fixtures("../../fixtures/projects.sql"))]
+async fn test_returns_project(pool: PgPool) {
+    let data = execute_graphql(
+        pool,
+        r#"{ project(id: "11111111-1111-1111-1111-111111111111") { id name } }"#,
+    )
     .await;
 
-    assert_no_errors(&json);
-
-    let data = get_data(&json);
-    assert_eq!(data["project"]["id"], project.id.0.to_string());
-    assert_eq!(data["project"]["name"], project.name);
-
-    // クリーンアップ
-    delete_test_project(&project).await;
-    delete_test_project(&other_project).await;
+    assert_eq!(
+        data,
+        json!({
+            "project": {
+                "id": "11111111-1111-1111-1111-111111111111",
+                "name": "Test Project 1"
+            }
+        })
+    );
 }

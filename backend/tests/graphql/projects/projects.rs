@@ -2,48 +2,35 @@
 //!
 //! プロジェクト一覧取得クエリのリクエストレベルテスト。
 
-use serial_test::serial;
+use serde_json::json;
+use sqlx::PgPool;
 
-use crate::graphql::request::{assert_no_errors, execute_graphql, get_data};
-use crate::graphql::test_data::project::{delete_test_project, insert_test_project};
+use crate::graphql::schema::execute_graphql;
 
-#[tokio::test]
-#[serial]
-async fn test_returns_list() {
-    let json = execute_graphql("{ projects { id name } }").await;
+#[sqlx::test(migrations = "./migrations")]
+async fn test_returns_empty_list(pool: PgPool) {
+    let data = execute_graphql(pool, "{ projects { id name } }").await;
 
-    assert_no_errors(&json);
-
-    let data = get_data(&json);
-    assert!(
-        data.get("projects").is_some(),
-        "Response should have projects field: {:?}",
-        json
-    );
+    assert_eq!(data, json!({ "projects": [] }));
 }
 
-#[tokio::test]
-#[serial]
-async fn test_contains_inserted_project() {
-    // テストデータ投入
-    let project = insert_test_project("test_projects_list").await;
+#[sqlx::test(migrations = "./migrations", fixtures("../../fixtures/projects.sql"))]
+async fn test_returns_projects_from_fixture(pool: PgPool) {
+    let data = execute_graphql(pool, "{ projects { id name } }").await;
 
-    // クエリ実行
-    let json = execute_graphql("{ projects { id name } }").await;
-
-    assert_no_errors(&json);
-
-    let data = get_data(&json);
-    let projects = data["projects"].as_array().expect("projects should be array");
-
-    // 投入したプロジェクトが含まれていることを確認
-    let found = projects.iter().any(|p| p["name"] == project.name);
-    assert!(
-        found,
-        "Inserted project should be in the list: {:?}",
-        projects
+    assert_eq!(
+        data,
+        json!({
+            "projects": [
+                {
+                    "id": "11111111-1111-1111-1111-111111111111",
+                    "name": "Test Project 1"
+                },
+                {
+                    "id": "22222222-2222-2222-2222-222222222222",
+                    "name": "Test Project 2"
+                }
+            ]
+        })
     );
-
-    // クリーンアップ
-    delete_test_project(&project).await;
 }
