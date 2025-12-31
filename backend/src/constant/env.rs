@@ -12,7 +12,6 @@
 //! | 変数名 | 必須 | デフォルト | 説明 |
 //! |--------|------|------------|------|
 //! | DATABASE_URL | Yes | - | PostgreSQL 接続URL |
-//! | TEST_DATABASE_URL | No | - | テスト用 PostgreSQL 接続URL |
 //! | SERVER_PORT | No | 8080 | サーバーのポート番号 |
 
 use std::sync::OnceLock;
@@ -23,10 +22,6 @@ pub struct Env {
     /// PostgreSQL 接続URL
     /// 環境変数: DATABASE_URL（必須）
     pub database_url: String,
-
-    /// テスト用 PostgreSQL 接続URL
-    /// 環境変数: TEST_DATABASE_URL（オプション）
-    pub test_database_url: Option<String>,
 
     /// サーバーのポート番号
     /// 環境変数: SERVER_PORT（オプション、デフォルト: 8080）
@@ -55,7 +50,6 @@ pub fn get() -> &'static Env {
 
 /// 環境変数を読み込み、グローバル定数を初期化する
 ///
-/// .env ファイルが存在する場合は環境変数として読み込む。
 /// 既に初期化済みの場合は何もしない（冪等）。
 pub fn load() -> Result<(), LoadError> {
     // 既に初期化済みなら何もしない
@@ -63,16 +57,10 @@ pub fn load() -> Result<(), LoadError> {
         return Ok(());
     }
 
-    // .env ファイルを読み込む（存在しなくてもOK）
-    let _ = dotenvy::dotenv();
-
     // DATABASE_URL（必須）
     let database_url = std::env::var("DATABASE_URL").map_err(|_| LoadError::MissingEnv {
         name: "DATABASE_URL",
     })?;
-
-    // TEST_DATABASE_URL（オプション）
-    let test_database_url = std::env::var("TEST_DATABASE_URL").ok();
 
     // SERVER_PORT（オプション、デフォルト: 8080）
     let server_port = match std::env::var("SERVER_PORT") {
@@ -86,7 +74,6 @@ pub fn load() -> Result<(), LoadError> {
 
     let env = Env {
         database_url,
-        test_database_url,
         server_port,
     };
 

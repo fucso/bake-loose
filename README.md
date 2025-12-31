@@ -260,13 +260,7 @@ docker compose exec backend sqlx migrate run
 
 ### テスト用データベース
 
-テストは開発用DBとは別の `bakeloose_test` データベースを使用します。テスト用DBは `docker compose up` 時に自動作成されます。
-
-#### テスト用DBにマイグレーションを実行
-
-```bash
-docker compose exec backend bash -c "DATABASE_URL=\$TEST_DATABASE_URL sqlx migrate run"
-```
+テストは `sqlx::test` マクロを使用しており、テストごとに一時的なデータベースが自動作成・削除されます。開発用DBのデータに影響を与えることはありません。
 
 ### テストの実行
 

@@ -30,9 +30,6 @@ async-trait = "0.1"
 # Error Handling
 thiserror = "2"
 
-# Environment
-dotenvy = "0.15"
-
 # Logging
 tracing = "0.1"
 tracing-subscriber = "0.3"
