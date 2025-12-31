@@ -150,12 +150,27 @@ docker compose exec backend cargo build
 
 # テスト実行
 docker compose exec backend cargo test
+```
 
-# フォーマット
+#### Linter / Formatter
+
+| ツール | 用途 | コマンド |
+|--------|------|----------|
+| **Clippy** | コード品質チェック（非効率なコード、バグの可能性、非慣用的な書き方の検出） | `cargo clippy` |
+| **rustfmt** | コードフォーマット（インデント、改行、スペースなどの統一） | `cargo fmt` |
+
+```bash
+# フォーマット（自動整形）
 docker compose exec backend cargo fmt
+
+# フォーマットチェック（CI向け、ファイル変更なし）
+docker compose exec backend cargo fmt -- --check
 
 # Lint
 docker compose exec backend cargo clippy
+
+# Lint（警告をエラー扱い、CI向け）
+docker compose exec backend cargo clippy -- -D warnings
 ```
 
 ### Frontend 開発
@@ -239,4 +254,20 @@ sqlx migrate info
 ```bash
 # コンテナ内でマイグレーション実行
 docker compose exec backend sqlx migrate run
+```
+
+## テスト
+
+### テスト用データベース
+
+テストは `sqlx::test` マクロを使用しており、テストごとに一時的なデータベースが自動作成・削除されます。開発用DBのデータに影響を与えることはありません。
+
+### テストの実行
+
+```bash
+# 全テスト実行
+docker compose exec backend cargo test
+
+# 特定のテストを実行
+docker compose exec backend cargo test repository::project_repo::tests
 ```

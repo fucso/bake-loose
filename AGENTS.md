@@ -145,31 +145,41 @@ backend/src/
 ├── main.rs
 ├── lib.rs
 │
+├── domain.rs
 ├── domain/
+│   ├── models.rs
 │   ├── models/
 │   │   ├── project.rs
 │   │   └── ...
+│   ├── actions.rs
 │   └── actions/
 │       └── ...
 │
+├── use_case.rs
 ├── use_case/
+│   ├── project.rs
 │   ├── project/
 │   │   ├── create_project.rs
 │   │   └── ...
 │   └── ...
 │
+├── ports.rs
 ├── ports/
 │   ├── project_repository.rs
 │   └── ...
 │
+├── repository.rs
 ├── repository/
 │   ├── project_repo.rs
 │   └── ...
 │
+├── infrastructure.rs
 ├── infrastructure/
 │   └── database.rs
 │
+├── presentation.rs
 └── presentation/
+    ├── graphql.rs
     └── graphql/
         ├── schema.rs
         └── ...
@@ -275,3 +285,74 @@ sqlx migrate info
 - マイグレーションファイルは一度適用したら変更しない
 - 変更が必要な場合は新しいマイグレーションファイルを作成する
 - 本番環境に適用する前に必ずローカルでテストする
+
+---
+
+### 5. 開発環境とコマンド実行
+
+#### Docker Compose による開発環境
+
+このプロジェクトでは Docker Compose を使用して開発環境を構築している。プロジェクトルートで `docker compose up` を実行することで、以下のサービスが起動する：
+
+- `db`: PostgreSQL データベース
+- `backend`: Rust (Axum) バックエンドサーバー
+- `frontend`: Vite + React フロントエンドサーバー
+
+#### コマンド実行方法
+
+**重要**: ビルドやテストなどのコマンドは、ホストマシンではなく Docker コンテナ内で実行すること。
+
+```bash
+# バックエンドコンテナでコマンドを実行
+docker compose exec backend bash -c "<command>"
+
+# 例: cargo build
+docker compose exec backend bash -c "cargo build"
+
+# 例: cargo test
+docker compose exec backend bash -c "cargo test"
+
+# 例: cargo check
+docker compose exec backend bash -c "cargo check"
+
+# 例: SQLx マイグレーション実行
+docker compose exec backend bash -c "sqlx migrate run"
+```
+
+#### ワーキングディレクトリ
+
+各コンテナのワーキングディレクトリは以下の通り：
+
+| サービス | ワーキングディレクトリ | マウント元 |
+|----------|----------------------|------------|
+| backend  | `/app`               | `./backend` |
+| frontend | `/app`               | `./frontend` |
+
+コンテナ内では既にワーキングディレクトリが設定されているため、`cd` は不要。
+
+---
+
+### 6. Linter / Formatter
+
+#### 使用ツール
+
+| ツール | 用途 |
+|--------|------|
+| **Clippy** | コード品質チェック（非効率なコード、バグの可能性、非慣用的な書き方の検出） |
+| **rustfmt** | コードフォーマット（インデント、改行、スペースなどの統一） |
+
+#### コマンド
+
+```bash
+# フォーマット（自動整形）
+docker compose exec backend bash -c "cargo fmt"
+
+# フォーマットチェック（ファイル変更なし）
+docker compose exec backend bash -c "cargo fmt -- --check"
+
+# Lint（警告をエラー扱い）
+docker compose exec backend bash -c "cargo clippy -- -D warnings"
+```
+
+- コードを変更した後は `cargo fmt` を実行してフォーマットを統一すること
+- PR作成前やコミット前には `cargo clippy` を実行して警告がないことを確認すること

@@ -88,6 +88,46 @@ pub trait UnitOfWork: Send + Sync {
 | 保存 | `save` |
 | 削除 | `delete` |
 
+## ソート機能
+
+ソート機能は以下のように責務を分離する:
+
+```
+ports/sort.rs              → 汎用型（モデル非依存）
+  SortDirection, SortColumn trait, Sort<C>
+
+ports/{model}_repository.rs → ソート可能フィールドの定義
+  {Model}SortColumn enum
+
+repository/models/{model}_row.rs → DBカラム名へのマッピング
+  impl SortColumn for {Model}SortColumn
+```
+
+**ports層での定義:**
+
+```rust
+// src/ports/sort.rs - 汎用型
+pub trait SortColumn: Send + Sync + Copy {
+    fn as_sql_column(&self) -> &'static str;
+}
+
+pub struct Sort<C: SortColumn> {
+    pub column: C,
+    pub direction: SortDirection,
+}
+
+// src/ports/project_repository.rs - ソート可能フィールド
+pub enum ProjectSortColumn {
+    Name,
+    CreatedAt,
+    UpdatedAt,
+}
+
+pub type ProjectSort = Sort<ProjectSortColumn>;
+```
+
+**repository層での実装は repository.md を参照。**
+
 ## アンチパターン
 
 ```rust
