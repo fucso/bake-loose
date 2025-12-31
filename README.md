@@ -150,12 +150,27 @@ docker compose exec backend cargo build
 
 # テスト実行
 docker compose exec backend cargo test
+```
 
-# フォーマット
+#### Linter / Formatter
+
+| ツール | 用途 | コマンド |
+|--------|------|----------|
+| **Clippy** | コード品質チェック（非効率なコード、バグの可能性、非慣用的な書き方の検出） | `cargo clippy` |
+| **rustfmt** | コードフォーマット（インデント、改行、スペースなどの統一） | `cargo fmt` |
+
+```bash
+# フォーマット（自動整形）
 docker compose exec backend cargo fmt
+
+# フォーマットチェック（CI向け、ファイル変更なし）
+docker compose exec backend cargo fmt -- --check
 
 # Lint
 docker compose exec backend cargo clippy
+
+# Lint（警告をエラー扱い、CI向け）
+docker compose exec backend cargo clippy -- -D warnings
 ```
 
 ### Frontend 開発

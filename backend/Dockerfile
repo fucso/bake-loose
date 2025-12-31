@@ -10,6 +10,9 @@ RUN apt-get update && apt-get install -y \
     postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
+# Rust コンポーネント（linter / formatter）
+RUN rustup component add clippy rustfmt
+
 # 開発用ツール
 RUN cargo install cargo-watch
 RUN cargo install sqlx-cli --no-default-features --features postgres
