@@ -151,9 +151,7 @@ mod tests {
         // 投入したデータのみでフィルタ
         let test_projects: Vec<_> = projects
             .iter()
-            .filter(|p| {
-                p.id().0 == test_id1 || p.id().0 == test_id2 || p.id().0 == test_id3
-            })
+            .filter(|p| p.id().0 == test_id1 || p.id().0 == test_id2 || p.id().0 == test_id3)
             .collect();
         assert_eq!(test_projects.len(), 3);
 

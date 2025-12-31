@@ -5,8 +5,8 @@
 use std::net::SocketAddr;
 
 use bake_loose::constant::{env, load_env, EnvLoadError};
-use bake_loose::infrastructure::database;
 use bake_loose::create_app;
+use bake_loose::infrastructure::database;
 
 fn env_load_error_message(e: &EnvLoadError) -> String {
     match e {

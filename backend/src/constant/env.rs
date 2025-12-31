@@ -67,8 +67,9 @@ pub fn load() -> Result<(), LoadError> {
     let _ = dotenvy::dotenv();
 
     // DATABASE_URL（必須）
-    let database_url = std::env::var("DATABASE_URL")
-        .map_err(|_| LoadError::MissingEnv { name: "DATABASE_URL" })?;
+    let database_url = std::env::var("DATABASE_URL").map_err(|_| LoadError::MissingEnv {
+        name: "DATABASE_URL",
+    })?;
 
     // TEST_DATABASE_URL（オプション）
     let test_database_url = std::env::var("TEST_DATABASE_URL").ok();
@@ -77,7 +78,9 @@ pub fn load() -> Result<(), LoadError> {
     let server_port = match std::env::var("SERVER_PORT") {
         Ok(port_str) => port_str
             .parse::<u16>()
-            .map_err(|_| LoadError::InvalidValue { name: "SERVER_PORT" })?,
+            .map_err(|_| LoadError::InvalidValue {
+                name: "SERVER_PORT",
+            })?,
         Err(_) => 8080,
     };
 
