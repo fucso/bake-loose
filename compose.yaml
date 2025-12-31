@@ -22,7 +22,6 @@ services:
       target: development
     environment:
       DATABASE_URL: postgres://bakeloose:bakeloose@db:5432/bakeloose
-      TEST_DATABASE_URL: postgres://bakeloose:bakeloose@db:5432/bakeloose_test
       RUST_LOG: debug
     volumes:
       - ./backend:/app

@@ -55,15 +55,6 @@ mod tests {
     use sqlx::PgPool;
     use uuid::Uuid;
 
-    /// テスト用DBプールを取得する
-    async fn get_test_pool() -> PgPool {
-        let database_url =
-            std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL must be set for tests");
-        PgPool::connect(&database_url)
-            .await
-            .expect("Failed to connect to test database")
-    }
-
     /// テスト用データを投入する
     async fn insert_test_project(pool: &PgPool, id: Uuid, name: &str) {
         sqlx::query(
@@ -79,18 +70,8 @@ mod tests {
         .expect("Failed to insert test project");
     }
 
-    /// テスト用データを削除する
-    async fn delete_test_project(pool: &PgPool, id: Uuid) {
-        sqlx::query("DELETE FROM projects WHERE id = $1")
-            .bind(id)
-            .execute(pool)
-            .await
-            .expect("Failed to delete test project");
-    }
-
-    #[tokio::test]
-    async fn test_find_by_id_returns_project_when_exists() {
-        let pool = get_test_pool().await;
+    #[sqlx::test(migrations = "./migrations")]
+    async fn test_find_by_id_returns_project_when_exists(pool: PgPool) {
         let repo = PgProjectRepository::new(pool.clone());
 
         // テストデータ作成
@@ -108,14 +89,10 @@ mod tests {
         let project = project.unwrap();
         assert_eq!(project.id().0, test_id);
         assert_eq!(project.name(), test_name);
-
-        // クリーンアップ
-        delete_test_project(&pool, test_id).await;
     }
 
-    #[tokio::test]
-    async fn test_find_by_id_returns_none_when_not_exists() {
-        let pool = get_test_pool().await;
+    #[sqlx::test(migrations = "./migrations")]
+    async fn test_find_by_id_returns_none_when_not_exists(pool: PgPool) {
         let repo = PgProjectRepository::new(pool);
 
         // 存在しないIDで検索
@@ -127,9 +104,8 @@ mod tests {
         assert!(result.unwrap().is_none());
     }
 
-    #[tokio::test]
-    async fn test_find_all_with_name_asc() {
-        let pool = get_test_pool().await;
+    #[sqlx::test(migrations = "./migrations")]
+    async fn test_find_all_with_name_asc(pool: PgPool) {
         let repo = PgProjectRepository::new(pool.clone());
 
         // テストデータ作成（名前順の確認）
@@ -147,30 +123,16 @@ mod tests {
         // 検証
         assert!(result.is_ok());
         let projects = result.unwrap();
-
-        // 投入したデータのみでフィルタ
-        let test_projects: Vec<_> = projects
-            .iter()
-            .filter(|p| {
-                p.id().0 == test_id1 || p.id().0 == test_id2 || p.id().0 == test_id3
-            })
-            .collect();
-        assert_eq!(test_projects.len(), 3);
+        assert_eq!(projects.len(), 3);
 
         // name ASC順: アップルパイ, チーズケーキ, バゲット
-        assert_eq!(test_projects[0].name(), "アップルパイ");
-        assert_eq!(test_projects[1].name(), "チーズケーキ");
-        assert_eq!(test_projects[2].name(), "バゲット");
-
-        // クリーンアップ
-        delete_test_project(&pool, test_id1).await;
-        delete_test_project(&pool, test_id2).await;
-        delete_test_project(&pool, test_id3).await;
+        assert_eq!(projects[0].name(), "アップルパイ");
+        assert_eq!(projects[1].name(), "チーズケーキ");
+        assert_eq!(projects[2].name(), "バゲット");
     }
 
-    #[tokio::test]
-    async fn test_find_all_with_created_at_desc() {
-        let pool = get_test_pool().await;
+    #[sqlx::test(migrations = "./migrations")]
+    async fn test_find_all_with_created_at_desc(pool: PgPool) {
         let repo = PgProjectRepository::new(pool.clone());
 
         // テストデータ作成（順序確認のため2件）
@@ -188,20 +150,10 @@ mod tests {
         // 検証
         assert!(result.is_ok());
         let projects = result.unwrap();
-
-        // 投入したデータが含まれていることを確認
-        let test_projects: Vec<_> = projects
-            .iter()
-            .filter(|p| p.id().0 == test_id1 || p.id().0 == test_id2)
-            .collect();
-        assert_eq!(test_projects.len(), 2);
+        assert_eq!(projects.len(), 2);
 
         // created_at DESC順なので、後に投入した test_id2 が先に来る
-        assert_eq!(test_projects[0].id().0, test_id2);
-        assert_eq!(test_projects[1].id().0, test_id1);
-
-        // クリーンアップ
-        delete_test_project(&pool, test_id1).await;
-        delete_test_project(&pool, test_id2).await;
+        assert_eq!(projects[0].id().0, test_id2);
+        assert_eq!(projects[1].id().0, test_id1);
     }
 }

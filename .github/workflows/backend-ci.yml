@@ -1,0 +1,94 @@
+name: Backend CI
+
+on:
+  push:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+
+env:
+  CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: bakeloose
+          POSTGRES_PASSWORD: bakeloose
+          POSTGRES_DB: bakeloose
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bakeloose -d bakeloose"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgres://bakeloose:bakeloose@localhost:5432/bakeloose
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.92"
+          components: clippy, rustfmt
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            backend/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('backend/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --no-default-features --features postgres --locked
+
+      - name: Run migrations
+        run: sqlx migrate run
+
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+      - name: Run clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Build
+        run: cargo build --all-targets
+
+      - name: Create test database
+        run: |
+          psql -c "CREATE DATABASE bakeloose_test;"
+        env:
+          PGHOST: localhost
+          PGUSER: bakeloose
+          PGPASSWORD: bakeloose
+          PGDATABASE: bakeloose
+
+      - name: Run migrations on test database
+        run: sqlx migrate run
+        env:
+          DATABASE_URL: postgres://bakeloose:bakeloose@localhost:5432/bakeloose_test
+
+      - name: Run tests
+        run: cargo test
+        env:
+          DATABASE_URL: postgres://bakeloose:bakeloose@localhost:5432/bakeloose_test

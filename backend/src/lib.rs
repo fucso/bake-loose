@@ -10,8 +10,8 @@ pub mod presentation;
 pub mod repository;
 pub mod use_case;
 
-use axum::{routing::get, Json, Router};
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
+use axum::{routing::get, Json, Router};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use tower_http::cors::{Any, CorsLayer};

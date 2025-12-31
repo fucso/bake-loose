@@ -8,8 +8,5 @@ use sqlx::{postgres::PgPoolOptions, PgPool};
 /// # Returns
 /// * `Result<PgPool, sqlx::Error>` - 成功時は接続プール、失敗時はエラー
 pub async fn create_pool(url: &str) -> Result<PgPool, sqlx::Error> {
-    PgPoolOptions::new()
-        .max_connections(5)
-        .connect(url)
-        .await
+    PgPoolOptions::new().max_connections(5).connect(url).await
 }

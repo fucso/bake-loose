@@ -329,3 +329,30 @@ docker compose exec backend bash -c "sqlx migrate run"
 | frontend | `/app`               | `./frontend` |
 
 コンテナ内では既にワーキングディレクトリが設定されているため、`cd` は不要。
+
+---
+
+### 6. Linter / Formatter
+
+#### 使用ツール
+
+| ツール | 用途 |
+|--------|------|
+| **Clippy** | コード品質チェック（非効率なコード、バグの可能性、非慣用的な書き方の検出） |
+| **rustfmt** | コードフォーマット（インデント、改行、スペースなどの統一） |
+
+#### コマンド
+
+```bash
+# フォーマット（自動整形）
+docker compose exec backend bash -c "cargo fmt"
+
+# フォーマットチェック（ファイル変更なし）
+docker compose exec backend bash -c "cargo fmt -- --check"
+
+# Lint（警告をエラー扱い）
+docker compose exec backend bash -c "cargo clippy -- -D warnings"
+```
+
+- コードを変更した後は `cargo fmt` を実行してフォーマットを統一すること
+- PR作成前やコミット前には `cargo clippy` を実行して警告がないことを確認すること
