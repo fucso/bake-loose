@@ -2,6 +2,8 @@ use uuid::Uuid;
 
 use crate::domain::models::project::{Project, ProjectId};
 
+const MAX_NAME_LENGTH: usize = 100;
+
 pub struct Command {
     pub name: String,
 }
@@ -16,9 +18,9 @@ pub fn validate(command: &Command) -> Result<(), Error> {
     if command.name.trim().is_empty() {
         return Err(Error::EmptyName);
     }
-    if command.name.chars().count() > 100 {
+    if command.name.chars().count() > MAX_NAME_LENGTH {
         return Err(Error::NameTooLong {
-            max: 100,
+            max: MAX_NAME_LENGTH,
             actual: command.name.chars().count(),
         });
     }
@@ -48,14 +50,6 @@ mod tests {
     }
 
     #[test]
-    fn test_run_creates_project_with_max_length_name() {
-        let name = "a".repeat(100);
-        let command = Command { name: name.clone() };
-        let project = run(command).unwrap();
-        assert_eq!(project.name(), &name);
-    }
-
-    #[test]
     fn test_execute_generates_unique_id() {
         let command1 = Command {
             name: "Project 1".to_string(),
@@ -69,34 +63,26 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_returns_error_for_empty_name() {
-        let command = Command {
-            name: "".to_string(),
-        };
-        let result = validate(&command);
-        assert_eq!(result, Err(Error::EmptyName));
-    }
+    fn test_name_validation() {
+        let cases = vec![
+            ("a".repeat(MAX_NAME_LENGTH), Ok(())),
+            ("".to_string(), Err(Error::EmptyName)),
+            ("   ".to_string(), Err(Error::EmptyName)),
+            (
+                "a".repeat(MAX_NAME_LENGTH + 1),
+                Err(Error::NameTooLong {
+                    max: MAX_NAME_LENGTH,
+                    actual: MAX_NAME_LENGTH + 1,
+                }),
+            ),
+        ];
 
-    #[test]
-    fn test_validate_returns_error_for_whitespace_only_name() {
-        let command = Command {
-            name: "   ".to_string(),
-        };
-        let result = validate(&command);
-        assert_eq!(result, Err(Error::EmptyName));
-    }
-
-    #[test]
-    fn test_validate_returns_error_for_too_long_name() {
-        let name = "a".repeat(101);
-        let command = Command { name: name.clone() };
-        let result = validate(&command);
-        assert_eq!(
-            result,
-            Err(Error::NameTooLong {
-                max: 100,
-                actual: 101
-            })
-        );
+        for (name, expected) in cases {
+            let command = Command {
+                name: name.to_string(),
+            };
+            let result = validate(&command);
+            assert_eq!(result, expected);
+        }
     }
 }
