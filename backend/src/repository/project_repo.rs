@@ -10,6 +10,7 @@ use crate::ports::project_repository::{ProjectRepository, ProjectSort};
 use super::models::ProjectRow;
 
 /// PostgreSQL 用の ProjectRepository 実装
+#[derive(Clone)]
 pub struct PgProjectRepository {
     pool: PgPool,
 }

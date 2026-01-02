@@ -3,23 +3,18 @@
 //! `sqlx::test` マクロから渡される `PgPool` を使用して
 //! テスト用の GraphQL スキーマを構築し、クエリを実行する。
 
+use async_graphql::{Request, Variables};
 use bake_loose::presentation::graphql::build_schema;
+use serde_json::Value;
 use sqlx::PgPool;
 
 /// GraphQL クエリを実行し、レスポンスの JSON を返す
-///
-/// # Arguments
-/// * `pool` - `sqlx::test` から渡される PostgreSQL コネクションプール
-/// * `query` - GraphQL クエリ文字列
-///
-/// # Returns
-/// レスポンスの JSON 値
-///
-/// # Panics
-/// GraphQL エラーが発生した場合にパニックする
-pub async fn execute_graphql(pool: PgPool, query: &str) -> serde_json::Value {
+pub async fn execute_graphql(pool: PgPool, query: &str, variables: Value) -> serde_json::Value {
     let schema = build_schema(pool);
-    let response = schema.execute(query).await;
+    let mut request = Request::new(query);
+    request = request.variables(Variables::from_json(variables));
+
+    let response = schema.execute(request).await;
 
     assert!(
         response.errors.is_empty(),
@@ -28,4 +23,17 @@ pub async fn execute_graphql(pool: PgPool, query: &str) -> serde_json::Value {
     );
 
     response.data.into_json().unwrap()
+}
+
+/// GraphQL クエリを実行し、エラーを含むレスポンスを返す
+pub async fn execute_graphql_with_errors(
+    pool: PgPool,
+    query: &str,
+    variables: Value,
+) -> async_graphql::Response {
+    let schema = build_schema(pool);
+    let mut request = Request::new(query);
+    request = request.variables(Variables::from_json(variables));
+
+    schema.execute(request).await
 }
