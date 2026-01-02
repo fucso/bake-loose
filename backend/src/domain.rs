@@ -1,4 +1,4 @@
 //! ドメイン層
 
-pub mod models;
 pub mod actions;
+pub mod models;

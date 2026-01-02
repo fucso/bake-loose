@@ -1,6 +1,4 @@
-use uuid::Uuid;
-
-use crate::domain::models::project::{Project, ProjectId};
+use crate::domain::models::project::Project;
 
 const MAX_NAME_LENGTH: usize = 100;
 
