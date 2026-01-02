@@ -24,4 +24,10 @@ pub trait ProjectRepository: Send + Sync {
 
     /// すべてのプロジェクトを取得する
     async fn find_all(&self, sort: ProjectSort) -> Result<Vec<Project>, RepositoryError>;
+
+    /// 指定した名前のプロジェクトが存在するかを確認する
+    async fn exists_by_name(&self, name: &str) -> Result<bool, RepositoryError>;
+
+    /// プロジェクトを保存（新規作成または更新）する
+    async fn save(&self, project: &Project) -> Result<(), RepositoryError>;
 }
