@@ -46,11 +46,42 @@ impl ProjectRepository for PgProjectRepository {
                 message: e.to_string(),
             })
     }
+
+    async fn exists_by_name(&self, name: &str) -> Result<bool, RepositoryError> {
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM projects WHERE name = $1)")
+            .bind(name)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Internal {
+                message: e.to_string(),
+            })
+    }
+
+    async fn save(&self, project: &Project) -> Result<(), RepositoryError> {
+        sqlx::query(
+            r#"
+            INSERT INTO projects (id, name, created_at, updated_at)
+            VALUES ($1, $2, NOW(), NOW())
+            ON CONFLICT (id) DO UPDATE SET
+                name = EXCLUDED.name,
+                updated_at = NOW()
+            "#,
+        )
+        .bind(project.id().0)
+        .bind(project.name())
+        .execute(&self.pool)
+        .await
+        .map(|_| ())
+        .map_err(|e| RepositoryError::Internal {
+            message: e.to_string(),
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::models::project::Project;
     use crate::ports::{ProjectSortColumn, SortDirection};
     use sqlx::PgPool;
     use uuid::Uuid;
@@ -155,5 +186,62 @@ mod tests {
         // created_at DESC順なので、後に投入した test_id2 が先に来る
         assert_eq!(projects[0].id().0, test_id2);
         assert_eq!(projects[1].id().0, test_id1);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn test_save_inserts_new_project(pool: PgPool) {
+        let repo = PgProjectRepository::new(pool.clone());
+
+        let new_project = Project::new("新規プロジェクト".to_string());
+
+        let result = repo.save(&new_project).await;
+        assert!(result.is_ok());
+
+        // find_by_id で検証
+        let found = repo.find_by_id(new_project.id()).await.unwrap().unwrap();
+        assert_eq!(found.name(), "新規プロジェクト");
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn test_save_updates_existing_project(pool: PgPool) {
+        let repo = PgProjectRepository::new(pool.clone());
+
+        // 既存データ作成
+        let existing_id = Uuid::new_v4();
+        insert_test_project(&pool, existing_id, "更新前プロジェクト").await;
+        let project_to_update = repo
+            .find_by_id(&ProjectId(existing_id))
+            .await
+            .unwrap()
+            .unwrap();
+
+        // 更新
+        let updated_project = Project::from_raw(project_to_update.id().clone(), "更新後プロジェクト".to_string());
+        let result = repo.save(&updated_project).await;
+        assert!(result.is_ok());
+
+        // find_by_id で検証
+        let found = repo.find_by_id(&ProjectId(existing_id)).await.unwrap().unwrap();
+        assert_eq!(found.name(), "更新後プロジェクト");
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn test_exists_by_name_returns_true_when_exists(pool: PgPool) {
+        let repo = PgProjectRepository::new(pool.clone());
+
+        // 既存データ作成
+        insert_test_project(&pool, Uuid::new_v4(), "存在するプロジェクト").await;
+
+        let result = repo.exists_by_name("存在するプロジェクト").await;
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn test_exists_by_name_returns_false_when_not_exists(pool: PgPool) {
+        let repo = PgProjectRepository::new(pool);
+        let result = repo.exists_by_name("存在しないプロジェクト").await;
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
     }
 }

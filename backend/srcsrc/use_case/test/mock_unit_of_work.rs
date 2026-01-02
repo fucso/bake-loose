@@ -6,25 +6,21 @@ use crate::domain::models::project::{Project, ProjectId};
 use crate::ports::{
     ProjectRepository, ProjectSort, ProjectSortColumn, RepositoryError, SortDirection, UnitOfWork,
 };
-use tokio::sync::Mutex;
 
 /// テスト用の MockProjectRepository
 #[derive(Default)]
 pub struct MockProjectRepository {
-    // 内部可変性パターンを使用
-    pub projects: Mutex<Vec<Project>>,
+    pub projects: Vec<Project>,
 }
 
 #[async_trait::async_trait]
 impl ProjectRepository for MockProjectRepository {
     async fn find_by_id(&self, id: &ProjectId) -> Result<Option<Project>, RepositoryError> {
-        let projects = self.projects.lock().await;
-        Ok(projects.iter().find(|p| p.id() == id).cloned())
+        Ok(self.projects.iter().find(|p| p.id() == id).cloned())
     }
 
     async fn find_all(&self, sort: ProjectSort) -> Result<Vec<Project>, RepositoryError> {
-        let projects = self.projects.lock().await;
-        let mut projects = projects.clone();
+        let mut projects = self.projects.clone();
 
         // ソート処理
         projects.sort_by(|a, b| {
@@ -45,20 +41,17 @@ impl ProjectRepository for MockProjectRepository {
     }
 
     async fn exists_by_name(&self, name: &str) -> Result<bool, RepositoryError> {
-        let projects = self.projects.lock().await;
-        Ok(projects.iter().any(|p| p.name() == name))
+        Ok(self.projects.iter().any(|p| p.name() == name))
     }
 
-    async fn save(&self, project: &Project) -> Result<(), RepositoryError> {
-        let mut projects = self.projects.lock().await;
-        projects.retain(|p| p.id() != project.id());
-        projects.push(project.clone());
+    async fn save(&mut self, project: &Project) -> Result<(), RepositoryError> {
+        self.projects.retain(|p| p.id() != project.id());
+        self.projects.push(project.clone());
         Ok(())
     }
 }
 
 /// テスト用の MockUnitOfWork
-#[derive(Default)]
 pub struct MockUnitOfWork {
     pub project_repo: MockProjectRepository,
 }
@@ -67,9 +60,7 @@ impl MockUnitOfWork {
     /// プロジェクト一覧から MockUnitOfWork を作成する
     pub fn with_projects(projects: Vec<Project>) -> Self {
         Self {
-            project_repo: MockProjectRepository {
-                projects: Mutex::new(projects),
-            },
+            project_repo: MockProjectRepository { projects },
         }
     }
 }
@@ -78,8 +69,8 @@ impl MockUnitOfWork {
 impl UnitOfWork for MockUnitOfWork {
     type ProjectRepo = MockProjectRepository;
 
-    fn project_repository(&self) -> &Self::ProjectRepo {
-        &self.project_repo
+    fn project_repository(&mut self) -> &mut Self::ProjectRepo {
+        &mut self.project_repo
     }
 
     async fn commit(&mut self) -> Result<(), RepositoryError> {
