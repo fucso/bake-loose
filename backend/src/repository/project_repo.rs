@@ -216,12 +216,19 @@ mod tests {
             .unwrap();
 
         // 更新
-        let updated_project = Project::from_raw(project_to_update.id().clone(), "更新後プロジェクト".to_string());
+        let updated_project = Project::from_raw(
+            project_to_update.id().clone(),
+            "更新後プロジェクト".to_string(),
+        );
         let result = repo.save(&updated_project).await;
         assert!(result.is_ok());
 
         // find_by_id で検証
-        let found = repo.find_by_id(&ProjectId(existing_id)).await.unwrap().unwrap();
+        let found = repo
+            .find_by_id(&ProjectId(existing_id))
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(found.name(), "更新後プロジェクト");
     }
 
