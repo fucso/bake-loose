@@ -5,7 +5,7 @@
 use async_graphql::ErrorExtensions;
 
 use crate::domain::actions::project::create_project as create_project_action;
-use crate::use_case::project::{create_project, get_project};
+use crate::use_case::project::{create_project, get_project, list_projects};
 
 /// GraphQL エラーのラッパー
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -79,6 +79,23 @@ impl UserFacingError for create_project::Error {
 
 impl From<create_project::Error> for async_graphql::Error {
     fn from(e: create_project::Error) -> Self {
+        e.to_user_facing().extend()
+    }
+}
+
+impl UserFacingError for list_projects::Error {
+    fn to_user_facing(&self) -> GraphQLError {
+        match self {
+            list_projects::Error::Infrastructure(e) => {
+                log::error!("Infrastructure error: {}", e);
+                GraphQLError::new("内部エラーが発生しました", "INTERNAL_ERROR")
+            }
+        }
+    }
+}
+
+impl From<list_projects::Error> for async_graphql::Error {
+    fn from(e: list_projects::Error) -> Self {
         e.to_user_facing().extend()
     }
 }

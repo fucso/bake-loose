@@ -43,7 +43,7 @@ impl ProjectQuery {
         // ユースケース実行
         let result = list_projects::execute(&uow)
             .await
-            .map_err(|e| async_graphql::Error::new(format!("{:?}", e)))?;
+            .map_err(|e| e.to_user_facing().extend())?;
 
         Ok(result.into_iter().map(Project::from).collect())
     }
