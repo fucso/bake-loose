@@ -43,7 +43,10 @@ mod tests {
         assert!(result.is_ok());
         let found = result.unwrap();
         assert!(found.is_some());
-        assert_eq!(found.unwrap().id(), &target_id);
+
+        let project = found.unwrap();
+        assert_eq!(project.id(), &target_id);
+        assert_eq!(project.name(), "対象プロジェクト");
     }
 
     #[tokio::test]
@@ -52,6 +55,7 @@ mod tests {
         let mut uow = MockUnitOfWork::default();
         uow.project_repository().save(&project).await.unwrap();
 
+        // 存在しないIDで取得
         let non_existing_id = ProjectId(Uuid::new_v4());
         let result = execute(&uow, &non_existing_id).await;
 
