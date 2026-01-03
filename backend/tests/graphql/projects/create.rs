@@ -6,24 +6,24 @@ use uuid::Uuid;
 
 use crate::graphql::schema::{execute_graphql, execute_graphql_with_errors};
 
-const MUTATION: &str = r#"
-    mutation CreateProject($input: CreateProjectInput!) {
-        createProject(input: $input) {
-            id
-            name
-        }
-    }
-"#;
+fn build_mutation(name: &str) -> String {
+    format!(
+        r#"
+        mutation {{
+            createProject(input: {{ name: "{}" }}) {{
+                id
+                name
+            }}
+        }}
+    "#,
+        name
+    )
+}
 
 #[sqlx::test(migrations = "./migrations")]
 async fn test_creates_project_successfully(pool: PgPool) {
-    let variables = json!({
-        "input": {
-            "name": "新規プロジェクト"
-        }
-    });
-
-    let data = execute_graphql(pool, MUTATION, variables).await;
+    let query = build_mutation("新規プロジェクト");
+    let data = execute_graphql(pool, &query).await;
 
     // レスポンス検証
     let project = &data["createProject"];
@@ -36,11 +36,8 @@ async fn test_creates_project_successfully(pool: PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn test_returns_error_for_empty_name(pool: PgPool) {
-    let variables = json!({
-        "input": { "name": "" }
-    });
-
-    let response = execute_graphql_with_errors(pool, MUTATION, variables).await;
+    let query = build_mutation("");
+    let response = execute_graphql_with_errors(pool, &query).await;
 
     assert_eq!(response.errors.len(), 1);
     let error = &response.errors[0];
@@ -54,11 +51,8 @@ async fn test_returns_error_for_empty_name(pool: PgPool) {
 #[sqlx::test(migrations = "./migrations")]
 async fn test_returns_error_for_too_long_name(pool: PgPool) {
     let long_name = "a".repeat(101);
-    let variables = json!({
-        "input": { "name": long_name }
-    });
-
-    let response = execute_graphql_with_errors(pool, MUTATION, variables).await;
+    let query = build_mutation(&long_name);
+    let response = execute_graphql_with_errors(pool, &query).await;
 
     assert_eq!(response.errors.len(), 1);
     let error = &response.errors[0];
@@ -71,12 +65,8 @@ async fn test_returns_error_for_too_long_name(pool: PgPool) {
 
 #[sqlx::test(migrations = "./migrations", fixtures("../../fixtures/projects.sql"))]
 async fn test_returns_error_for_duplicate_name(pool: PgPool) {
-    // フィクスチャに "Test Project 1" が存在する前提
-    let variables = json!({
-        "input": { "name": "Test Project 1" }
-    });
-
-    let response = execute_graphql_with_errors(pool, MUTATION, variables).await;
+    let query = build_mutation("Test Project 1");
+    let response = execute_graphql_with_errors(pool, &query).await;
 
     assert_eq!(response.errors.len(), 1);
     let error = &response.errors[0];

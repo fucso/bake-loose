@@ -1,6 +1,6 @@
 //! project クエリのテスト
 //!
-//! 単一プロジェクト取得クエリのリクエストレベルテスト。
+//! IDによるプロジェクト取得クエリのリクエストレベルテスト。
 
 use serde_json::json;
 use sqlx::PgPool;
@@ -12,7 +12,6 @@ async fn test_returns_null_when_not_found(pool: PgPool) {
     let data = execute_graphql(
         pool,
         r#"{ project(id: "00000000-0000-0000-0000-000000000000") { id name } }"#,
-        json!({}),
     )
     .await;
 
@@ -24,7 +23,6 @@ async fn test_returns_project(pool: PgPool) {
     let data = execute_graphql(
         pool,
         r#"{ project(id: "11111111-1111-1111-1111-111111111111") { id name } }"#,
-        json!({}),
     )
     .await;
 

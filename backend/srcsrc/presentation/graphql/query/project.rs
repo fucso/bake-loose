@@ -2,7 +2,7 @@
 //!
 //! プロジェクトに関するクエリを処理する。
 
-use async_graphql::{Context, ErrorExtensions, Object, Result, ID};
+use async_graphql::{Context, Object, Result, ID};
 use uuid::Uuid;
 
 use crate::domain::models::project::ProjectId;

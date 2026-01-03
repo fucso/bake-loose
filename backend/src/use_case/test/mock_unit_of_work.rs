@@ -63,17 +63,6 @@ pub struct MockUnitOfWork {
     pub project_repo: MockProjectRepository,
 }
 
-impl MockUnitOfWork {
-    /// プロジェクト一覧から MockUnitOfWork を作成する
-    pub fn with_projects(projects: Vec<Project>) -> Self {
-        Self {
-            project_repo: MockProjectRepository {
-                projects: Mutex::new(projects),
-            },
-        }
-    }
-}
-
 #[async_trait::async_trait]
 impl UnitOfWork for MockUnitOfWork {
     type ProjectRepo = MockProjectRepository;

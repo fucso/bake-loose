@@ -1,17 +1,20 @@
-//! GraphQL コンテキストヘルパー
+//! GraphQL Context 拡張
 //!
-//! リゾルバーから UnitOfWork を取得するためのヘルパー関数を提供する。
+//! Context にヘルパー関数を追加する。
 
 use async_graphql::{Context, Result};
 use sqlx::PgPool;
 
 use crate::repository::PgUnitOfWork;
 
-/// コンテキストから UnitOfWork を構築する
-///
-/// リゾルバーはこの関数を呼び出すだけで UnitOfWork を取得できる。
-/// PgPool や PgUnitOfWork の詳細はこのモジュールに隠蔽される。
-pub fn create_unit_of_work(ctx: &Context<'_>) -> Result<PgUnitOfWork> {
-    let pool = ctx.data::<PgPool>()?;
-    Ok(PgUnitOfWork::new(pool.clone()))
+/// Context に `PgUnitOfWork` を作成するヘルパーを追加
+pub trait ContextExt {
+    fn create_unit_of_work(&self) -> Result<PgUnitOfWork>;
+}
+
+impl ContextExt for Context<'_> {
+    fn create_unit_of_work(&self) -> Result<PgUnitOfWork> {
+        let pool = self.data::<PgPool>()?;
+        Ok(PgUnitOfWork::new(pool.clone()))
+    }
 }

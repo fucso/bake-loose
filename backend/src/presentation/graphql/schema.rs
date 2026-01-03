@@ -6,7 +6,6 @@ use async_graphql::{EmptySubscription, MergedObject, Schema};
 use sqlx::PgPool;
 
 use crate::presentation::graphql::mutation::project::ProjectMutation;
-use crate::repository::PgUnitOfWork;
 
 use super::query::ProjectQuery;
 
@@ -25,14 +24,13 @@ pub type AppSchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
 
 /// スキーマを構築する
 ///
-/// コンテキストに PgPool (uow) を設定し、リゾルバーで利用可能にする。
+/// コンテキストに PgPool を設定し、リゾルバーで利用可能にする。
 pub fn build_schema(pool: PgPool) -> AppSchema {
     Schema::build(
         QueryRoot::default(),
         MutationRoot::default(),
         EmptySubscription,
     )
-    .data(pool.clone())
-    .data(PgUnitOfWork::new(pool))
+    .data(pool)
     .finish()
 }

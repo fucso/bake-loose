@@ -9,14 +9,14 @@ use crate::graphql::schema::execute_graphql;
 
 #[sqlx::test(migrations = "./migrations")]
 async fn test_returns_empty_list(pool: PgPool) {
-    let data = execute_graphql(pool, "{ projects { id name } }", json!({})).await;
+    let data = execute_graphql(pool, "{ projects { id name } }").await;
 
     assert_eq!(data, json!({ "projects": [] }));
 }
 
 #[sqlx::test(migrations = "./migrations", fixtures("../../fixtures/projects.sql"))]
 async fn test_returns_projects_from_fixture(pool: PgPool) {
-    let data = execute_graphql(pool, "{ projects { id name } }", json!({})).await;
+    let data = execute_graphql(pool, "{ projects { id name } }").await;
 
     assert_eq!(
         data,

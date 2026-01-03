@@ -2,9 +2,9 @@
 
 use async_graphql::{Context, ErrorExtensions, Object, Result};
 
+use crate::presentation::graphql::context::ContextExt;
 use crate::presentation::graphql::error::UserFacingError;
 use crate::presentation::graphql::types::{project::CreateProjectInput, project::Project};
-use crate::repository::PgUnitOfWork;
 use crate::use_case::project::create_project;
 
 /// プロジェクト関連のミューテーション
@@ -19,7 +19,7 @@ impl ProjectMutation {
         ctx: &Context<'_>,
         input: CreateProjectInput,
     ) -> Result<Project> {
-        let mut uow = ctx.data::<PgUnitOfWork>()?.clone();
+        let mut uow = ctx.create_unit_of_work()?;
         let input = create_project::Input { name: input.name };
 
         let project = create_project::execute(&mut uow, input)

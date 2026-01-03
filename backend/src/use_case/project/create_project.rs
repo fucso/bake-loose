@@ -80,7 +80,11 @@ mod tests {
     #[tokio::test]
     async fn test_execute_returns_duplicate_error_when_name_exists() {
         let existing_project = Project::new("既存プロジェクト".to_string());
-        let mut uow = MockUnitOfWork::with_projects(vec![existing_project]);
+        let mut uow = MockUnitOfWork::default();
+        uow.project_repository()
+            .save(&existing_project)
+            .await
+            .unwrap();
         let input = Input {
             name: "既存プロジェクト".to_string(),
         };
