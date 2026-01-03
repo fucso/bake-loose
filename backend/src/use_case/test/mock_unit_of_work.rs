@@ -6,20 +6,25 @@ use crate::domain::models::project::{Project, ProjectId};
 use crate::ports::{
     ProjectRepository, ProjectSort, ProjectSortColumn, RepositoryError, SortDirection, UnitOfWork,
 };
+use tokio::sync::Mutex;
 
 /// テスト用の MockProjectRepository
+#[derive(Default)]
 pub struct MockProjectRepository {
-    pub projects: Vec<Project>,
+    // 内部可変性パターンを使用
+    pub projects: Mutex<Vec<Project>>,
 }
 
 #[async_trait::async_trait]
 impl ProjectRepository for MockProjectRepository {
     async fn find_by_id(&self, id: &ProjectId) -> Result<Option<Project>, RepositoryError> {
-        Ok(self.projects.iter().find(|p| p.id() == id).cloned())
+        let projects = self.projects.lock().await;
+        Ok(projects.iter().find(|p| p.id() == id).cloned())
     }
 
     async fn find_all(&self, sort: ProjectSort) -> Result<Vec<Project>, RepositoryError> {
-        let mut projects = self.projects.clone();
+        let projects = self.projects.lock().await;
+        let mut projects = projects.clone();
 
         // ソート処理
         projects.sort_by(|a, b| {
@@ -38,20 +43,24 @@ impl ProjectRepository for MockProjectRepository {
 
         Ok(projects)
     }
+
+    async fn exists_by_name(&self, name: &str) -> Result<bool, RepositoryError> {
+        let projects = self.projects.lock().await;
+        Ok(projects.iter().any(|p| p.name() == name))
+    }
+
+    async fn save(&self, project: &Project) -> Result<(), RepositoryError> {
+        let mut projects = self.projects.lock().await;
+        projects.retain(|p| p.id() != project.id());
+        projects.push(project.clone());
+        Ok(())
+    }
 }
 
 /// テスト用の MockUnitOfWork
+#[derive(Default)]
 pub struct MockUnitOfWork {
     pub project_repo: MockProjectRepository,
-}
-
-impl MockUnitOfWork {
-    /// プロジェクト一覧から MockUnitOfWork を作成する
-    pub fn with_projects(projects: Vec<Project>) -> Self {
-        Self {
-            project_repo: MockProjectRepository { projects },
-        }
-    }
 }
 
 #[async_trait::async_trait]

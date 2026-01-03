@@ -2,7 +2,7 @@
 //!
 //! ドメインモデルの Project をラップした GraphQL 型。
 
-use async_graphql::{Object, ID};
+use async_graphql::{InputObject, Object, ID};
 
 use crate::domain::models::project::Project as DomainProject;
 
@@ -28,4 +28,10 @@ impl From<DomainProject> for Project {
     fn from(project: DomainProject) -> Self {
         Self(project)
     }
+}
+
+/// プロジェクト作成時の入力
+#[derive(InputObject)]
+pub struct CreateProjectInput {
+    pub name: String,
 }
