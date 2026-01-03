@@ -11,7 +11,6 @@ use crate::ports::UnitOfWork;
 use super::project_repo::PgProjectRepository;
 
 /// PostgreSQL 用の UnitOfWork 実装
-#[derive(Clone)]
 pub struct PgUnitOfWork {
     project_repo: PgProjectRepository,
 }
