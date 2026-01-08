@@ -3,7 +3,6 @@
 //! `sqlx::test` マクロから渡される `PgPool` を使用して
 //! テスト用の GraphQL スキーマを構築し、クエリを実行する。
 
-use async_graphql::Request;
 use bake_loose::presentation::graphql::build_schema;
 use sqlx::PgPool;
 
