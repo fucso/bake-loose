@@ -21,27 +21,40 @@ pub enum Error {
 
 /// ユースケースの実行
 pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Project, Error> {
-    // 1. 重複チェック
+    // 1. トランザクション開始
+    uow.begin()
+        .await
+        .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
+
+    // 2. 重複チェック
     if uow
         .project_repository()
         .exists_by_name(&input.name)
         .await
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?
     {
+        // エラー時はロールバック（トランザクションを開始したので）
+        let _ = uow.rollback().await;
         return Err(Error::DuplicateName);
     }
 
-    // 2. ドメインアクション実行
+    // 3. ドメインアクション実行
     let command = create_project::Command { name: input.name };
-    let project = create_project::run(command).map_err(Error::Domain)?;
+    let project = match create_project::run(command) {
+        Ok(p) => p,
+        Err(e) => {
+            let _ = uow.rollback().await;
+            return Err(Error::Domain(e));
+        }
+    };
 
-    // 3. 永続化
-    uow.project_repository()
-        .save(&project)
-        .await
-        .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
+    // 4. 永続化
+    if let Err(e) = uow.project_repository().save(&project).await {
+        let _ = uow.rollback().await;
+        return Err(Error::Infrastructure(format!("{:?}", e)));
+    }
 
-    // 4. コミット
+    // 5. コミット
     uow.commit()
         .await
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
@@ -79,12 +92,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_execute_returns_duplicate_error_when_name_exists() {
-        let existing_project = Project::new("既存プロジェクト".to_string());
         let mut uow = MockUnitOfWork::default();
+
+        // 既存プロジェクトを作成（トランザクションなしで直接保存）
+        let existing_project = Project::new("既存プロジェクト".to_string());
         uow.project_repository()
             .save(&existing_project)
             .await
             .unwrap();
+
         let input = Input {
             name: "既存プロジェクト".to_string(),
         };

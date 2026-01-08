@@ -2,17 +2,25 @@
 //!
 //! ユースケースのテストで使用する共通モック。
 
-use crate::domain::models::project::{Project, ProjectId};
-use crate::ports::{
-    ProjectRepository, ProjectSort, ProjectSortColumn, RepositoryError, SortDirection, UnitOfWork,
-};
+use std::sync::Arc;
 use tokio::sync::Mutex;
 
+use crate::domain::models::project::{Project, ProjectId};
+use crate::ports::project_repository::ProjectRepository;
+use crate::ports::{ProjectSort, ProjectSortColumn, RepositoryError, SortDirection, UnitOfWork};
+
 /// テスト用の MockProjectRepository
-#[derive(Default)]
+///
+/// MockUnitOfWork 内のデータを共有するため Arc<Mutex> を使用
+#[derive(Clone)]
 pub struct MockProjectRepository {
-    // 内部可変性パターンを使用
-    pub projects: Mutex<Vec<Project>>,
+    projects: Arc<Mutex<Vec<Project>>>,
+}
+
+impl MockProjectRepository {
+    fn new(projects: Arc<Mutex<Vec<Project>>>) -> Self {
+        Self { projects }
+    }
 }
 
 #[async_trait::async_trait]
@@ -23,8 +31,8 @@ impl ProjectRepository for MockProjectRepository {
     }
 
     async fn find_all(&self, sort: ProjectSort) -> Result<Vec<Project>, RepositoryError> {
-        let projects = self.projects.lock().await;
-        let mut projects = projects.clone();
+        let projects_guard = self.projects.lock().await;
+        let mut projects = projects_guard.clone();
 
         // ソート処理
         projects.sort_by(|a, b| {
@@ -58,24 +66,55 @@ impl ProjectRepository for MockProjectRepository {
 }
 
 /// テスト用の MockUnitOfWork
-#[derive(Default)]
 pub struct MockUnitOfWork {
-    pub project_repo: MockProjectRepository,
+    projects: Arc<Mutex<Vec<Project>>>,
+    transaction_started: bool,
+}
+
+impl Default for MockUnitOfWork {
+    fn default() -> Self {
+        Self {
+            projects: Arc::new(Mutex::new(Vec::new())),
+            transaction_started: false,
+        }
+    }
 }
 
 #[async_trait::async_trait]
 impl UnitOfWork for MockUnitOfWork {
     type ProjectRepo = MockProjectRepository;
 
-    fn project_repository(&self) -> &Self::ProjectRepo {
-        &self.project_repo
+    fn project_repository(&mut self) -> Self::ProjectRepo {
+        MockProjectRepository::new(self.projects.clone())
+    }
+
+    async fn begin(&mut self) -> Result<(), RepositoryError> {
+        if self.transaction_started {
+            return Err(RepositoryError::Internal {
+                message: "Transaction already started".to_string(),
+            });
+        }
+        self.transaction_started = true;
+        Ok(())
     }
 
     async fn commit(&mut self) -> Result<(), RepositoryError> {
+        if !self.transaction_started {
+            return Err(RepositoryError::Internal {
+                message: "No transaction to commit".to_string(),
+            });
+        }
+        self.transaction_started = false;
         Ok(())
     }
 
     async fn rollback(&mut self) -> Result<(), RepositoryError> {
+        if !self.transaction_started {
+            return Err(RepositoryError::Internal {
+                message: "No transaction to rollback".to_string(),
+            });
+        }
+        self.transaction_started = false;
         Ok(())
     }
 }

@@ -3,7 +3,8 @@
 //! プロジェクト一覧を取得する。
 
 use crate::domain::models::project::Project;
-use crate::ports::{ProjectRepository, ProjectSort, UnitOfWork};
+use crate::ports::project_repository::ProjectRepository;
+use crate::ports::{ProjectSort, UnitOfWork};
 
 #[derive(Debug)]
 pub enum Error {
@@ -11,7 +12,9 @@ pub enum Error {
 }
 
 /// プロジェクト一覧を取得する
-pub async fn execute<U: UnitOfWork>(uow: &U) -> Result<Vec<Project>, Error> {
+///
+/// 読み取り専用のためトランザクションは不要。
+pub async fn execute<U: UnitOfWork>(uow: &mut U) -> Result<Vec<Project>, Error> {
     uow.project_repository()
         .find_all(ProjectSort::default())
         .await
@@ -21,7 +24,7 @@ pub async fn execute<U: UnitOfWork>(uow: &U) -> Result<Vec<Project>, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::models::project::ProjectId;
+    use crate::domain::models::project::{Project, ProjectId};
     use crate::use_case::test::MockUnitOfWork;
     use uuid::Uuid;
 
@@ -36,7 +39,7 @@ mod tests {
         uow.project_repository().save(&p2).await.unwrap();
         uow.project_repository().save(&p3).await.unwrap();
 
-        let result = execute(&uow).await;
+        let result = execute(&mut uow).await;
 
         assert!(result.is_ok());
         let projects = result.unwrap();
@@ -48,8 +51,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_projects_empty() {
-        let uow = MockUnitOfWork::default();
-        let result = execute(&uow).await;
+        let mut uow = MockUnitOfWork::default();
+        let result = execute(&mut uow).await;
 
         assert!(result.is_ok());
         assert!(result.unwrap().is_empty());

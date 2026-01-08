@@ -3,7 +3,8 @@
 //! IDでプロジェクトを取得する。
 
 use crate::domain::models::project::{Project, ProjectId};
-use crate::ports::{ProjectRepository, UnitOfWork};
+use crate::ports::project_repository::ProjectRepository;
+use crate::ports::UnitOfWork;
 
 #[derive(Debug)]
 pub enum Error {
@@ -11,7 +12,9 @@ pub enum Error {
 }
 
 /// IDでプロジェクトを取得する
-pub async fn execute<U: UnitOfWork>(uow: &U, id: &ProjectId) -> Result<Option<Project>, Error> {
+///
+/// 読み取り専用のためトランザクションは不要。
+pub async fn execute<U: UnitOfWork>(uow: &mut U, id: &ProjectId) -> Result<Option<Project>, Error> {
     uow.project_repository()
         .find_by_id(id)
         .await
@@ -21,6 +24,7 @@ pub async fn execute<U: UnitOfWork>(uow: &U, id: &ProjectId) -> Result<Option<Pr
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::models::project::Project;
     use crate::use_case::test::MockUnitOfWork;
     use uuid::Uuid;
 
@@ -32,13 +36,16 @@ mod tests {
         let other_project = Project::from_raw(other_id.clone(), "別のプロジェクト".to_string());
 
         let mut uow = MockUnitOfWork::default();
-        uow.project_repository().save(&other_project).await.unwrap();
+        uow.project_repository()
+            .save(&other_project)
+            .await
+            .unwrap();
         uow.project_repository()
             .save(&target_project)
             .await
             .unwrap();
 
-        let result = execute(&uow, &target_id).await;
+        let result = execute(&mut uow, &target_id).await;
 
         assert!(result.is_ok());
         let found = result.unwrap();
@@ -57,7 +64,7 @@ mod tests {
 
         // 存在しないIDで取得
         let non_existing_id = ProjectId(Uuid::new_v4());
-        let result = execute(&uow, &non_existing_id).await;
+        let result = execute(&mut uow, &non_existing_id).await;
 
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
