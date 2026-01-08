@@ -12,9 +12,8 @@ pub enum Error {
 
 /// プロジェクト一覧を取得する
 pub async fn execute<U: UnitOfWork>(uow: &U) -> Result<Vec<Project>, Error> {
-    let sort = ProjectSort::default(); // デフォルトは名前昇順
     uow.project_repository()
-        .find_all(sort)
+        .find_all(ProjectSort::default())
         .await
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))
 }
