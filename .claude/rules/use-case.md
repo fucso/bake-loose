@@ -39,6 +39,7 @@ backend/src/use_case/
 // src/use_case/project/create_project.rs
 
 use crate::domain::actions::project::create_project;
+use crate::ports::project_repository::ProjectRepository;
 use crate::ports::unit_of_work::UnitOfWork;
 
 #[derive(Debug)]
@@ -50,28 +51,52 @@ pub enum Error {
 
 pub struct Input {
     pub name: String,
-    pub description: Option<String>,
 }
 
 pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Project, Error> {
-    // 1. DB問い合わせが必要な検証（先に行う）
+    // 1. トランザクション開始（書き込み操作を行うため）
+    uow.begin().await
+        .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
+
+    // 2. DB問い合わせが必要な検証（先に行う）
     if uow.project_repository().exists_by_name(&input.name).await
-        .map_err(|e| Error::Infrastructure(e.to_string()))? {
+        .map_err(|e| Error::Infrastructure(format!("{:?}", e)))? {
+        let _ = uow.rollback().await;
         return Err(Error::DuplicateName);
     }
 
-    // 2. ドメインアクション実行
-    let command = create_project::Command { name: input.name, ... };
-    let project = create_project::run(command).map_err(Error::Domain)?;
+    // 3. ドメインアクション実行
+    let command = create_project::Command { name: input.name };
+    let project = match create_project::run(command) {
+        Ok(p) => p,
+        Err(e) => {
+            let _ = uow.rollback().await;
+            return Err(Error::Domain(e));
+        }
+    };
 
-    // 3. 永続化
-    uow.project_repository().save(&project).await
-        .map_err(|e| Error::Infrastructure(e.to_string()))?;
+    // 4. 永続化
+    if let Err(e) = uow.project_repository().save(&project).await {
+        let _ = uow.rollback().await;
+        return Err(Error::Infrastructure(format!("{:?}", e)));
+    }
 
-    // 4. コミット
-    uow.commit().await.map_err(|e| Error::Infrastructure(e.to_string()))?;
+    // 5. コミット
+    uow.commit().await
+        .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
 
     Ok(project)
+}
+```
+
+**読み取り専用のユースケース** では `begin()` は不要:
+
+```rust
+pub async fn execute<U: UnitOfWork>(uow: &mut U) -> Result<Vec<Project>, Error> {
+    uow.project_repository()
+        .find_all(ProjectSort::default())
+        .await
+        .map_err(|e| Error::Infrastructure(format!("{:?}", e)))
 }
 ```
 
@@ -99,8 +124,12 @@ if repository.exists_by_name(&project.name()).await? { ... }
 // ❌ リポジトリを個別に引数で受け取る
 pub async fn execute(repo: &impl ProjectRepository, input: Input) -> Result<...> { ... }
 
-// ✅ ドメインアクションに委譲、UnitOfWork経由、DB検証を先に
-pub async fn execute<U: UnitOfWork>(uow: &U, input: Input) -> Result<...> { ... }
+// ❌ 書き込み操作で begin() を呼ばない
+uow.project_repository().save(&project).await?;
+uow.commit().await?;  // トランザクションが開始されていない！
+
+// ✅ ドメインアクションに委譲、UnitOfWork経由、DB検証を先に、begin() で開始
+pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<...> { ... }
 ```
 
 ## チェックリスト
@@ -109,4 +138,6 @@ pub async fn execute<U: UnitOfWork>(uow: &U, input: Input) -> Result<...> { ... 
 - [ ] ドメインアクションを呼び出している（直接ロジック実装していない）
 - [ ] UnitOfWork経由で永続化
 - [ ] DB検証はドメインアクション実行前
+- [ ] 書き込み操作では`begin()`でトランザクション開始
 - [ ] 成功後に`commit()`を呼んでいる
+- [ ] エラー時は`rollback()`を呼んでいる

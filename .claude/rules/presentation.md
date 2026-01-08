@@ -58,7 +58,10 @@ impl ProjectMutation {
 
 ## エラー変換
 
-**全層のエラーは種類のみを定義し、presentation層でメッセージに変換**:
+**全層のエラーは種類のみを定義し、presentation層でメッセージに変換**。
+
+- 各 use_case のエラー型に対して `UserFacingError` trait を実装する
+- query / mutation では `e.to_user_facing().extend()` を使用してエラーを変換する
 
 ```rust
 // src/presentation/graphql/error.rs
