@@ -36,10 +36,7 @@ mod tests {
         let other_project = Project::from_raw(other_id.clone(), "別のプロジェクト".to_string());
 
         let mut uow = MockUnitOfWork::default();
-        uow.project_repository()
-            .save(&other_project)
-            .await
-            .unwrap();
+        uow.project_repository().save(&other_project).await.unwrap();
         uow.project_repository()
             .save(&target_project)
             .await

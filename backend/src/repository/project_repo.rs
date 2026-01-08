@@ -28,8 +28,8 @@ impl PgProjectRepository {
 #[async_trait]
 impl ProjectRepository for PgProjectRepository {
     async fn find_by_id(&self, id: &ProjectId) -> Result<Option<Project>, RepositoryError> {
-        let query = sqlx::query_as::<_, ProjectRow>("SELECT * FROM projects WHERE id = $1")
-            .bind(id.0);
+        let query =
+            sqlx::query_as::<_, ProjectRow>("SELECT * FROM projects WHERE id = $1").bind(id.0);
 
         self.executor
             .fetch_optional(query)
@@ -55,8 +55,8 @@ impl ProjectRepository for PgProjectRepository {
     }
 
     async fn exists_by_name(&self, name: &str) -> Result<bool, RepositoryError> {
-        let query = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM projects WHERE name = $1)")
-            .bind(name);
+        let query =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM projects WHERE name = $1)").bind(name);
 
         self.executor
             .fetch_one_scalar(query)
@@ -234,7 +234,11 @@ mod tests {
         assert!(result.is_ok());
 
         // find_by_id で検証
-        let found = repo.find_by_id(&ProjectId(existing_id)).await.unwrap().unwrap();
+        let found = repo
+            .find_by_id(&ProjectId(existing_id))
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(found.name(), "更新後プロジェクト");
     }
 

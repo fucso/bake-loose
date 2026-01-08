@@ -91,7 +91,7 @@ async fn find_all(&self, sort: ProjectSort) -> Result<Vec<Project>, RepositoryEr
 Pool と Transaction を抽象化し、リポジトリが両方で動作できるようにする。
 
 **設計原則**:
-- sqlx の Query 型の種類ごとにメソッドを実装する
+- sqlx の Query 型の種類ごとに Query 実行メソッドを実装する
 - Pool/Transaction の分岐は `PgExecutor` 内に閉じ込め、リポジトリには露出させない
 - 新しいクエリパターンが必要になった場合は `PgExecutor` にメソッドを追加する
 
