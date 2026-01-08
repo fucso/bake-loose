@@ -240,6 +240,29 @@ flowchart LR
 
 ---
 
+## テストケース
+
+{テストの配置場所とテストケース一覧を記載する}
+
+### テストファイル
+
+- **ユニットテスト**: `src/{layer}/{module}.rs` 内の `#[cfg(test)] mod tests`
+- **統合テスト（GraphQL）**: `tests/graphql/{entity}/{operation}.rs`
+
+### 正常系
+
+| テスト名 | 内容 |
+|----------|------|
+| `test_xxx` | {テスト内容} |
+
+### 異常系
+
+| テスト名 | 内容 |
+|----------|------|
+| `test_xxx_returns_error_when_yyy` | {テスト内容} |
+
+---
+
 ## 補足資料（該当する場合）
 
 | ファイル | 内容 |
@@ -251,8 +274,25 @@ flowchart LR
 ## 完了条件
 
 - [ ] {具体的な完了条件}
+- [ ] 上記テストケースがすべて実装されている
 - [ ] テストが通る
 ```
+
+### テストの配置ルール
+
+| レイヤー | テスト配置 | 備考 |
+|----------|-----------|------|
+| domain | `src/domain/actions/{entity}/{action}.rs` 内 | `#[cfg(test)] mod tests` |
+| ports | なし | トレイト定義のみのためテスト不要 |
+| use_case | `src/use_case/{entity}/{use_case}.rs` 内 | `MockUnitOfWork` 使用 |
+| repository | `src/repository/{entity}_repo.rs` 内 | `#[sqlx::test]` 使用 |
+| presentation | `tests/graphql/{entity}/{operation}.rs` | 統合テスト |
+
+### GraphQL 統合テストのポイント
+
+- **GET 系（Query）**: `execute_graphql` を使用し、完全な JSON で検証
+- **POST 系（Mutation）**: `execute_graphql_with_errors` を使用し、エラーレスポンスも検証可能に
+- **テストヘルパー**: `tests/graphql/schema.rs` に共通ヘルパーを定義
 
 ---
 
