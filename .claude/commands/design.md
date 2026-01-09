@@ -19,7 +19,7 @@ argument-hint: [実現したい機能・要件]
 ## 出力ファイル構成
 
 ```
-.agents/features/{feature-id}/
+.agents/features/{yyyymmdd}-{feature_name}/
 ├── spec.md                        # 要件分析 + タスク分解
 └── tasks/
     ├── 01-{task-name}/
@@ -123,12 +123,16 @@ argument-hint: [実現したい機能・要件]
 
 ## Phase 4: ファイル出力
 
-### feature-id の命名
+### feature ディレクトリの命名
 
-ケバブケースで要件を端的に表す:
-- `add-trial-photo`
-- `update-project-status`
-- `bulk-delete-trials`
+`{yyyymmdd}-{feature_name}` の形式で命名する:
+- 日付部分: 設計実行日（例: `20260109`）
+- feature_name: スネークケースで要件を端的に表す
+
+例:
+- `20260109-add_trial_photo`
+- `20260109-update_project_status`
+- `20260109-bulk_delete_trials`
 
 ---
 
@@ -137,7 +141,7 @@ argument-hint: [実現したい機能・要件]
 ### spec.md（Feature レベル）
 
 ```markdown
-# Feature: {feature-id}
+# Feature: {feature_name}
 
 ## 概要
 {1-2行の要約}
@@ -208,7 +212,7 @@ flowchart LR
 ```markdown
 # Task: {タスク名}
 
-> Feature: [{feature-id}](../../spec.md)
+> Feature: [{feature_name}](../../spec.md)
 > 依存: {依存タスク or なし}
 
 ## 目的
