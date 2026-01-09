@@ -69,14 +69,22 @@ pub trait UnitOfWork: Send + Sync {
     type TrialRepo: TrialRepository;
     // ...
 
-    fn project_repository(&mut self) -> &mut Self::ProjectRepo;
-    fn trial_repository(&mut self) -> &mut Self::TrialRepo;
+    /// リポジトリを取得（呼び出すたびに新しいインスタンスを返す）
+    fn project_repository(&mut self) -> Self::ProjectRepo;
+    fn trial_repository(&mut self) -> Self::TrialRepo;
     // ...
 
+    /// トランザクションを開始（書き込み操作前に呼び出す）
+    async fn begin(&mut self) -> Result<(), RepositoryError>;
     async fn commit(&mut self) -> Result<(), RepositoryError>;
     async fn rollback(&mut self) -> Result<(), RepositoryError>;
 }
 ```
+
+**設計ポイント**:
+- `project_repository()` は毎回新しいインスタンスを返す（Rust の借用ルール対応）
+- トランザクション状態は UnitOfWork 内で管理し、リポジトリ間で共有される
+- 読み取り専用の場合は `begin()` 不要（pool を直接使用）
 
 ## 命名規則
 

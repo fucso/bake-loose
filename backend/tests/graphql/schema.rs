@@ -7,16 +7,6 @@ use bake_loose::presentation::graphql::build_schema;
 use sqlx::PgPool;
 
 /// GraphQL クエリを実行し、レスポンスの JSON を返す
-///
-/// # Arguments
-/// * `pool` - `sqlx::test` から渡される PostgreSQL コネクションプール
-/// * `query` - GraphQL クエリ文字列
-///
-/// # Returns
-/// レスポンスの JSON 値
-///
-/// # Panics
-/// GraphQL エラーが発生した場合にパニックする
 pub async fn execute_graphql(pool: PgPool, query: &str) -> serde_json::Value {
     let schema = build_schema(pool);
     let response = schema.execute(query).await;
@@ -28,4 +18,10 @@ pub async fn execute_graphql(pool: PgPool, query: &str) -> serde_json::Value {
     );
 
     response.data.into_json().unwrap()
+}
+
+/// GraphQL クエリを実行し、エラーを含むレスポンスを返す
+pub async fn execute_graphql_with_errors(pool: PgPool, query: &str) -> async_graphql::Response {
+    let schema = build_schema(pool);
+    schema.execute(query).await
 }

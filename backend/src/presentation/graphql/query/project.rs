@@ -2,14 +2,14 @@
 //!
 //! プロジェクトに関するクエリを処理する。
 
-use async_graphql::{Context, Object, Result, ID};
+use async_graphql::{Context, ErrorExtensions, Object, Result, ID};
 use uuid::Uuid;
 
 use crate::domain::models::project::ProjectId;
+use crate::presentation::graphql::context::ContextExt;
+use crate::presentation::graphql::error::UserFacingError;
+use crate::presentation::graphql::types::project::Project;
 use crate::use_case::project::{get_project, list_projects};
-
-use super::super::context::create_unit_of_work;
-use super::super::types::Project;
 
 /// Project クエリリゾルバー
 #[derive(Default)]
@@ -21,7 +21,7 @@ impl ProjectQuery {
     ///
     /// 存在しない場合は null を返す。
     async fn project(&self, ctx: &Context<'_>, id: ID) -> Result<Option<Project>> {
-        let uow = create_unit_of_work(ctx)?;
+        let mut uow = ctx.create_unit_of_work()?;
 
         // ID のパース
         let uuid = Uuid::parse_str(&id.0)
@@ -29,21 +29,21 @@ impl ProjectQuery {
         let project_id = ProjectId(uuid);
 
         // ユースケース実行
-        let result = get_project::execute(&uow, &project_id)
+        let result = get_project::execute(&mut uow, &project_id)
             .await
-            .map_err(|e| async_graphql::Error::new(format!("{:?}", e)))?;
+            .map_err(|e| e.to_user_facing().extend())?;
 
         Ok(result.map(Project::from))
     }
 
     /// すべてのプロジェクトを取得する
     async fn projects(&self, ctx: &Context<'_>) -> Result<Vec<Project>> {
-        let uow = create_unit_of_work(ctx)?;
+        let mut uow = ctx.create_unit_of_work()?;
 
         // ユースケース実行
-        let result = list_projects::execute(&uow)
+        let result = list_projects::execute(&mut uow)
             .await
-            .map_err(|e| async_graphql::Error::new(format!("{:?}", e)))?;
+            .map_err(|e| e.to_user_facing().extend())?;
 
         Ok(result.into_iter().map(Project::from).collect())
     }

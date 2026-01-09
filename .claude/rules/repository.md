@@ -22,6 +22,8 @@
 
 ```
 backend/src/repository/
+├── executor.rs         # PgExecutor（Pool/Transaction の抽象化）
+├── pg_unit_of_work.rs  # PgUnitOfWork 実装
 ├── project_repo.rs
 ├── trial_repo.rs
 ├── ...
@@ -84,41 +86,73 @@ async fn find_all(&self, sort: ProjectSort) -> Result<Vec<Project>, RepositoryEr
 }
 ```
 
+## PgExecutor
+
+Pool と Transaction を抽象化し、リポジトリが両方で動作できるようにする。
+
+**設計原則**:
+- sqlx の Query 型の種類ごとに Query 実行メソッドを実装する
+- Pool/Transaction の分岐は `PgExecutor` 内に閉じ込め、リポジトリには露出させない
+- 新しいクエリパターンが必要になった場合は `PgExecutor` にメソッドを追加する
+
+```rust
+// src/repository/executor.rs
+
+pub enum PgExecutor {
+    Pool(PgPool),
+    Transaction(Arc<Mutex<Transaction<'static, Postgres>>>),
+}
+
+impl PgExecutor {
+    /// 単一行を取得する（存在しない場合は None）
+    pub async fn fetch_optional<'q, T>(
+        &self,
+        query: sqlx::query::QueryAs<'q, Postgres, T, sqlx::postgres::PgArguments>,
+    ) -> Result<Option<T>, sqlx::Error>
+    where
+        T: for<'r> FromRow<'r, PgRow> + Send + Unpin,
+    {
+        match self {
+            Self::Pool(pool) => query.fetch_optional(pool).await,
+            Self::Transaction(tx) => {
+                let mut guard = tx.lock().await;
+                query.fetch_optional(&mut **guard).await
+            }
+        }
+    }
+
+    // fetch_all, fetch_one_scalar, execute, ...
+}
+```
+
 ## リポジトリ実装
+
+**設計原則**:
+- リポジトリは `PgExecutor` を受け取る
+- SQL は一度だけ記述し、`PgExecutor` のメソッドに委譲する
+- リポジトリ内で Pool/Transaction の match 分岐を書かない
 
 ```rust
 // src/repository/project_repo.rs
 
 pub struct PgProjectRepository {
-    pool: PgPool,
+    executor: PgExecutor,
 }
 
 #[async_trait]
 impl ProjectRepository for PgProjectRepository {
-    async fn save(&self, project: &Project) -> Result<(), RepositoryError> {
-        sqlx::query(r#"
-            INSERT INTO projects (id, name, status, created_at, updated_at)
-            VALUES ($1, $2, $3, NOW(), NOW())
-            ON CONFLICT (id) DO UPDATE SET
-                name = EXCLUDED.name, status = EXCLUDED.status, updated_at = NOW()
-        "#)
-        .bind(project.id().0)
-        .bind(project.name())
-        .bind(project.status().to_string())
-        .execute(&self.pool)
-        .await
-        .map_err(|e| RepositoryError::Internal { message: e.to_string() })?;
-        Ok(())
-    }
-
     async fn find_by_id(&self, id: &ProjectId) -> Result<Option<Project>, RepositoryError> {
-        sqlx::query_as::<_, ProjectRow>("SELECT * FROM projects WHERE id = $1")
-            .bind(id.0)
-            .fetch_optional(&self.pool)
+        let query = sqlx::query_as::<_, ProjectRow>("SELECT * FROM projects WHERE id = $1")
+            .bind(id.0);
+
+        self.executor
+            .fetch_optional(query)
             .await
             .map(|row| row.map(Project::from))
             .map_err(|e| RepositoryError::Internal { message: e.to_string() })
     }
+
+    // find_all, save, exists_by_name, ...
 }
 ```
 
