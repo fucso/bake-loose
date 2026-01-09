@@ -13,7 +13,6 @@ use super::models::ProjectRow;
 ///
 /// `PgExecutor` を使用して、pool 直接または
 /// トランザクション内のどちらでも動作する。
-#[derive(Clone)]
 pub struct PgProjectRepository {
     executor: PgExecutor,
 }
