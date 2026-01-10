@@ -1,3 +1,7 @@
+---
+paths: backend/src/use_case/**/*.rs
+---
+
 # Use Case Layer
 
 ユースケース層はドメインアクションを組み合わせてビジネスフローを実現するオーケストレーション層。

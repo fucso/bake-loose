@@ -1,3 +1,7 @@
+---
+paths: backend/**/*.rs
+---
+
 # Testing
 
 テスト実装に関するルール。

@@ -1,3 +1,7 @@
+---
+paths: backend/src/repository/**/*.rs
+---
+
 # Repository Layer
 
 リポジトリ層はports層で定義されたトレイトの具体実装を担当。PostgreSQL/SQLxを使用。

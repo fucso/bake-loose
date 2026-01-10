@@ -1,3 +1,7 @@
+---
+paths: backend/src/ports/**/*.rs
+---
+
 # Ports Layer
 
 Ports層はドメイン層とインフラ層の境界を定義し、リポジトリトレイト（インターフェース）を定義する。

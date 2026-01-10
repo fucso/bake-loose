@@ -1,3 +1,7 @@
+---
+paths: backend/src/domain/**/*.rs
+---
+
 # Domain Layer
 
 ドメイン層はアプリケーションの最内層であり、純粋なビジネスロジックを担当する。

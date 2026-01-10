@@ -1,3 +1,7 @@
+---
+paths: backend/src/presentation/**/*.rs
+---
+
 # Presentation Layer
 
 プレゼンテーション層はアプリケーションの最外層。GraphQLリゾルバー・スキーマを担当。
