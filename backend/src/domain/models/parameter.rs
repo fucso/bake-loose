@@ -1,7 +1,7 @@
 //! Parameter ドメインモデル
 
 use super::step::StepId;
-use super::time_unit::Duration;
+use super::duration::Duration;
 use super::unit::Unit;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -93,7 +93,7 @@ pub struct TextParameter {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DurationRangeParameter {
     pub duration: Duration,
-    pub note: Option<String>,
+    pub note: String,
 }
 
 /// 時点パラメーター
@@ -178,10 +178,10 @@ mod tests {
         let duration = Duration::minutes(30);
         let param = DurationRangeParameter {
             duration: duration.clone(),
-            note: Some("Kneading time".to_string()),
+            note: "Kneading time".to_string(),
         };
         assert_eq!(param.duration, duration);
-        assert_eq!(param.note, Some("Kneading time".to_string()));
+        assert_eq!(param.note, "Kneading time".to_string());
     }
 
     #[test]

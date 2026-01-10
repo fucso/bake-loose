@@ -1,11 +1,11 @@
-//! TimeUnit and Duration ドメインモデル
+//! Duration ドメインモデル
 
 use serde::{Deserialize, Serialize};
 use std::time::Duration as StdDuration;
 
 /// 時間の単位
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum TimeUnit {
+enum TimeUnit {
     Second,
     Minute,
     Hour,
@@ -13,7 +13,7 @@ pub enum TimeUnit {
 
 impl TimeUnit {
     /// DB/JSON 用の文字列表現
-    pub fn as_str(&self) -> &'static str {
+    fn as_str(&self) -> &'static str {
         match self {
             TimeUnit::Second => "s",
             TimeUnit::Minute => "min",
@@ -22,7 +22,7 @@ impl TimeUnit {
     }
 
     /// 文字列からの変換
-    pub fn from_str(s: &str) -> Option<Self> {
+    fn from_str(s: &str) -> Option<Self> {
         match s {
             "s" => Some(TimeUnit::Second),
             "min" => Some(TimeUnit::Minute),
@@ -35,7 +35,7 @@ impl TimeUnit {
 /// 期間（値と表示単位を持つ）
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Duration {
-    value: StdDuration,
+    std_duration: StdDuration,
     display_unit: TimeUnit,
 }
 
@@ -43,7 +43,7 @@ impl Duration {
     /// 秒数を指定して Duration を作成
     pub fn seconds(value: u64) -> Self {
         Self {
-            value: StdDuration::from_secs(value),
+            std_duration: StdDuration::from_secs(value),
             display_unit: TimeUnit::Second,
         }
     }
@@ -51,7 +51,7 @@ impl Duration {
     /// 分を指定して Duration を作成
     pub fn minutes(value: u64) -> Self {
         Self {
-            value: StdDuration::from_secs(value * 60),
+            std_duration: StdDuration::from_secs(value * 60),
             display_unit: TimeUnit::Minute,
         }
     }
@@ -59,34 +59,24 @@ impl Duration {
     /// 時間を指定して Duration を作成
     pub fn hours(value: u64) -> Self {
         Self {
-            value: StdDuration::from_secs(value * 3600),
+            std_duration: StdDuration::from_secs(value * 3600),
             display_unit: TimeUnit::Hour,
         }
     }
 
-    /// 内部の StdDuration を取得
-    pub fn as_std(&self) -> &StdDuration {
-        &self.value
-    }
-
     /// 表示単位を取得
-    pub fn display_unit(&self) -> TimeUnit {
+    fn unit(&self) -> TimeUnit {
         self.display_unit
     }
 
     /// 表示単位での値を取得
-    pub fn display_value(&self) -> u64 {
-        let secs = self.value.as_secs();
+    pub fn value(&self) -> u64 {
+        let secs = self.std_duration.as_secs();
         match self.display_unit {
             TimeUnit::Second => secs,
             TimeUnit::Minute => secs / 60,
             TimeUnit::Hour => secs / 3600,
         }
-    }
-
-    /// 秒数での値を取得（比較・計算用）
-    pub fn as_secs(&self) -> u64 {
-        self.value.as_secs()
     }
 }
 
@@ -107,43 +97,33 @@ mod tests {
     #[test]
     fn test_duration_seconds() {
         let d = Duration::seconds(120);
-        assert_eq!(d.as_secs(), 120);
-        assert_eq!(d.display_unit(), TimeUnit::Second);
-        assert_eq!(d.display_value(), 120);
+        assert_eq!(d.std_duration, StdDuration::from_secs(120));
+        assert_eq!(d.unit(), TimeUnit::Second);
+        assert_eq!(d.value(), 120);
     }
 
     #[test]
     fn test_duration_minutes() {
         let d = Duration::minutes(2);
-        assert_eq!(d.as_secs(), 120);
-        assert_eq!(d.display_unit(), TimeUnit::Minute);
-        assert_eq!(d.display_value(), 2);
+        assert_eq!(d.std_duration, StdDuration::from_secs(120));
+        assert_eq!(d.unit(), TimeUnit::Minute);
+        assert_eq!(d.value(), 2);
     }
 
     #[test]
     fn test_duration_hours() {
         let d = Duration::hours(1);
-        assert_eq!(d.as_secs(), 3600);
-        assert_eq!(d.display_unit(), TimeUnit::Hour);
-        assert_eq!(d.display_value(), 1);
+        assert_eq!(d.std_duration, StdDuration::from_secs(3600));
+        assert_eq!(d.unit(), TimeUnit::Hour);
+        assert_eq!(d.value(), 1);
     }
 
     #[test]
-    fn test_duration_display_value() {
-        let d_min = Duration::minutes(90); // 5400s
-        assert_eq!(d_min.display_value(), 90);
+    fn test_duration_value() {
+        let d_min = Duration::minutes(90);
+        assert_eq!(d_min.value(), 90);
 
-        let d_hr = Duration::hours(2); // 7200s
-        assert_eq!(d_hr.display_value(), 2);
-    }
-
-    #[test]
-    fn test_duration_comparison() {
-        let d1 = Duration::minutes(1);
-        let d2 = Duration::seconds(60);
-        let d3 = Duration::seconds(61);
-
-        assert_eq!(d1.as_secs(), d2.as_secs());
-        assert!(d2.as_secs() < d3.as_secs());
+        let d_hr = Duration::hours(2);
+        assert_eq!(d_hr.value(), 2);
     }
 }

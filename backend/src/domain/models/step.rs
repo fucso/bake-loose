@@ -28,13 +28,13 @@ pub struct Step {
     id: StepId,
     trial_id: TrialId,
     name: Option<String>,
-    position: u32,
+    position: u8,
     started_at: Option<DateTime<Utc>>,
 }
 
 impl Step {
     /// 新しい Step を作成する
-    pub fn new(trial_id: TrialId, position: u32) -> Self {
+    pub fn new(trial_id: TrialId, position: u8) -> Self {
         Self {
             id: StepId::new(),
             trial_id,
@@ -49,7 +49,7 @@ impl Step {
         id: StepId,
         trial_id: TrialId,
         name: Option<String>,
-        position: u32,
+        position: u8,
         started_at: Option<DateTime<Utc>>,
     ) -> Self {
         Self {
@@ -74,7 +74,7 @@ impl Step {
         self.name.as_deref()
     }
 
-    pub fn position(&self) -> u32 {
+    pub fn position(&self) -> u8 {
         self.position
     }
 
