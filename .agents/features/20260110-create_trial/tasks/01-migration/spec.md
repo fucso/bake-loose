@@ -70,9 +70,10 @@ JSONB を使用して柔軟に格納する。
 | step_id | UUID | NOT NULL, FK | 所属する Step |
 | content_type | VARCHAR(20) | NOT NULL | パラメーター種別 |
 | content | JSONB | NOT NULL | パラメーター内容 |
-| position | INTEGER | NOT NULL | 順序（登録順） |
 | created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | 作成日時 |
 | updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | 更新日時 |
+
+**注**: Parameter の順序は `created_at` でソートする（明示的な position カラムは不要）。
 
 **content_type の値:**
 - `key_value`
