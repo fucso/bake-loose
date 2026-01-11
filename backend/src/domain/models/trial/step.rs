@@ -1,6 +1,6 @@
 //! Step ドメインモデル
 
-use super::trial::TrialId;
+use super::TrialId;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

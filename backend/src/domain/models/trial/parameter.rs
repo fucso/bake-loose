@@ -1,8 +1,7 @@
 //! Parameter ドメインモデル
 
 use super::step::StepId;
-use super::duration::Duration;
-use super::unit::Unit;
+use crate::domain::models::utils::{Duration, Unit};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

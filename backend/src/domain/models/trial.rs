@@ -1,5 +1,11 @@
 //! Trial ドメインモデル
 
+mod parameter;
+mod step;
+
+pub use parameter::*;
+pub use step::*;
+
 use super::project::ProjectId;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
