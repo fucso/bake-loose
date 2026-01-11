@@ -86,7 +86,6 @@ impl Trial {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

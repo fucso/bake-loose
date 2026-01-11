@@ -21,7 +21,6 @@ impl Default for StepId {
     }
 }
 
-
 /// ステップ
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Step {

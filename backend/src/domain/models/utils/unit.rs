@@ -1,6 +1,7 @@
 //! Unit ドメインモデル
 
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 /// 計測単位（時間系を除く）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -32,17 +33,20 @@ impl Unit {
             Unit::Percent => "%",
         }
     }
+}
 
-    /// 文字列からの変換
-    pub fn from_str(s: &str) -> Option<Self> {
+impl FromStr for Unit {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "g" => Some(Unit::Gram),
-            "kg" => Some(Unit::Kilogram),
-            "°C" => Some(Unit::Celsius),
-            "ml" => Some(Unit::Milliliter),
-            "l" => Some(Unit::Liter),
-            "%" => Some(Unit::Percent),
-            _ => None,
+            "g" => Ok(Unit::Gram),
+            "kg" => Ok(Unit::Kilogram),
+            "°C" => Ok(Unit::Celsius),
+            "ml" => Ok(Unit::Milliliter),
+            "l" => Ok(Unit::Liter),
+            "%" => Ok(Unit::Percent),
+            _ => Err(()),
         }
     }
 }
@@ -64,8 +68,14 @@ mod tests {
 
         for unit in all_units.iter() {
             let s = unit.as_str();
-            let recovered_unit = Unit::from_str(s);
-            assert_eq!(Some(*unit), recovered_unit);
+            let recovered_unit: Unit = s.parse().unwrap();
+            assert_eq!(*unit, recovered_unit);
         }
+    }
+
+    #[test]
+    fn test_unit_from_str_invalid() {
+        let result: Result<Unit, _> = "invalid".parse();
+        assert!(result.is_err());
     }
 }
