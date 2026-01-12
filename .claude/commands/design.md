@@ -19,7 +19,7 @@ argument-hint: [実現したい機能・要件]
 ## 出力ファイル構成
 
 ```
-.agents/features/{feature-id}/
+.agents/features/{yyyymmdd}-{feature_name}/
 ├── spec.md                        # 要件分析 + タスク分解
 └── tasks/
     ├── 01-{task-name}/
@@ -123,160 +123,26 @@ argument-hint: [実現したい機能・要件]
 
 ## Phase 4: ファイル出力
 
-### feature-id の命名
+### feature ディレクトリの命名
 
-ケバブケースで要件を端的に表す:
-- `add-trial-photo`
-- `update-project-status`
-- `bulk-delete-trials`
+`{yyyymmdd}-{feature_name}` の形式で命名する:
+- 日付部分: 設計実行日（例: `20260109`）
+- feature_name: スネークケースで要件を端的に表す
+
+例:
+- `20260109-add_trial_photo`
+- `20260109-update_project_status`
+- `20260109-bulk_delete_trials`
 
 ---
 
 ## 出力フォーマット
 
-### spec.md（Feature レベル）
+仕様ドキュメントの記載ルールとテンプレートは以下を参照すること:
 
-```markdown
-# Feature: {feature-id}
-
-## 概要
-{1-2行の要約}
-
-## 元の要件
-> {ユーザー入力の原文}
-
----
-
-## 要件分析
-
-### 機能要件
-- {要件1}
-- {要件2}
-
-### 非機能要件（該当する場合）
-- {要件}
-
----
-
-## 影響範囲
-
-| レイヤー | 影響 | 変更概要 |
-|----------|------|----------|
-| domain   | あり / なし | {概要} |
-| ports    | あり / なし | {概要} |
-| use_case | あり / なし | {概要} |
-| repository | あり / なし | {概要} |
-| presentation | あり / なし | {概要} |
-| migration | あり / なし | {概要} |
-
----
-
-## タスク分解
-
-### 分解方針
-{なぜこの粒度で分けたかの説明}
-
-### タスク一覧
-
-| # | タスク | ディレクトリ | 依存 |
-|---|--------|--------------|------|
-| 01 | {タスク名} | [01-{name}/](./tasks/01-{name}/) | - |
-| 02 | {タスク名} | [02-{name}/](./tasks/02-{name}/) | 01 |
-
-### 実装順序
-```mermaid
-flowchart LR
-    01 --> 02 --> ...
-```
-
----
-
-## 前提条件
-- {既存機能への依存}
-
-## オープンクエスチョン
-
-なし
-
-{または先送りした問題がある場合}
-以下は実装を進めながら判断する:
-- [ ] {問題の内容}（合意日: YYYY-MM-DD）
-```
-
-### spec.md（Task レベル）
-
-```markdown
-# Task: {タスク名}
-
-> Feature: [{feature-id}](../../spec.md)
-> 依存: {依存タスク or なし}
-
-## 目的
-{このタスクで達成すること - 日本語で明確に}
-
----
-
-## 変更対象
-
-| ファイル | 操作 | 概要 |
-|----------|------|------|
-| `src/domain/models/xxx.rs` | 新規 / 修正 | {概要} |
-
----
-
-## 設計詳細
-
-### {セクション名}
-
-{日本語での説明を主とする。コードは必要最小限に。}
-
-- {何をするか}
-- {どのような構造にするか}
-- {注意点}
-
-```rust
-// 必要最小限のコード例（省略可）
-```
-
----
-
-## テストケース
-
-{テストの配置場所とテストケース一覧を記載する}
-
-### テストファイル
-
-- **ユニットテスト**: `src/{layer}/{module}.rs` 内の `#[cfg(test)] mod tests`
-- **統合テスト（GraphQL）**: `tests/graphql/{entity}/{operation}.rs`
-
-### 正常系
-
-| テスト名 | 内容 |
-|----------|------|
-| `test_xxx` | {テスト内容} |
-
-### 異常系
-
-| テスト名 | 内容 |
-|----------|------|
-| `test_xxx_returns_error_when_yyy` | {テスト内容} |
-
----
-
-## 補足資料（該当する場合）
-
-| ファイル | 内容 |
-|----------|------|
-| [xxx.sql](./xxx.sql) | {説明} |
-
----
-
-## 完了条件
-
-- [ ] {具体的な完了条件}
-- [ ] 上記テストケースがすべて実装されている
-- [ ] テストが通る
-```
+- **記載ルール**: [.claude/skills/spec-writing/SKILL.md](../skills/spec-writing/SKILL.md)
+- **Feature spec.md テンプレート**: [.claude/skills/spec-writing/templates/feature-spec.md](../skills/spec-writing/templates/feature-spec.md)
+- **Task spec.md テンプレート**: [.claude/skills/spec-writing/templates/task-spec.md](../skills/spec-writing/templates/task-spec.md)
 
 ### テストの配置ルール
 
@@ -299,6 +165,5 @@ flowchart LR
 ## 注意事項
 
 - **実装は行わない**: このコマンドは設計のみ
-- **日本語での説明を優先**: コードは「何をすべきか」を補足する程度に留める
 - **オープンクエスチョンは解決してから進む**: 先送りする場合は合意を得て記録する
 - **スキルドキュメントを参照**: 各レイヤーのルールに従った設計を行う

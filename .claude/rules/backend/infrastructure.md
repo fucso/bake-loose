@@ -1,3 +1,7 @@
+---
+paths: backend/src/infrastructure/**/*.rs
+---
+
 # Infrastructure Layer
 
 Infrastructure層はアプリケーションの技術的基盤を提供。DB接続、設定管理など純粋な技術機能を担当。
