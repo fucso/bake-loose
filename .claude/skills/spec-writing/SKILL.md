@@ -2,7 +2,7 @@
 name: spec-writing
 description: |
   仕様ドキュメント (spec.md) や GitHub issue を記載する際のガイドライン。
-  使用タイミング: (1) 設計コマンドでの spec.md 作成、(2) feature/task 仕様の作成、(3) GitHub issue の作成・編集
+  使用タイミング: (1) 設計コマンドでの spec.md 作成、(2) feature/task spec.md の作成、(3) GitHub issue の作成・編集
 ---
 
 # 仕様ドキュメント記載スキル
@@ -10,7 +10,7 @@ description: |
 ## 概要
 
 仕様ドキュメント (spec.md) や GitHub issue を記載する際のガイドライン。
-設計コマンド、feature 仕様作成、GitHub issue 作成など、あらゆるコンテキストで適用する。
+設計コマンド、feature\task spec.md の作成、GitHub issue 作成など、あらゆるコンテキストで適用する。
 
 ---
 
