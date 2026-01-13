@@ -36,7 +36,7 @@ main ブランチから開始し、指定されたブランチにチェックア
 - フォーク元ブランチが存在すること
 - タスク仕様ファイルが存在すること
 - 依存タスクがすべて完了していること
-- GitHub CLI (`gh`) が認証済みであること
+- `GITHUB_TOKEN` 環境変数が設定されていること
 
 ---
 
@@ -155,22 +155,14 @@ Task: 01-domain-model
 
 ### Phase 4: Push と PR 作成
 
-gh コマンドを使用して push と PR 作成を行う。
+`.claude/skills/web/create-pr` スキルのワークフローに従って push と PR 作成を行う。
 
-**Push**:
+- **ベースブランチ**: `$SOURCE_BRANCH`
+- **ヘッドブランチ**: `$TASK_BRANCH`
+- **PR タイトル**: `feat({feature-id}): {タスク名}`
+- **PR 本文**: 以下の形式で作成
 
-```bash
-git push -u origin $TASK_BRANCH
-```
-
-**PR 作成**:
-
-PR は `$TASK_BRANCH` から `$SOURCE_BRANCH` へマージする形で作成する。
-
-```bash
-gh pr create \
-  --title "feat({feature-id}): {タスク名}" \
-  --body "$(cat <<'EOF'
+```markdown
 ## Summary
 
 - {実装概要を箇条書き}
@@ -198,9 +190,6 @@ gh pr create \
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 
 Co-Authored-By: Claude <noreply@anthropic.com>
-EOF
-)" \
-  --base $SOURCE_BRANCH
 ```
 
 ---
