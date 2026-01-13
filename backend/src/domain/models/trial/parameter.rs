@@ -1,6 +1,5 @@
 //! Parameter ドメインモデル
 
-use super::step::StepId;
 use crate::domain::models::utils::{Duration, Unit};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -25,33 +24,23 @@ impl Default for ParameterId {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Parameter {
     id: ParameterId,
-    step_id: StepId,
     content: ParameterContent,
 }
 
 impl Parameter {
-    pub fn new(step_id: StepId, content: ParameterContent) -> Self {
+    pub fn new(content: ParameterContent) -> Self {
         Self {
             id: ParameterId::new(),
-            step_id,
             content,
         }
     }
 
-    pub fn from_raw(id: ParameterId, step_id: StepId, content: ParameterContent) -> Self {
-        Self {
-            id,
-            step_id,
-            content,
-        }
+    pub fn from_raw(id: ParameterId, content: ParameterContent) -> Self {
+        Self { id, content }
     }
 
     pub fn id(&self) -> &ParameterId {
         &self.id
-    }
-
-    pub fn step_id(&self) -> &StepId {
-        &self.step_id
     }
 
     pub fn content(&self) -> &ParameterContent {
@@ -108,27 +97,23 @@ mod tests {
 
     #[test]
     fn test_parameter_new() {
-        let step_id = StepId::new();
         let content = ParameterContent::Text(TextParameter {
             value: "Test".to_string(),
         });
-        let param = Parameter::new(step_id.clone(), content.clone());
+        let param = Parameter::new(content.clone());
 
-        assert_eq!(*param.step_id(), step_id);
         assert_eq!(param.content(), &content);
     }
 
     #[test]
     fn test_parameter_from_raw() {
         let id = ParameterId::new();
-        let step_id = StepId::new();
         let content = ParameterContent::Text(TextParameter {
             value: "Test".to_string(),
         });
-        let param = Parameter::from_raw(id.clone(), step_id.clone(), content.clone());
+        let param = Parameter::from_raw(id.clone(), content.clone());
 
         assert_eq!(*param.id(), id);
-        assert_eq!(*param.step_id(), step_id);
         assert_eq!(param.content(), &content);
     }
 

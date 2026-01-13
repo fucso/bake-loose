@@ -1,6 +1,6 @@
 //! Step ドメインモデル
 
-use super::TrialId;
+use super::Parameter;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -22,51 +22,47 @@ impl Default for StepId {
 }
 
 /// ステップ
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Step {
     id: StepId,
-    trial_id: TrialId,
     name: Option<String>,
     position: u8,
-    started_at: Option<DateTime<Utc>>,
+    started_at: DateTime<Utc>,
+    parameters: Vec<Parameter>,
 }
 
 impl Step {
-    /// 新しい Step を作成する
-    pub fn new(trial_id: TrialId, position: u8) -> Self {
+    /// 新しい Step を作成する（Parameters は空）
+    pub fn new(position: u8, started_at: DateTime<Utc>) -> Self {
         Self {
             id: StepId::new(),
-            trial_id,
             name: None,
             position,
-            started_at: None,
+            started_at,
+            parameters: Vec::new(),
         }
     }
 
     /// DB などから Step を復元する
     pub fn from_raw(
         id: StepId,
-        trial_id: TrialId,
         name: Option<String>,
         position: u8,
-        started_at: Option<DateTime<Utc>>,
+        started_at: DateTime<Utc>,
+        parameters: Vec<Parameter>,
     ) -> Self {
         Self {
             id,
-            trial_id,
             name,
             position,
             started_at,
+            parameters,
         }
     }
 
     // Getters
     pub fn id(&self) -> &StepId {
         &self.id
-    }
-
-    pub fn trial_id(&self) -> &TrialId {
-        &self.trial_id
     }
 
     pub fn name(&self) -> Option<&str> {
@@ -77,22 +73,47 @@ impl Step {
         self.position
     }
 
-    pub fn started_at(&self) -> Option<DateTime<Utc>> {
+    pub fn started_at(&self) -> DateTime<Utc> {
         self.started_at
+    }
+
+    pub fn parameters(&self) -> &[Parameter] {
+        &self.parameters
+    }
+
+    /// Parameter を追加する
+    pub fn add_parameter(&mut self, parameter: Parameter) {
+        self.parameters.push(parameter);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::models::trial::{ParameterContent, TextParameter};
 
     #[test]
-    fn test_step_new_creates_with_given_position() {
-        let trial_id = TrialId::new();
-        let step = Step::new(trial_id.clone(), 3);
-        assert_eq!(step.trial_id(), &trial_id);
-        assert_eq!(step.position(), 3);
-        assert!(step.name().is_none());
-        assert!(step.started_at().is_none());
+    fn test_step_new_has_empty_parameters() {
+        let started_at = Utc::now();
+        let step = Step::new(0, started_at);
+        assert!(step.parameters().is_empty());
+    }
+
+    #[test]
+    fn test_step_new_has_started_at() {
+        let started_at = Utc::now();
+        let step = Step::new(0, started_at);
+        assert_eq!(step.started_at(), started_at);
+    }
+
+    #[test]
+    fn test_step_add_parameter() {
+        let started_at = Utc::now();
+        let mut step = Step::new(0, started_at);
+        let param = Parameter::new(ParameterContent::Text(TextParameter {
+            value: "Test".to_string(),
+        }));
+        step.add_parameter(param);
+        assert_eq!(step.parameters().len(), 1);
     }
 }
