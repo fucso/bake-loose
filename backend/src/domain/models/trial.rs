@@ -44,12 +44,12 @@ pub struct Trial {
 
 impl Trial {
     /// 新しい Trial を作成する
-    pub fn new(project_id: ProjectId) -> Self {
+    pub fn new(project_id: ProjectId, memo: Option<String>) -> Self {
         Self {
             id: TrialId::new(),
             project_id,
             status: TrialStatus::InProgress,
-            memo: None,
+            memo,
         }
     }
 
@@ -100,9 +100,19 @@ mod tests {
     #[test]
     fn test_trial_new_creates_with_in_progress_status() {
         let project_id = ProjectId::new();
-        let trial = Trial::new(project_id.clone());
+        let trial = Trial::new(project_id.clone(), None);
         assert_eq!(trial.status(), TrialStatus::InProgress);
         assert_eq!(trial.project_id(), &project_id);
         assert!(trial.memo().is_none());
+    }
+
+    #[test]
+    fn test_trial_new_with_memo() {
+        let project_id = ProjectId::new();
+        let memo = Some("テストメモ".to_string());
+        let trial = Trial::new(project_id.clone(), memo.clone());
+        assert_eq!(trial.status(), TrialStatus::InProgress);
+        assert_eq!(trial.project_id(), &project_id);
+        assert_eq!(trial.memo(), Some("テストメモ"));
     }
 }
