@@ -1,0 +1,42 @@
+feature_id: "20260209-parallel_orchestration"
+base_branch: "main"
+
+tasks:
+  - id: "01-skill-definition"
+    name: "スキル定義"
+    dependencies: []
+
+  - id: "02-design-command"
+    name: "設計コマンド"
+    dependencies:
+      - "01-skill-definition"
+
+  - id: "03-worker-agent"
+    name: "ワーカーエージェント"
+    dependencies:
+      - "01-skill-definition"
+
+  - id: "04-orchestrator-start"
+    name: "オーケストレーター起動"
+    dependencies:
+      - "01-skill-definition"
+      - "03-worker-agent"
+
+  - id: "05-orchestrator-status"
+    name: "状況確認コマンド"
+    dependencies:
+      - "01-skill-definition"
+
+  - id: "06-orchestrator-cleanup"
+    name: "クリーンアップコマンド"
+    dependencies:
+      - "01-skill-definition"
+
+  - id: "07-integration"
+    name: "統合テスト"
+    dependencies:
+      - "02-design-command"
+      - "03-worker-agent"
+      - "04-orchestrator-start"
+      - "05-orchestrator-status"
+      - "06-orchestrator-cleanup"
