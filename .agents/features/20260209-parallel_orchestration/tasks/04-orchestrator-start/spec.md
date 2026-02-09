@@ -57,19 +57,31 @@ Feature の並列タスク実行を開始するオーケストレーターコマ
 2. 各タスクの `report.md` を監視（ポーリング）
 3. `report.md` が作成されたら:
    a. 内容を読み取り、成功/失敗を判定
-   b. `status.yaml` を更新
+   b. worktree を削除
+      ```bash
+      git worktree remove .agents/worktrees/{feature-id}_{task-id} --force
+      ```
+   c. タスクブランチを Feature ブランチにマージ
+      ```bash
+      git checkout feature/{feature-id}
+      git merge task/{feature-id}_{task-id}
+      ```
+   d. タスクブランチを削除
+      ```bash
+      git branch -d task/{feature-id}_{task-id}
+      ```
+   e. `status.yaml` を更新
       - `active_tasks` から削除
       - `completed_tasks` に追加
-   c. worktree を削除（オプション、または cleanup で行う）
-   d. `tasks.yaml` を参照して依存解決
-   e. 新たに unblocked になったタスクをディスパッチ（Phase 2 に戻る）
+   f. `tasks.yaml` を参照して依存解決
+   g. 新たに unblocked になったタスクをディスパッチ（Phase 2 に戻る）
 
 #### Phase 4: 完了判定
 
 1. 全タスクが `completed_tasks` に含まれたら完了
 2. `status.yaml` を更新（`status: completed`）
 3. `.agents/active.yaml` をクリア
-4. 完了レポートを出力
+4. 完了レポートを出力（次のステップを案内）
 
 ### worktree の命名規則
 

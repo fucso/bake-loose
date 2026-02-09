@@ -27,16 +27,10 @@ tasks:
     dependencies:
       - "01-skill-definition"
 
-  - id: "06-orchestrator-cleanup"
-    name: "クリーンアップコマンド"
-    dependencies:
-      - "01-skill-definition"
-
-  - id: "07-integration"
+  - id: "06-integration"
     name: "統合テスト"
     dependencies:
       - "02-design-command"
       - "03-worker-agent"
       - "04-orchestrator-start"
       - "05-orchestrator-status"
-      - "06-orchestrator-cleanup"

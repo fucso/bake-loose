@@ -1,7 +1,7 @@
 # Task: 統合テスト
 
 > Feature: [parallel_orchestration](../../spec.md)
-> 依存: 02-design-command, 03-worker-agent, 04-orchestrator-start, 05-orchestrator-status, 06-orchestrator-cleanup
+> 依存: 02-design-command, 03-worker-agent, 04-orchestrator-start, 05-orchestrator-status
 
 ## 目的
 
@@ -39,10 +39,13 @@
 4. 全タスク完了を待つ
    - `report.md` が作成されるか
    - 依存解決が正しく行われるか
+   - タスク完了時に worktree が削除されるか
+   - タスクブランチが Feature ブランチにマージされるか
 
-5. `/orchestrate:cleanup` でクリーンアップ
-   - worktree が削除されるか
-   - ブランチが整理されるか
+5. 全タスク完了後
+   - `status.yaml` が `completed` になっているか
+   - `active.yaml` がクリアされているか
+   - 完了レポートが出力されるか
 
 #### シナリオ 2: 並列実行
 
@@ -53,8 +56,7 @@
 #### シナリオ 3: エラーハンドリング
 
 1. タスク実行中に `/orchestrate:status` を実行
-2. 進行中に `/orchestrate:cleanup` を実行（警告確認）
-3. 存在しない Feature ID を指定（エラー確認）
+2. 存在しない Feature ID を指定（エラー確認）
 
 ### テスト用 Feature 構成
 
@@ -98,8 +100,14 @@ tasks:
 
 - [ ] `active.yaml` が正しく更新される
 - [ ] `status.yaml` が正しく更新される
-- [ ] worktree が正しく作成・削除される
+- [ ] worktree が正しく作成される
+- [ ] タスク完了時に worktree が削除される
 - [ ] `report.md` が正しく作成される
+
+#### ブランチ操作
+
+- [ ] タスク完了時にタスクブランチが Feature ブランチにマージされる
+- [ ] マージ後にタスクブランチが削除される
 
 #### 依存解決
 
@@ -110,12 +118,11 @@ tasks:
 #### エラーハンドリング
 
 - [ ] 不正な入力に対して適切なエラーメッセージが表示される
-- [ ] 進行中の cleanup 試行に対して警告される
 
 #### ログ・レポート
 
 - [ ] `/orchestrate:status` が正しい情報を表示する
-- [ ] クリーンアップ完了レポートが正しい
+- [ ] 全タスク完了時の完了レポートが正しい
 
 ---
 
