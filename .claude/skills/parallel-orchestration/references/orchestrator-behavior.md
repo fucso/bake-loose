@@ -59,6 +59,7 @@
       ```
 
    b. **ワーカープロセスを起動**
+      - [ワーカー用プロンプトテンプレート](../appendix/worker-prompt.md) を使用してプロンプトを構築
       ```bash
       cd {worktree_path} && claude -p "{prompt}" > {task_dir}/worker_output.log 2>&1 &
       ```
