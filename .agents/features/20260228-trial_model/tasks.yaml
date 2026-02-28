@@ -1,0 +1,99 @@
+feature_id: 20260228-trial_model
+base_branch: main
+
+tasks:
+  - id: 01-migration
+    name: マイグレーション
+    dependencies: []
+
+  - id: 02-domain-model
+    name: ドメインモデル
+    dependencies: []
+
+  - id: 03.1-domain-action-create-trial
+    name: create_trial アクション
+    dependencies:
+      - 02-domain-model
+
+  - id: 03.2-domain-action-update-trial
+    name: update_trial アクション
+    dependencies:
+      - 02-domain-model
+
+  - id: 03.3-domain-action-complete-trial
+    name: complete_trial アクション
+    dependencies:
+      - 02-domain-model
+
+  - id: 03.4-domain-action-add-step
+    name: add_step アクション
+    dependencies:
+      - 02-domain-model
+
+  - id: 03.5-domain-action-update-step
+    name: update_step アクション
+    dependencies:
+      - 02-domain-model
+
+  - id: 03.6-domain-action-complete-step
+    name: complete_step アクション
+    dependencies:
+      - 02-domain-model
+
+  - id: 04-ports
+    name: TrialRepository トレイト
+    dependencies:
+      - 02-domain-model
+
+  - id: 05-repository
+    name: PgTrialRepository 実装
+    dependencies:
+      - 01-migration
+      - 04-ports
+
+  - id: 06.1-use-case-create-trial
+    name: create_trial ユースケース
+    dependencies:
+      - 03.1-domain-action-create-trial
+      - 04-ports
+
+  - id: 06.2-use-case-update-trial
+    name: update_trial ユースケース
+    dependencies:
+      - 03.2-domain-action-update-trial
+      - 04-ports
+
+  - id: 06.3-use-case-complete-trial
+    name: complete_trial ユースケース
+    dependencies:
+      - 03.3-domain-action-complete-trial
+      - 04-ports
+
+  - id: 06.4-use-case-add-step
+    name: add_step ユースケース
+    dependencies:
+      - 03.4-domain-action-add-step
+      - 04-ports
+
+  - id: 06.5-use-case-update-step
+    name: update_step ユースケース
+    dependencies:
+      - 03.5-domain-action-update-step
+      - 04-ports
+
+  - id: 06.6-use-case-complete-step
+    name: complete_step ユースケース
+    dependencies:
+      - 03.6-domain-action-complete-step
+      - 04-ports
+
+  - id: 07-presentation
+    name: GraphQL 実装
+    dependencies:
+      - 05-repository
+      - 06.1-use-case-create-trial
+      - 06.2-use-case-update-trial
+      - 06.3-use-case-complete-trial
+      - 06.4-use-case-add-step
+      - 06.5-use-case-update-step
+      - 06.6-use-case-complete-step
