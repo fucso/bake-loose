@@ -157,7 +157,7 @@ git worktree add .agents/worktrees/{feature-id}_{task-id} -b task/{feature-id}_{
 [ワーカー用プロンプトテンプレート](../../skills/parallel-orchestration/appendix/worker-prompt.md) を使用してプロンプトを構築し、ワーカーを起動する。
 
 ```bash
-cd {worktree_path} && claude -p "{prompt}" > {task_dir}/worker_output.log 2>&1 &
+cd {worktree_path} && env -u CLAUDECODE claude -p "{prompt}" > {task_dir}/worker_output.log 2>&1 &
 ```
 
 変数の設定:
@@ -186,7 +186,35 @@ pending_tasks:
 
 ### Phase 3: 監視ループ
 
-#### 3.1 report.md の監視（git ベース）
+#### 3.1 ワーカーの状態確認とログ監視
+
+**status.yaml で実行状態を確認:**
+
+```bash
+cat .agents/features/{feature-id}/status.yaml
+```
+
+**アクティブなワーカープロセスを確認:**
+
+```bash
+ps aux | grep claude
+```
+
+**ワーカーのログを確認:**
+
+各タスクの実行ログは以下に出力される:
+```
+.agents/features/{feature-id}/tasks/{task-id}/worker_output.log
+```
+
+エラーが発生した場合はこのログを確認する。
+
+```bash
+# ログをリアルタイムで監視
+tail -f .agents/features/{feature-id}/tasks/{task-id}/worker_output.log
+```
+
+#### 3.2 report.md の監視（git ベース）
 
 各 `active_tasks` のタスクブランチを git で監視する。
 
@@ -198,7 +226,7 @@ git show task/{feature-id}_{task-id}:.agents/features/{feature-id}/tasks/{task-i
 - コマンドが成功（exit 0）→ 完了検知
 - コマンドが失敗 → 未完了、待機を継続
 
-#### 3.2 タスク完了検知時の処理
+#### 3.3 タスク完了検知時の処理
 
 **a. worktree を削除:**
 
@@ -249,7 +277,7 @@ updated_at: {ISO 8601 datetime}
 
 `tasks.yaml` を参照し、新たに unblocked になったタスクがあれば Phase 2 へ戻りディスパッチする。
 
-#### 3.3 ループ継続判定
+#### 3.4 ループ継続判定
 
 - `active_tasks` が空でなければループを継続
 - 全タスクが `completed_tasks` に含まれたら Phase 4 へ
