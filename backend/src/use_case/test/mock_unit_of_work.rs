@@ -6,7 +6,9 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use crate::domain::models::project::{Project, ProjectId};
+use crate::domain::models::trial::{Trial, TrialId};
 use crate::ports::project_repository::ProjectRepository;
+use crate::ports::trial_repository::{TrialRepository, TrialSort};
 use crate::ports::{ProjectSort, ProjectSortColumn, RepositoryError, SortDirection, UnitOfWork};
 
 /// テスト用の MockProjectRepository
@@ -65,6 +67,34 @@ impl ProjectRepository for MockProjectRepository {
     }
 }
 
+/// テスト用の MockTrialRepository（stub）
+///
+/// task 05/06 でより本格的なモックに差し替えられる。
+pub struct MockTrialRepository;
+
+#[async_trait::async_trait]
+impl TrialRepository for MockTrialRepository {
+    async fn find_by_id(&self, _id: &TrialId) -> Result<Option<Trial>, RepositoryError> {
+        todo!("MockTrialRepository is not yet implemented")
+    }
+
+    async fn find_by_project_id(
+        &self,
+        _project_id: &ProjectId,
+        _sort: TrialSort,
+    ) -> Result<Vec<Trial>, RepositoryError> {
+        todo!("MockTrialRepository is not yet implemented")
+    }
+
+    async fn save(&self, _trial: &Trial) -> Result<(), RepositoryError> {
+        todo!("MockTrialRepository is not yet implemented")
+    }
+
+    async fn delete(&self, _id: &TrialId) -> Result<(), RepositoryError> {
+        todo!("MockTrialRepository is not yet implemented")
+    }
+}
+
 /// テスト用の MockUnitOfWork
 pub struct MockUnitOfWork {
     projects: Arc<Mutex<Vec<Project>>>,
@@ -83,9 +113,14 @@ impl Default for MockUnitOfWork {
 #[async_trait::async_trait]
 impl UnitOfWork for MockUnitOfWork {
     type ProjectRepo = MockProjectRepository;
+    type TrialRepo = MockTrialRepository;
 
     fn project_repository(&mut self) -> Self::ProjectRepo {
         MockProjectRepository::new(self.projects.clone())
+    }
+
+    fn trial_repository(&mut self) -> Self::TrialRepo {
+        MockTrialRepository
     }
 
     async fn begin(&mut self) -> Result<(), RepositoryError> {
