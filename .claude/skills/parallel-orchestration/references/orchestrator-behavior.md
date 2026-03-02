@@ -60,9 +60,16 @@
 
    b. **ワーカープロセスを起動**
       - [ワーカー用プロンプトテンプレート](../appendix/worker-prompt.md) を使用してプロンプトを構築
+
+      **注意: Claude Code in Claude Code の実現**
+
+      オーケストレーター自身も Claude Code セッションとして実行されるため、ワーカーを起動する際に `CLAUDECODE` 環境変数を継承させないよう `env -u CLAUDECODE` を使用する。
+
       ```bash
-      cd {worktree_path} && claude -p "{prompt}" > {task_dir}/worker_output.log 2>&1 &
+      cd {worktree_path} && env -u CLAUDECODE claude -p "{prompt}" > {task_dir}/worker_output.log 2>&1 &
       ```
+
+      これにより、各ワーカーは独立した Claude Code セッションとして起動される。
 
    c. **status.yaml を更新**
       - `active_tasks` に追加
@@ -157,6 +164,14 @@
 | ワーカーがクラッシュ | `status.yaml` に失敗を記録、ユーザーに報告 |
 | worktree 作成失敗 | エラーログを出力、手動対応を案内 |
 | マージコンフリクト | 中断、手動解決を案内 |
+
+### リソース管理
+
+| 課題 | 対処 |
+|------|------|
+| メモリ不足 | 並列実行数を減らす、一部タスクを直列化 |
+| Docker コンテナのクラッシュ | `docker compose restart` でコンテナを再起動 |
+| ディスク容量不足 | 古い worktree を削除、不要なファイルをクリーン |
 
 ---
 

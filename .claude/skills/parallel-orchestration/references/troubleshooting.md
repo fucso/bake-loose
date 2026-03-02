@@ -56,6 +56,29 @@
 
 ---
 
+### 「Claude Code cannot be launched inside another Claude Code session」エラー
+
+**症状:**
+```
+Error: Claude Code cannot be launched inside another Claude Code session.
+Nested sessions share runtime resources and will crash all active sessions.
+To bypass this check, unset the CLAUDECODE environment variable.
+```
+
+**原因:**
+- `spawn-worker.sh` で `env -u CLAUDECODE` が使用されていない
+- 環境変数が子プロセスに継承されている
+
+**対処:**
+1. `spawn-worker.sh` の76行目を確認
+   ```bash
+   cd "${WORKTREE_PATH}" && env -u CLAUDECODE claude -p "${PROMPT}" > "${LOG_PATH}" 2>&1
+   ```
+2. `env -u CLAUDECODE` が含まれていることを確認
+3. 含まれていない場合は追加して再実行
+
+---
+
 ## 実行中の問題
 
 ### ワーカーが応答しない
