@@ -1,3 +1,4 @@
+pub mod add_step;
 pub mod complete_step;
 pub mod complete_trial;
 pub mod create_trial;
