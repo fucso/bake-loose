@@ -69,7 +69,7 @@ fn validate_parameter_content(
                 });
             }
             match value {
-                ParameterValue::Text(text) if text.trim().is_empty() => {
+                ParameterValue::Text { value: text } if text.trim().is_empty() => {
                     return Err(Error::InvalidParameter {
                         step_index,
                         parameter_index,
@@ -361,7 +361,9 @@ mod tests {
                 parameters: vec![ParameterInput {
                     content: ParameterContent::KeyValue {
                         key: "".to_string(),
-                        value: ParameterValue::Text("300g".to_string()),
+                        value: ParameterValue::Text {
+                            value: "300g".to_string(),
+                        },
                     },
                 }],
             }],

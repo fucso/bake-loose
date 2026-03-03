@@ -39,7 +39,7 @@ impl DurationValue {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ParameterValue {
-    Text(String),
+    Text { value: String },
     Quantity { amount: f64, unit: String },
 }
 
