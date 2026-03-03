@@ -290,7 +290,9 @@ mod tests {
             parameters: vec![ParameterInput {
                 content: ParameterContent::KeyValue {
                     key: "".to_string(),
-                    value: ParameterValue::Text("test".to_string()),
+                    value: ParameterValue::Text {
+                        value: "test".to_string(),
+                    },
                 },
             }],
         };
