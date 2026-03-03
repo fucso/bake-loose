@@ -122,6 +122,17 @@ pub struct MockUnitOfWork {
     transaction_started: bool,
 }
 
+impl MockUnitOfWork {
+    /// Trial データを初期設定して MockUnitOfWork を作成する
+    pub fn with_trials(trials: Vec<Trial>) -> Self {
+        Self {
+            projects: Arc::new(Mutex::new(Vec::new())),
+            trials: Arc::new(Mutex::new(trials)),
+            transaction_started: false,
+        }
+    }
+}
+
 impl Default for MockUnitOfWork {
     fn default() -> Self {
         Self {
