@@ -197,7 +197,9 @@ mod tests {
             add_parameters: vec![ParameterInput {
                 content: ParameterContent::KeyValue {
                     key: "粉".to_string(),
-                    value: ParameterValue::Text { value: "強力粉".to_string() },
+                    value: ParameterValue::Text {
+                        value: "強力粉".to_string(),
+                    },
                 },
             }],
             remove_parameter_ids: vec![],
