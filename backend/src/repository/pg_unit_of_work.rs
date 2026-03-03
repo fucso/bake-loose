@@ -7,11 +7,42 @@ use sqlx::{PgPool, Postgres, Transaction};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+use crate::domain::models::project::ProjectId;
+use crate::domain::models::trial::{Trial, TrialId};
 use crate::ports::error::RepositoryError;
+use crate::ports::trial_repository::{TrialRepository, TrialSort};
 use crate::ports::UnitOfWork;
 
 use super::executor::PgExecutor;
 use super::project_repo::PgProjectRepository;
+
+/// TrialRepository の仮実装
+///
+/// task 05 で PgTrialRepository に差し替えられる。
+pub struct PgTrialRepositoryStub;
+
+#[async_trait]
+impl TrialRepository for PgTrialRepositoryStub {
+    async fn find_by_id(&self, _id: &TrialId) -> Result<Option<Trial>, RepositoryError> {
+        todo!("PgTrialRepository is not yet implemented (task 05)")
+    }
+
+    async fn find_by_project_id(
+        &self,
+        _project_id: &ProjectId,
+        _sort: TrialSort,
+    ) -> Result<Vec<Trial>, RepositoryError> {
+        todo!("PgTrialRepository is not yet implemented (task 05)")
+    }
+
+    async fn save(&self, _trial: &Trial) -> Result<(), RepositoryError> {
+        todo!("PgTrialRepository is not yet implemented (task 05)")
+    }
+
+    async fn delete(&self, _id: &TrialId) -> Result<(), RepositoryError> {
+        todo!("PgTrialRepository is not yet implemented (task 05)")
+    }
+}
 
 /// PostgreSQL 用の UnitOfWork 実装
 ///
@@ -42,9 +73,14 @@ impl PgUnitOfWork {
 #[async_trait]
 impl UnitOfWork for PgUnitOfWork {
     type ProjectRepo = PgProjectRepository;
+    type TrialRepo = PgTrialRepositoryStub;
 
     fn project_repository(&mut self) -> Self::ProjectRepo {
         PgProjectRepository::new(self.executor())
+    }
+
+    fn trial_repository(&mut self) -> Self::TrialRepo {
+        PgTrialRepositoryStub
     }
 
     async fn begin(&mut self) -> Result<(), RepositoryError> {
