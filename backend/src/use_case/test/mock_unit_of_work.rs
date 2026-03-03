@@ -67,44 +67,74 @@ impl ProjectRepository for MockProjectRepository {
     }
 }
 
-/// テスト用の MockTrialRepository（stub）
-///
-/// task 05/06 でより本格的なモックに差し替えられる。
-pub struct MockTrialRepository;
+/// テスト用の MockTrialRepository
+#[derive(Clone)]
+pub struct MockTrialRepository {
+    trials: Arc<Mutex<Vec<Trial>>>,
+}
+
+impl MockTrialRepository {
+    fn new(trials: Arc<Mutex<Vec<Trial>>>) -> Self {
+        Self { trials }
+    }
+}
 
 #[async_trait::async_trait]
 impl TrialRepository for MockTrialRepository {
-    async fn find_by_id(&self, _id: &TrialId) -> Result<Option<Trial>, RepositoryError> {
-        todo!("MockTrialRepository is not yet implemented")
+    async fn find_by_id(&self, id: &TrialId) -> Result<Option<Trial>, RepositoryError> {
+        let trials = self.trials.lock().await;
+        Ok(trials.iter().find(|t| t.id() == id).cloned())
     }
 
     async fn find_by_project_id(
         &self,
-        _project_id: &ProjectId,
+        project_id: &ProjectId,
         _sort: TrialSort,
     ) -> Result<Vec<Trial>, RepositoryError> {
-        todo!("MockTrialRepository is not yet implemented")
+        let trials = self.trials.lock().await;
+        Ok(trials
+            .iter()
+            .filter(|t| t.project_id() == project_id)
+            .cloned()
+            .collect())
     }
 
-    async fn save(&self, _trial: &Trial) -> Result<(), RepositoryError> {
-        todo!("MockTrialRepository is not yet implemented")
+    async fn save(&self, trial: &Trial) -> Result<(), RepositoryError> {
+        let mut trials = self.trials.lock().await;
+        trials.retain(|t| t.id() != trial.id());
+        trials.push(trial.clone());
+        Ok(())
     }
 
-    async fn delete(&self, _id: &TrialId) -> Result<(), RepositoryError> {
-        todo!("MockTrialRepository is not yet implemented")
+    async fn delete(&self, id: &TrialId) -> Result<(), RepositoryError> {
+        let mut trials = self.trials.lock().await;
+        trials.retain(|t| t.id() != id);
+        Ok(())
     }
 }
 
 /// テスト用の MockUnitOfWork
 pub struct MockUnitOfWork {
     projects: Arc<Mutex<Vec<Project>>>,
+    trials: Arc<Mutex<Vec<Trial>>>,
     transaction_started: bool,
+}
+
+impl MockUnitOfWork {
+    pub fn with_trials(trials: Vec<Trial>) -> Self {
+        Self {
+            projects: Arc::new(Mutex::new(Vec::new())),
+            trials: Arc::new(Mutex::new(trials)),
+            transaction_started: false,
+        }
+    }
 }
 
 impl Default for MockUnitOfWork {
     fn default() -> Self {
         Self {
             projects: Arc::new(Mutex::new(Vec::new())),
+            trials: Arc::new(Mutex::new(Vec::new())),
             transaction_started: false,
         }
     }
@@ -120,7 +150,7 @@ impl UnitOfWork for MockUnitOfWork {
     }
 
     fn trial_repository(&mut self) -> Self::TrialRepo {
-        MockTrialRepository
+        MockTrialRepository::new(self.trials.clone())
     }
 
     async fn begin(&mut self) -> Result<(), RepositoryError> {
