@@ -72,6 +72,17 @@ Feature 内のタスクを並列実行するための機構。
 
 ---
 
+## スクリプト
+
+| スクリプト | 用途 | 実行者 |
+|-----------|------|--------|
+| [`scripts/wait-for-completion.sh`](scripts/wait-for-completion.sh) | タスク完了の監視。完了/クラッシュ検知で exit | オーケストレーター |
+| [`scripts/tasks.js`](scripts/tasks.js) | tasks.yaml / status.yaml からタスク一覧取得 | 共通 |
+| [`scripts/common/get-repo-root.sh`](scripts/common/get-repo-root.sh) | リポジトリルートパス取得 | 共通 |
+| [`scripts/common/get-active-feature-id.sh`](scripts/common/get-active-feature-id.sh) | active.yaml から Feature ID 取得 | 共通 |
+
+---
+
 ## 役割別ガイド
 
 | 役割 | ガイド |

@@ -113,12 +113,13 @@ sequenceDiagram
 ### Phase 4: 監視ループ
 
 ```
-[report.md 監視（git ベース）]
-  git show task/{id}_{task-id}:.agents/.../report.md
+[wait-for-completion.sh を run_in_background で起動]
+  - active.yaml / status.yaml から監視対象を自動取得
+  - ポーリング間隔: 30秒→45秒→...→最大300秒
       ↓
-report.md がコミット済み?
-  No → 待機 → ループ先頭へ
-  Yes ↓
+スクリプト exit（完了 or クラッシュ検知）
+  CRASHED:{task_id} → エラー処理
+  COMPLETED:{task_id} ↓
 [worktree 削除]
   git worktree remove --force
       ↓
@@ -139,7 +140,7 @@ report.md がコミット済み?
   Yes → ディスパッチ
   No  ↓
 全タスク完了?
-  No  → ループ先頭へ
+  No  → wait-for-completion.sh を再起動 → ループ先頭へ
   Yes → 完了処理へ
 ```
 

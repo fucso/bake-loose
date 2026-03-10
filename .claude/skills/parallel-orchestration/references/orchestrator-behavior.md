@@ -77,13 +77,15 @@
 
 ### Phase 3: 監視ループ
 
-1. **report.md の監視（git ベース）**
-   - 各 `active_tasks` のタスクブランチを git で監視
-   - report.md がコミットされているかを確認
+1. **監視スクリプトの起動**
+   - `wait-for-completion.sh` を Bash ツールの `run_in_background=true` で起動
    ```bash
-   # タスクブランチに report.md がコミットされているか確認
-   git show task/{feature-id}_{task-id}:.agents/features/{feature-id}/tasks/{task-id}/report.md 2>/dev/null
+   bash .claude/skills/parallel-orchestration/scripts/wait-for-completion.sh
    ```
+   - スクリプトは `active.yaml` と `status.yaml` から監視対象を自動取得
+   - いずれかのタスクが完了（report.md コミット検知）またはクラッシュ（プロセス消失）した時点で exit
+   - 出力: `COMPLETED:{task_id}` (exit 0) / `CRASHED:{task_id}` (exit 1)
+   - ポーリング間隔: 30秒から徐々に増加（最大 300秒）
 
 2. **タスク完了検知時:**
    a. **worktree を削除**
@@ -110,7 +112,7 @@
       - 新たに unblocked になったタスクがあればディスパッチ（Phase 2 へ）
 
 3. **ループ継続判定**
-   - `active_tasks` が空でなければループを継続
+   - `active_tasks` が空でなければ `wait-for-completion.sh` を再起動してループを継続
    - 全タスク完了なら Phase 4 へ
 
 ### Phase 4: 完了処理
