@@ -146,40 +146,10 @@ pending_tasks:
 
 #### 2.2 各タスクに対してワーカーを起動
 
-**a. worktree を作成:**
+[`start-worker.sh`](../../skills/parallel-orchestration/scripts/start-worker.sh) を使用して worktree 作成・ワーカー起動を一括で行う。
 
 ```bash
-git worktree add .agents/worktrees/{feature-id}_{task-id} -b task/{feature-id}_{task-id}
-```
-
-**b. ワーカープロセスを起動:**
-
-[ワーカー用プロンプトテンプレート](../../skills/parallel-orchestration/appendix/worker-prompt.md) を使用してプロンプトを構築し、ワーカーを起動する。
-
-```bash
-cd {worktree_path} && env -u CLAUDECODE claude -p "{prompt}" > {task_dir}/worker_output.log 2>&1 &
-```
-
-変数の設定:
-- `WORKTREE_PATH`: `.agents/worktrees/{feature-id}_{task-id}`
-- `MAIN_REPO_PATH`: メインリポジトリのパス
-- `DOCKER_WORKTREE_PATH`: `/worktrees/{feature-id}_{task-id}`
-- `TASK_SPEC_PATH`: `.agents/features/{feature-id}/tasks/{task-id}/spec.md`
-- `FEATURE_SPEC_PATH`: `.agents/features/{feature-id}/spec.md`
-- `LOG_PATH`: `.agents/features/{feature-id}/tasks/{task-id}/worker_output.log`
-
-**c. status.yaml を更新:**
-
-```yaml
-active_tasks:
-  - task_id: {task-id}
-    worktree_path: .agents/worktrees/{feature-id}_{task-id}
-    branch: task/{feature-id}_{task-id}
-    worker_pid: {pid}
-    started_at: {ISO 8601 datetime}
-
-pending_tasks:
-  # {task-id} を削除
+WORKER_PID=$(bash .claude/skills/parallel-orchestration/scripts/start-worker.sh {task-id})
 ```
 
 ---
@@ -188,84 +158,39 @@ pending_tasks:
 
 #### 3.1 監視スクリプトの起動
 
-`wait-for-completion.sh` をバックグラウンドで起動し、タスク完了を監視する。
+[`wait-for-completion.sh`](../../skills/parallel-orchestration/scripts/wait-for-completion.sh) を Bash ツールの `run_in_background=true` で起動する。
 
 ```bash
-# Bash ツールの run_in_background=true で起動
 bash .claude/skills/parallel-orchestration/scripts/wait-for-completion.sh
 ```
 
-**スクリプトの動作:**
-- `active.yaml` から Feature ID、`status.yaml` から active tasks を自動取得
-- 各タスクブランチに report.md がコミットされているかを定期的に確認
-- ポーリング間隔: 30秒 → 45秒 → 60秒 → ... 最大 300秒（徐々に増加）
-- いずれかのタスクが完了（またはクラッシュ）した時点で exit
-
-**出力:**
-- `COMPLETED:{task_id}` → exit 0（完了検知）
-- `CRASHED:{task_id}` → exit 1（クラッシュ検知）
-
 スクリプトが exit すると、オーケストレーターに自動通知が届く。
 
-#### 3.2 ワーカーのログ確認（任意）
+#### 3.2 タスク完了検知時の処理
 
-各タスクの実行ログは以下に出力される:
-```
-.agents/features/{feature-id}/tasks/{task-id}/worker_output.log
-```
+**a. タスクブランチを Feature ブランチにマージ:**
 
-#### 3.3 タスク完了検知時の処理
-
-**a. worktree を削除:**
-
-```bash
-git worktree remove .agents/worktrees/{feature-id}_{task-id} --force
-```
-
-**b. タスクブランチを Feature ブランチにマージ:**
+オーケストレーターがエージェンティックにマージを行う。
+コンフリクトが発生した場合は内容を判断して解決する。
 
 ```bash
 git checkout feature/{feature-id}
 git merge task/{feature-id}_{task-id}
 ```
 
-**マージコンフリクトが発生した場合:**
-```
-⚠️ マージコンフリクトが発生しました
+**b. クリーンアップ:**
 
-タスク: {task-id}
-ブランチ: task/{feature-id}_{task-id}
-
-手動で解決してください:
-1. git status でコンフリクトファイルを確認
-2. コンフリクトを解決
-3. git add . && git commit
-4. オーケストレーターを再起動
-```
-
-**c. タスクブランチを削除:**
+マージ完了後、[`complete-task.sh`](../../skills/parallel-orchestration/scripts/complete-task.sh) でクリーンアップを行う。
 
 ```bash
-git branch -d task/{feature-id}_{task-id}
+bash .claude/skills/parallel-orchestration/scripts/complete-task.sh {task-id}
 ```
 
-**d. status.yaml を更新:**
-
-```yaml
-active_tasks:
-  # {task-id} を削除
-
-completed_tasks:
-  - {task-id}  # 追加
-
-updated_at: {ISO 8601 datetime}
-```
-
-**e. 依存解消チェック:**
+**c. 依存解消チェック:**
 
 `tasks.yaml` を参照し、新たに unblocked になったタスクがあれば Phase 2 へ戻りディスパッチする。
 
-#### 3.4 ループ継続判定
+#### 3.3 ループ継続判定
 
 - `active_tasks` が空でなければ `wait-for-completion.sh` を再起動してループを継続
 - 全タスクが `completed_tasks` に含まれたら Phase 4 へ
@@ -336,7 +261,7 @@ Feature: {feature-id}
 |------|------|-----|
 | Feature ブランチ | `feature/{feature-id}` | `feature/20260209-parallel_orchestration` |
 | タスクブランチ | `task/{feature-id}_{task-id}` | `task/20260209-parallel_orchestration_01-skill-definition` |
-| worktree | `.agents/worktrees/{feature-id}_{task-id}/` | `.agents/worktrees/20260209-parallel_orchestration_01-skill-definition/` |
+| worktree | `.worktrees/task_{feature-id}_{task-id}/` | `.worktrees/task_20260209-parallel_orchestration_01-skill-definition/` |
 
 ---
 
@@ -348,7 +273,7 @@ Feature: {feature-id}
 |------|------|
 | `active.yaml` | 進行中 Feature の管理 |
 | `status.yaml` | 実行状態の管理 |
-| worktree の作成・削除 | タスク実行環境の準備・クリーンアップ |
+| worktree の作成・削除 | `background-developing-with-worktree` skill に委譲 |
 | ブランチの作成・マージ・削除 | Feature/タスクブランチの管理 |
 
 ### 編集禁止

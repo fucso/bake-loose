@@ -51,7 +51,6 @@ Feature 内のタスクを並列実行するための機構。
 ```
 .agents/
 ├── active.yaml            # 現在進行中の Feature
-├── worktrees/             # git worktree の実体
 └── features/{feature-id}/
     ├── spec.md            # Feature 仕様
     ├── tasks.yaml         # タスク定義・依存関係
@@ -76,8 +75,10 @@ Feature 内のタスクを並列実行するための機構。
 
 | スクリプト | 用途 | 実行者 |
 |-----------|------|--------|
+| [`scripts/start-worker.sh`](scripts/start-worker.sh) | worktree セットアップ（background-developing-with-worktree に委譲）・ワーカープロセス起動。PID を出力 | オーケストレーター |
+| [`scripts/complete-task.sh`](scripts/complete-task.sh) | マージ後のクリーンアップ（worktree 削除・ブランチ削除・status.yaml 更新）を一括実行 | オーケストレーター |
 | [`scripts/wait-for-completion.sh`](scripts/wait-for-completion.sh) | タスク完了の監視。完了/クラッシュ検知で exit | オーケストレーター |
-| [`scripts/tasks.js`](scripts/tasks.js) | tasks.yaml / status.yaml からタスク一覧取得 | 共通 |
+| [`scripts/tasks.js`](scripts/tasks.js) | tasks.yaml / status.yaml の参照・更新 | 共通 |
 | [`scripts/common/get-repo-root.sh`](scripts/common/get-repo-root.sh) | リポジトリルートパス取得 | 共通 |
 | [`scripts/common/get-active-feature-id.sh`](scripts/common/get-active-feature-id.sh) | active.yaml から Feature ID 取得 | 共通 |
 

@@ -52,7 +52,7 @@ updated_at: {ISO 8601 datetime}
 
 active_tasks:
   - task_id: {task-id}
-    worktree_path: .agents/worktrees/{feature-id}_{task-id}
+    worktree_path: .worktrees/task_{feature-id}_{task-id}
     branch: task/{feature-id}_{task-id}
     worker_pid: {pid}
     started_at: {ISO 8601 datetime}
@@ -112,13 +112,13 @@ updated_at: 2026-02-09T11:15:00+09:00
 
 active_tasks:
   - task_id: 02-design-command
-    worktree_path: .agents/worktrees/20260209-parallel_orchestration_02-design-command
+    worktree_path: .worktrees/task_20260209-parallel_orchestration_02-design-command
     branch: task/20260209-parallel_orchestration_02-design-command
     worker_pid: 12346
     started_at: 2026-02-09T11:00:00+09:00
 
   - task_id: 03-worker-agent
-    worktree_path: .agents/worktrees/20260209-parallel_orchestration_03-worker-agent
+    worktree_path: .worktrees/task_20260209-parallel_orchestration_03-worker-agent
     branch: task/20260209-parallel_orchestration_03-worker-agent
     worker_pid: 12347
     started_at: 2026-02-09T11:00:00+09:00

@@ -97,14 +97,12 @@ sequenceDiagram
   dependencies が空、または
   全て completed_tasks に含まれる
          ↓
-[worktree 作成]
-  git worktree add
-      ↓
-[ワーカー起動]
-  claude -p "{prompt}"
+[start-worker.sh でワーカー起動]
+  worktree 作成 + claude -p を一括実行
+  PID を返却
       ↓
 [status.yaml 更新]
-  active_tasks に追加
+  active_tasks に追加（PID 記録）
   pending_tasks から削除
 ```
 
@@ -120,19 +118,12 @@ sequenceDiagram
 スクリプト exit（完了 or クラッシュ検知）
   CRASHED:{task_id} → エラー処理
   COMPLETED:{task_id} ↓
-[worktree 削除]
-  git worktree remove --force
-      ↓
-[タスクブランチを Feature ブランチにマージ]
-  git checkout feature/{id}
+[マージ（オーケストレーターがエージェンティックに実行）]
   git merge task/{id}_{task-id}
+  コンフリクト時は内容を判断して解決
       ↓
-[タスクブランチ削除]
-  git branch -d task/{id}_{task-id}
-      ↓
-[status.yaml 更新]
-  active_tasks から削除
-  completed_tasks に追加
+[complete-task.sh 実行（クリーンアップ）]
+  worktree 削除 → ブランチ削除 → status.yaml 更新
       ↓
 [依存解消チェック]
       ↓

@@ -21,19 +21,21 @@
 
 | 変数 | 説明 | 例 |
 |------|------|-----|
-| `WORKTREE_PATH` | ワーカーが作業する worktree ディレクトリ | `/path/to/project/.agents/worktrees/task-01` |
+| `WORKTREE_PATH` | ワーカーが作業する worktree ディレクトリ | `/path/to/project/.worktrees/task_20260209-xxx_01-task` |
 | `MAIN_REPO_PATH` | メインリポジトリのパス | `/path/to/project` |
-| `DOCKER_WORKTREE_PATH` | Docker コンテナ内での worktree パス | `/worktrees/task-01` |
+| `DOCKER_WORKTREE_PATH` | Docker コンテナ内での worktree パス | `/worktrees/task_20260209-xxx_01-task` |
 
 **注意**: Docker Compose 環境はメインリポジトリで起動されており、worktree ディレクトリは以下のようにマウントされている:
 
 ```yaml
 # compose.yaml での設定
 volumes:
-  - ./.agents/worktrees:/worktrees
+  - ./.worktrees:/worktrees
 ```
 
-これにより、ホストの `.agents/worktrees/task-01` がコンテナ内の `/worktrees/task-01` にマッピングされる。
+これにより、ホストの `.worktrees/task_xxx` がコンテナ内の `/worktrees/task_xxx` にマッピングされる。
+
+**注意**: worktree は `background-developing-with-worktree` skill によって `.worktrees/` ディレクトリに作成される。各 worktree には `.worktree.env` が自動生成され、パス情報が記録されている。
 
 ---
 
@@ -137,7 +139,7 @@ docker compose -f ${MAIN_REPO_PATH}/compose.yaml exec backend bash -c "cd ${DOCK
 docker compose -f ${MAIN_REPO_PATH}/compose.yaml exec backend bash -c "cd ${DOCKER_WORKTREE_PATH}/backend && cargo fmt"
 
 # Lint（worktree のコードを対象）
-docker compose -f ${MAIN_REPO_PATH}/compose.yaml exec backend bash -c "cd ${DOCKER_WORKTREE_PATH}/backend && cargo clippy -- -D warnings"
+docker compose -f ${MAIN_REPO_PATH}/compose.yaml exec backend bash -c "cd ${DOCKER_WORKTREE_PATH}/backend && cargo clippy --all-targets -- -D warnings"
 ```
 
 **注意**: `DOCKER_WORKTREE_PATH` は Docker コンテナ内でのパスであり、ホストの `WORKTREE_PATH` とは異なる。
@@ -237,5 +239,5 @@ worktree 内のタスクディレクトリに作成:
 |------|------|
 | `git checkout` でブランチを切り替える | worktree のブランチは固定 |
 | `git worktree` コマンドを使う | オーケストレーター専用 |
-| 親ディレクトリ（`.agents/worktrees/` の外）を参照する | 他 worktree との競合防止 |
+| 親ディレクトリ（`.worktrees/` の外）を参照する | 他 worktree との競合防止 |
 | オーケストレーション状態ファイルを編集する | 役割分離の原則 |

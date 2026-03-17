@@ -351,7 +351,7 @@ docker compose exec backend bash -c "cargo fmt"
 docker compose exec backend bash -c "cargo fmt -- --check"
 
 # Lint（警告をエラー扱い）
-docker compose exec backend bash -c "cargo clippy -- -D warnings"
+docker compose exec backend bash -c "cargo clippy --all-targets -- -D warnings"
 ```
 
 - コードを変更した後は `cargo fmt` を実行してフォーマットを統一すること

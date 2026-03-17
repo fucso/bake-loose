@@ -53,27 +53,19 @@
    - `dependencies` が空、または全て `completed_tasks` に含まれるタスクを抽出
 
 2. **各タスクに対して:**
-   a. **worktree を作成**
+   a. **worktree 作成・ワーカー起動**
+      [`start-worker.sh`](../scripts/start-worker.sh) を使用して worktree 作成とワーカー起動を一括で行う。
       ```bash
-      git worktree add .agents/worktrees/{feature-id}_{task-id} -b task/{feature-id}_{task-id}
+      WORKER_PID=$(bash .claude/skills/parallel-orchestration/scripts/start-worker.sh {task-id})
       ```
-
-   b. **ワーカープロセスを起動**
-      - [ワーカー用プロンプトテンプレート](../appendix/worker-prompt.md) を使用してプロンプトを構築
-
-      **注意: Claude Code in Claude Code の実現**
-
-      オーケストレーター自身も Claude Code セッションとして実行されるため、ワーカーを起動する際に `CLAUDECODE` 環境変数を継承させないよう `env -u CLAUDECODE` を使用する。
-
-      ```bash
-      cd {worktree_path} && env -u CLAUDECODE claude -p "{prompt}" > {task_dir}/worker_output.log 2>&1 &
-      ```
-
-      これにより、各ワーカーは独立した Claude Code セッションとして起動される。
-
-   c. **status.yaml を更新**
-      - `active_tasks` に追加
-      - `pending_tasks` から削除
+      スクリプトは以下を自動で行う:
+      - `active.yaml` から Feature ID を取得
+      - `background-developing-with-worktree` skill の `setup-worktree.sh` で worktree を作成
+      - `.worktree.env` からパス情報（`WORKTREE_PATH`, `DOCKER_WORKTREE_PATH`）を読み込み
+      - [ワーカー用プロンプトテンプレート](../appendix/worker-prompt.md) に基づくプロンプトを構築
+      - `env -u CLAUDECODE claude -p` でワーカーをバックグラウンド起動
+      - `tasks.js toActive` で status.yaml を更新（`pending_tasks` → `active_tasks`）
+      - stdout にワーカーの PID を出力
 
 ### Phase 3: 監視ループ
 
@@ -88,27 +80,26 @@
    - ポーリング間隔: 30秒から徐々に増加（最大 300秒）
 
 2. **タスク完了検知時:**
-   a. **worktree を削除**
-      ```bash
-      git worktree remove .agents/worktrees/{feature-id}_{task-id} --force
-      ```
-
-   b. **タスクブランチを Feature ブランチにマージ**
+   a. **タスクブランチを Feature ブランチにマージ**
+      オーケストレーターがエージェンティックにマージを行う。
+      コンフリクトが発生した場合は内容を判断して解決する。
       ```bash
       git checkout feature/{feature-id}
       git merge task/{feature-id}_{task-id}
       ```
 
-   c. **タスクブランチを削除**
+   b. **クリーンアップ**
+      マージ完了後、[`complete-task.sh`](../scripts/complete-task.sh) でクリーンアップを行う。
       ```bash
-      git branch -d task/{feature-id}_{task-id}
+      bash .claude/skills/parallel-orchestration/scripts/complete-task.sh {task-id}
       ```
+      スクリプトは以下を自動で行う:
+      - `status.yaml` の `active_tasks[]` から worktree パスとブランチ名を取得
+      - `background-developing-with-worktree` skill の `close-worktree.sh` で worktree を削除
+      - タスクブランチを削除
+      - `tasks.js toCompleted` で status.yaml を更新（`active_tasks` → `completed_tasks`）
 
-   d. **status.yaml を更新**
-      - `active_tasks` から削除
-      - `completed_tasks` に追加
-
-   e. **依存解消チェック**
+   c. **依存解消チェック**
       - 新たに unblocked になったタスクがあればディスパッチ（Phase 2 へ）
 
 3. **ループ継続判定**
@@ -145,7 +136,7 @@
 |------|------|-----|
 | Feature ブランチ | `feature/{feature-id}` | `feature/20260209-parallel_orchestration` |
 | タスクブランチ | `task/{feature-id}_{task-id}` | `task/20260209-parallel_orchestration_01-skill-definition` |
-| worktree | `.agents/worktrees/{feature-id}_{task-id}/` | `.agents/worktrees/20260209-parallel_orchestration_01-skill-definition/` |
+| worktree | `.worktrees/task_{feature-id}_{task-id}/` | `.worktrees/task_20260209-parallel_orchestration_01-skill-definition/` |
 
 ---
 
@@ -187,7 +178,7 @@
 |------|------|
 | `active.yaml` | 進行中 Feature の管理 |
 | `status.yaml` | 実行状態の管理 |
-| worktree の作成・削除 | タスク実行環境の準備・クリーンアップ |
+| worktree の作成・削除 | `background-developing-with-worktree` skill に委譲 |
 | ブランチの作成・マージ・削除 | Feature/タスクブランチの管理 |
 
 #### 編集禁止

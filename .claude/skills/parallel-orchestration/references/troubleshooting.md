@@ -66,11 +66,11 @@ To bypass this check, unset the CLAUDECODE environment variable.
 ```
 
 **原因:**
-- `spawn-worker.sh` で `env -u CLAUDECODE` が使用されていない
+- `start-worker.sh` で `env -u CLAUDECODE` が使用されていない
 - 環境変数が子プロセスに継承されている
 
 **対処:**
-1. `spawn-worker.sh` の76行目を確認
+1. `start-worker.sh` のワーカー起動部分を確認
    ```bash
    cd "${WORKTREE_PATH}" && env -u CLAUDECODE claude -p "${PROMPT}" > "${LOG_PATH}" 2>&1
    ```
@@ -260,7 +260,10 @@ To bypass this check, unset the CLAUDECODE environment variable.
 
 2. **worktree を全て削除**
    ```bash
-   rm -rf .agents/worktrees/{feature-id}_*
+   # background-developing-with-worktree skill の close-worktree.sh を使用
+   bash .claude/skills/background-developing-with-worktree/scripts/close-worktree.sh {worktree_path}
+   # または手動で
+   rm -rf .worktrees/task_{feature-id}_*
    git worktree prune
    ```
 
