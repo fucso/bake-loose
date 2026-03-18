@@ -140,9 +140,9 @@ argument-hint: [実現したい機能・要件]
 
 仕様ドキュメントの記載ルールとテンプレートは以下を参照すること:
 
-- **記載ルール**: [.claude/skills/spec-writing/SKILL.md](../skills/spec-writing/SKILL.md)
-- **Feature spec.md テンプレート**: [.claude/skills/spec-writing/templates/feature-spec.md](../skills/spec-writing/templates/feature-spec.md)
-- **Task spec.md テンプレート**: [.claude/skills/spec-writing/templates/task-spec.md](../skills/spec-writing/templates/task-spec.md)
+- **記載ルール**: [.claude/skills/defining-feature-task/SKILL.md](../skills/defining-feature-task/SKILL.md)
+- **Feature spec.md テンプレート**: [.claude/skills/defining-feature-task/templates/feature-spec.md](../skills/defining-feature-task/templates/feature-spec.md)
+- **Task spec.md テンプレート**: [.claude/skills/defining-feature-task/templates/task-spec.md](../skills/defining-feature-task/templates/task-spec.md)
 
 ### テストの配置ルール
 

@@ -44,6 +44,7 @@ argument-hint: [実現したい機能・要件]
 1. **AGENTS.md** - プロジェクト概要とアーキテクチャ
 2. **各レイヤーのコーディングルール** - `.claude/rules/` 配下
 3. **並列オーケストレーション機構** - `.claude/skills/parallel-orchestration/SKILL.md`
+4. **目標定義ガイドライン** - `.claude/skills/defining-feature-task/references/feature-goal.md`, `.claude/skills/defining-feature-task/references/task-goal.md`
 
 ---
 
@@ -102,7 +103,25 @@ argument-hint: [実現したい機能・要件]
 
 ---
 
-## Phase 3: タスク分解
+## Phase 3: Feature 目標の定義
+
+[Feature 目標の定義](../../skills/defining-feature-task/references/feature-goal.md) に従い、Feature の完了目標を定義する。
+
+### 定義手順
+
+1. Feature の種別を判断する（バックエンド / フロントエンド / リファクタリング）
+2. 振る舞いレベルの目標を正常系・異常系で記述する
+3. 検証方法を明記する（どのテストがパスすれば達成か）
+
+### チェックポイント
+
+- [ ] 目標が実装の手段ではなく振る舞いで書かれている
+- [ ] 正常系と異常系の両方が定義されている
+- [ ] テストやコマンドで検証可能な形になっている
+
+---
+
+## Phase 4: タスク分解
 
 ### 分解の判断基準
 
@@ -115,6 +134,15 @@ argument-hint: [実現したい機能・要件]
 **分けないケース:**
 - 1-2ファイルの小規模な修正 → 1タスクにまとめる
 - 分けると依存が複雑になる場合 → まとめる
+
+### タスク目標の定義
+
+各タスクに対し、[Task 目標の定義](../../skills/defining-feature-task/references/task-goal.md) に従って完了目標を定義する。
+
+1. **実装目標**: そのタスクの実装が正しく機能していることを具体的に記述
+2. **テスト目標**: 追加・修正するテストとその期待結果を明記
+
+**整合性チェック**: 全タスクの目標が達成されたとき、Feature の目標が達成されることを確認する。
 
 ### 並列実行を意識したタスク設計
 
@@ -138,7 +166,7 @@ argument-hint: [実現したい機能・要件]
 
 ---
 
-## Phase 4: ファイル出力
+## Phase 5: ファイル出力
 
 ### feature ディレクトリの命名
 
@@ -152,7 +180,7 @@ argument-hint: [実現したい機能・要件]
 
 ### 4.1 spec.md の生成
 
-[仕様記載ルール](../../skills/spec-writing/SKILL.md) に従い、以下を含める:
+[仕様記載ルール](../../skills/defining-feature-task/SKILL.md) に従い、以下を含める:
 
 - 概要
 - 元の要件
@@ -206,6 +234,8 @@ spec.md のタスク一覧から `tasks.yaml` を生成する。
 
 ## 参照ドキュメント
 
-- [仕様記載ルール](../../skills/spec-writing/SKILL.md) - spec.md の記載ガイドライン
+- [仕様記載ルール](../../skills/defining-feature-task/SKILL.md) - spec.md の記載ガイドライン
+- [Feature 目標の定義](../../skills/defining-feature-task/references/feature-goal.md) - Feature の振る舞いレベル目標
+- [Task 目標の定義](../../skills/defining-feature-task/references/task-goal.md) - Task の実装レベル目標
 - [並列オーケストレーション機構](../../skills/parallel-orchestration/SKILL.md) - 機構の全体像
 - [tasks.yaml フォーマット](../../skills/parallel-orchestration/appendix/tasks-yaml.md) - tasks.yaml のスキーマ
