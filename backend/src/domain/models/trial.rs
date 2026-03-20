@@ -110,12 +110,26 @@ impl Trial {
         &self.steps
     }
 
+    /// Steps への可変参照を返す
+    pub fn steps_mut(&mut self) -> &mut Vec<Step> {
+        &mut self.steps
+    }
+
     pub fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
         &self.created_at
     }
 
     pub fn updated_at(&self) -> &chrono::DateTime<chrono::Utc> {
         &self.updated_at
+    }
+
+    /// 新しい Step を追加し、追加した Step への可変参照を返す
+    pub fn add_step(&mut self, name: String) -> &mut Step {
+        let position = self.steps.len() as i16;
+        let step = Step::new(self.id.clone(), name, position);
+        self.steps.push(step);
+        self.updated_at = chrono::Utc::now();
+        self.steps.last_mut().unwrap()
     }
 }
 

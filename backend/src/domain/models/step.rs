@@ -3,7 +3,9 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::domain::models::parameter::Parameter;
+use chrono::{DateTime, Utc};
+
+use crate::domain::models::parameter::{Parameter, ParameterContent};
 use crate::domain::models::trial::TrialId;
 
 /// ステップID
@@ -114,6 +116,22 @@ impl Step {
 
     pub fn updated_at(&self) -> &chrono::DateTime<chrono::Utc> {
         &self.updated_at
+    }
+
+    /// Step を開始状態にする
+    ///
+    /// # Arguments
+    /// * `at` - 開始時刻。None の場合は現在時刻を使用
+    pub fn start(&mut self, at: Option<DateTime<Utc>>) {
+        self.started_at = Some(at.unwrap_or_else(Utc::now));
+        self.updated_at = Utc::now();
+    }
+
+    /// Parameter を追加する
+    pub fn add_parameter(&mut self, content: ParameterContent) {
+        let parameter = Parameter::new(self.id.clone(), content);
+        self.parameters.push(parameter);
+        self.updated_at = Utc::now();
     }
 }
 
