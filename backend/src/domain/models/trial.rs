@@ -133,6 +133,29 @@ impl Trial {
     pub fn next_step_position(&self) -> i16 {
         self.steps.len() as i16
     }
+
+    /// Trial の名前を設定する
+    pub fn set_name(&mut self, name: Option<String>) {
+        self.name = name;
+        self.updated_at = chrono::Utc::now();
+    }
+
+    /// Trial のメモを設定する
+    pub fn set_memo(&mut self, memo: Option<String>) {
+        self.memo = memo;
+        self.updated_at = chrono::Utc::now();
+    }
+
+    /// Trial を完了状態にする
+    pub fn complete(&mut self) {
+        self.status = TrialStatus::Completed;
+        self.updated_at = chrono::Utc::now();
+    }
+
+    /// updated_at を現在時刻に更新する
+    pub fn touch(&mut self) {
+        self.updated_at = chrono::Utc::now();
+    }
 }
 
 #[cfg(test)]

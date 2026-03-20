@@ -5,7 +5,7 @@
 use chrono::{DateTime, Utc};
 
 use crate::domain::models::parameter::{Parameter, ParameterContent, ParameterId};
-use crate::domain::models::step::{Step, StepId};
+use crate::domain::models::step::StepId;
 use crate::domain::models::trial::{Trial, TrialStatus};
 
 /// パラメーター検証エラー
@@ -121,72 +121,32 @@ pub fn validate(state: &Trial, command: &Command) -> Result<(), Error> {
 }
 
 /// 状態遷移（validate 成功前提）
-pub fn execute(state: Trial, command: Command) -> Trial {
-    let now = Utc::now();
+pub fn execute(mut state: Trial, command: Command) -> Trial {
+    if let Some(step) = state.steps_mut().iter_mut().find(|s| s.id() == &command.step_id) {
+        // 名前の更新
+        if let Some(name) = command.name {
+            step.set_name(name);
+        }
 
-    let trial_id = state.id().clone();
-    let project_id = state.project_id().clone();
-    let name = state.name().map(|s| s.to_string());
-    let memo = state.memo().map(|s| s.to_string());
-    let status = state.status().clone();
-    let created_at = *state.created_at();
-    let steps = state.steps().to_vec();
+        // 開始日時の更新
+        if let Some(started_at) = command.started_at {
+            step.set_started_at(started_at);
+        }
 
-    let updated_steps: Vec<Step> = steps
-        .into_iter()
-        .map(|step| {
-            if step.id() != &command.step_id {
-                return step;
-            }
+        // パラメーターの削除
+        for param_id in &command.remove_parameter_ids {
+            step.remove_parameter(param_id);
+        }
 
-            let new_name = match &command.name {
-                Some(n) => n.clone(),
-                None => step.name().to_string(),
-            };
+        // パラメーターの追加
+        for param_input in command.add_parameters {
+            let parameter = Parameter::new(step.id().clone(), param_input.content);
+            step.add_parameter(parameter);
+        }
+    }
 
-            let new_started_at = match command.started_at {
-                Some(value) => value,
-                None => step.started_at().copied(),
-            };
-
-            let mut new_parameters: Vec<Parameter> = step
-                .parameters()
-                .iter()
-                .filter(|p| !command.remove_parameter_ids.contains(p.id()))
-                .cloned()
-                .collect();
-
-            for param_input in &command.add_parameters {
-                new_parameters.push(Parameter::new(
-                    step.id().clone(),
-                    param_input.content.clone(),
-                ));
-            }
-
-            Step::from_raw(
-                step.id().clone(),
-                step.trial_id().clone(),
-                new_name,
-                step.position(),
-                new_started_at,
-                step.completed_at().copied(),
-                new_parameters,
-                *step.created_at(),
-                now,
-            )
-        })
-        .collect();
-
-    Trial::from_raw(
-        trial_id,
-        project_id,
-        name,
-        memo,
-        status,
-        updated_steps,
-        created_at,
-        now,
-    )
+    state.touch();
+    state
 }
 
 /// validate + execute
@@ -200,92 +160,39 @@ mod tests {
     use super::*;
     use crate::domain::models::parameter::{ParameterContent, ParameterValue};
     use crate::domain::models::project::ProjectId;
-    use crate::domain::models::trial::{TrialId, TrialStatus};
+    use crate::domain::models::step::Step;
+    use crate::domain::models::trial::Trial;
 
     fn make_trial_with_step() -> (Trial, StepId) {
-        let project_id = ProjectId::new();
-        let trial_id = TrialId::new();
-        let step = Step::new(trial_id.clone(), "準備".to_string(), 1);
+        let mut trial = Trial::new(ProjectId::new(), Some("テスト試行".to_string()), None);
+        let step = Step::new(trial.id().clone(), "準備".to_string(), 1);
         let step_id = step.id().clone();
-        let now = Utc::now();
-        let trial = Trial::from_raw(
-            trial_id,
-            project_id,
-            Some("テスト試行".to_string()),
-            None,
-            TrialStatus::InProgress,
-            vec![step],
-            now,
-            now,
-        );
+        trial.add_step(step);
         (trial, step_id)
     }
 
     fn make_trial_with_completed_step() -> (Trial, StepId) {
-        let project_id = ProjectId::new();
-        let trial_id = TrialId::new();
-        let step_id = StepId::new();
-        let now = Utc::now();
-        let step = Step::from_raw(
-            step_id.clone(),
-            trial_id.clone(),
-            "完了ステップ".to_string(),
-            1,
-            None,
-            Some(now),
-            vec![],
-            now,
-            now,
-        );
-        let trial = Trial::from_raw(
-            trial_id,
-            project_id,
-            None,
-            None,
-            TrialStatus::InProgress,
-            vec![step],
-            now,
-            now,
-        );
+        let mut trial = Trial::new(ProjectId::new(), None, None);
+        let mut step = Step::new(trial.id().clone(), "完了ステップ".to_string(), 1);
+        let step_id = step.id().clone();
+        step.complete(Utc::now());
+        trial.add_step(step);
         (trial, step_id)
     }
 
     fn make_trial_with_step_and_parameter() -> (Trial, StepId, ParameterId) {
-        let project_id = ProjectId::new();
-        let trial_id = TrialId::new();
-        let step_id = StepId::new();
-        let param_id = ParameterId::new();
-        let now = Utc::now();
-        let param = Parameter::from_raw(
-            param_id.clone(),
+        let mut trial = Trial::new(ProjectId::new(), None, None);
+        let mut step = Step::new(trial.id().clone(), "準備".to_string(), 1);
+        let step_id = step.id().clone();
+        let param = Parameter::new(
             step_id.clone(),
             ParameterContent::Text {
                 value: "テキスト".to_string(),
             },
-            now,
-            now,
         );
-        let step = Step::from_raw(
-            step_id.clone(),
-            trial_id.clone(),
-            "準備".to_string(),
-            1,
-            None,
-            None,
-            vec![param],
-            now,
-            now,
-        );
-        let trial = Trial::from_raw(
-            trial_id,
-            project_id,
-            None,
-            None,
-            TrialStatus::InProgress,
-            vec![step],
-            now,
-            now,
-        );
+        let param_id = param.id().clone();
+        step.add_parameter(param);
+        trial.add_step(step);
         (trial, step_id, param_id)
     }
 
@@ -324,31 +231,12 @@ mod tests {
 
     #[test]
     fn test_clear_step_started_at() {
-        let project_id = ProjectId::new();
-        let trial_id = TrialId::new();
-        let step_id = StepId::new();
-        let now = Utc::now();
-        let step = Step::from_raw(
-            step_id.clone(),
-            trial_id.clone(),
-            "準備".to_string(),
-            1,
-            Some(now),
-            None,
-            vec![],
-            now,
-            now,
-        );
-        let trial = Trial::from_raw(
-            trial_id,
-            project_id,
-            None,
-            None,
-            TrialStatus::InProgress,
-            vec![step],
-            now,
-            now,
-        );
+        let mut trial = Trial::new(ProjectId::new(), None, None);
+        let mut step = Step::new(trial.id().clone(), "準備".to_string(), 1);
+        step.start(Utc::now());
+        let step_id = step.id().clone();
+        trial.add_step(step);
+
         let command = Command {
             step_id: step_id.clone(),
             name: None,
@@ -420,31 +308,17 @@ mod tests {
 
     #[test]
     fn test_step_updated_at_is_changed() {
-        let past = Utc::now() - chrono::Duration::seconds(10);
-        let project_id = ProjectId::new();
-        let trial_id = TrialId::new();
-        let step_id = StepId::new();
-        let step = Step::from_raw(
-            step_id.clone(),
-            trial_id.clone(),
-            "準備".to_string(),
-            1,
-            None,
-            None,
-            vec![],
-            past,
-            past,
-        );
-        let trial = Trial::from_raw(
-            trial_id,
-            project_id,
-            None,
-            None,
-            TrialStatus::InProgress,
-            vec![step],
-            past,
-            past,
-        );
+        let (trial, step_id) = make_trial_with_step();
+        let original_updated_at = trial
+            .steps()
+            .iter()
+            .find(|s| s.id() == &step_id)
+            .unwrap()
+            .updated_at()
+            .clone();
+
+        std::thread::sleep(std::time::Duration::from_millis(1));
+
         let command = Command {
             step_id: step_id.clone(),
             name: Some("更新されたステップ".to_string()),
@@ -454,76 +328,37 @@ mod tests {
         };
         let result = run(trial, command).unwrap();
         let step = result.steps().iter().find(|s| s.id() == &step_id).unwrap();
-        assert!(step.updated_at() > &past);
+        assert!(step.updated_at() > &original_updated_at);
     }
 
     #[test]
     fn test_trial_updated_at_is_changed() {
-        let past = Utc::now() - chrono::Duration::seconds(10);
-        let project_id = ProjectId::new();
-        let trial_id = TrialId::new();
-        let step_id = StepId::new();
-        let step = Step::from_raw(
-            step_id.clone(),
-            trial_id.clone(),
-            "準備".to_string(),
-            1,
-            None,
-            None,
-            vec![],
-            past,
-            past,
-        );
-        let trial = Trial::from_raw(
-            trial_id,
-            project_id,
-            None,
-            None,
-            TrialStatus::InProgress,
-            vec![step],
-            past,
-            past,
-        );
+        let (trial, step_id) = make_trial_with_step();
+        let original_updated_at = trial.updated_at().clone();
+
+        std::thread::sleep(std::time::Duration::from_millis(1));
+
         let command = Command {
-            step_id: step_id.clone(),
+            step_id,
             name: Some("更新されたステップ".to_string()),
             started_at: None,
             add_parameters: vec![],
             remove_parameter_ids: vec![],
         };
         let result = run(trial, command).unwrap();
-        assert!(result.updated_at() > &past);
+        assert!(result.updated_at() > &original_updated_at);
     }
 
     // --- 異常系 ---
 
     #[test]
     fn test_returns_error_when_trial_completed() {
-        let project_id = ProjectId::new();
-        let trial_id = TrialId::new();
-        let step_id = StepId::new();
-        let now = Utc::now();
-        let step = Step::from_raw(
-            step_id.clone(),
-            trial_id.clone(),
-            "準備".to_string(),
-            1,
-            None,
-            None,
-            vec![],
-            now,
-            now,
-        );
-        let trial = Trial::from_raw(
-            trial_id,
-            project_id,
-            None,
-            None,
-            TrialStatus::Completed,
-            vec![step],
-            now,
-            now,
-        );
+        let mut trial = Trial::new(ProjectId::new(), None, None);
+        let step = Step::new(trial.id().clone(), "準備".to_string(), 1);
+        let step_id = step.id().clone();
+        trial.add_step(step);
+        trial.complete();
+
         let command = Command {
             step_id,
             name: None,

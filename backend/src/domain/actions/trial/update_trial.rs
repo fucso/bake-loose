@@ -1,5 +1,3 @@
-use chrono::Utc;
-
 use crate::domain::models::trial::{Trial, TrialStatus};
 
 pub struct Command {
@@ -21,19 +19,14 @@ pub fn validate(state: &Trial, _command: &Command) -> Result<(), Error> {
 }
 
 /// 状態遷移（validate成功前提）
-pub fn execute(state: Trial, command: Command) -> Trial {
-    let name = command.name.or_else(|| state.name().map(|s| s.to_string()));
-    let memo = command.memo.or_else(|| state.memo().map(|s| s.to_string()));
-    Trial::from_raw(
-        state.id().clone(),
-        state.project_id().clone(),
-        name,
-        memo,
-        state.status().clone(),
-        state.steps().to_vec(),
-        *state.created_at(),
-        Utc::now(),
-    )
+pub fn execute(mut state: Trial, command: Command) -> Trial {
+    if let Some(name) = command.name {
+        state.set_name(Some(name));
+    }
+    if let Some(memo) = command.memo {
+        state.set_memo(Some(memo));
+    }
+    state
 }
 
 /// validate + execute
@@ -46,7 +39,6 @@ pub fn run(state: Trial, command: Command) -> Result<Trial, Error> {
 mod tests {
     use super::*;
     use crate::domain::models::project::ProjectId;
-    use crate::domain::models::trial::{TrialId, TrialStatus};
 
     fn make_in_progress_trial() -> Trial {
         Trial::new(
@@ -57,16 +49,13 @@ mod tests {
     }
 
     fn make_completed_trial() -> Trial {
-        Trial::from_raw(
-            TrialId::new(),
+        let mut trial = Trial::new(
             ProjectId::new(),
             Some("完了済み試行".to_string()),
             None,
-            TrialStatus::Completed,
-            vec![],
-            chrono::Utc::now(),
-            chrono::Utc::now(),
-        )
+        );
+        trial.complete();
+        trial
     }
 
     #[test]
@@ -112,7 +101,7 @@ mod tests {
         let original_updated_at = *trial.updated_at();
         sleep(Duration::from_millis(10));
         let command = Command {
-            name: None,
+            name: Some("更新された名前".to_string()),
             memo: None,
         };
         let result = run(trial, command).unwrap();

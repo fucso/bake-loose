@@ -2,7 +2,7 @@
 
 use chrono::{DateTime, Utc};
 
-use crate::domain::models::step::{Step, StepId};
+use crate::domain::models::step::StepId;
 use crate::domain::models::trial::{Trial, TrialStatus};
 
 /// complete_step コマンド
@@ -33,42 +33,15 @@ pub fn validate(state: &Trial, command: &Command) -> Result<(), Error> {
 }
 
 /// 状態遷移（validate 成功前提）
-pub fn execute(state: Trial, command: Command) -> Trial {
-    let now = Utc::now();
-    let completed_at = command.completed_at.unwrap_or(now);
+pub fn execute(mut state: Trial, command: Command) -> Trial {
+    let completed_at = command.completed_at.unwrap_or_else(Utc::now);
 
-    let steps = state
-        .steps()
-        .iter()
-        .map(|s| {
-            if s.id() == &command.step_id {
-                Step::from_raw(
-                    s.id().clone(),
-                    s.trial_id().clone(),
-                    s.name().to_string(),
-                    s.position(),
-                    s.started_at().cloned(),
-                    Some(completed_at),
-                    s.parameters().to_vec(),
-                    *s.created_at(),
-                    now,
-                )
-            } else {
-                s.clone()
-            }
-        })
-        .collect();
+    if let Some(step) = state.steps_mut().iter_mut().find(|s| s.id() == &command.step_id) {
+        step.complete(completed_at);
+    }
 
-    Trial::from_raw(
-        state.id().clone(),
-        state.project_id().clone(),
-        state.name().map(|s| s.to_string()),
-        state.memo().map(|s| s.to_string()),
-        state.status().clone(),
-        steps,
-        *state.created_at(),
-        now,
-    )
+    state.touch();
+    state
 }
 
 /// validate + execute
@@ -81,103 +54,32 @@ pub fn run(state: Trial, command: Command) -> Result<Trial, Error> {
 mod tests {
     use super::*;
     use crate::domain::models::project::ProjectId;
-    use crate::domain::models::step::StepId;
-    use crate::domain::models::trial::{Trial, TrialId, TrialStatus};
+    use crate::domain::models::step::Step;
+    use crate::domain::models::trial::Trial;
 
     fn make_trial_with_step() -> (Trial, StepId) {
-        let project_id = ProjectId::new();
-        let trial_id = TrialId::new();
-        let step_id = StepId::new();
-        let past = Utc::now() - chrono::Duration::seconds(10);
-
-        let step = Step::from_raw(
-            step_id.clone(),
-            trial_id.clone(),
-            "捏ね".to_string(),
-            0,
-            None,
-            None,
-            vec![],
-            past,
-            past,
-        );
-
-        let trial = Trial::from_raw(
-            trial_id,
-            project_id,
-            None,
-            None,
-            TrialStatus::InProgress,
-            vec![step],
-            past,
-            past,
-        );
-
+        let mut trial = Trial::new(ProjectId::new(), None, None);
+        let step = Step::new(trial.id().clone(), "捏ね".to_string(), 0);
+        let step_id = step.id().clone();
+        trial.add_step(step);
         (trial, step_id)
     }
 
     fn make_completed_trial_with_step() -> (Trial, StepId) {
-        let project_id = ProjectId::new();
-        let trial_id = TrialId::new();
-        let step_id = StepId::new();
-        let past = Utc::now() - chrono::Duration::seconds(10);
-
-        let step = Step::from_raw(
-            step_id.clone(),
-            trial_id.clone(),
-            "捏ね".to_string(),
-            0,
-            None,
-            None,
-            vec![],
-            past,
-            past,
-        );
-
-        let trial = Trial::from_raw(
-            trial_id,
-            project_id,
-            None,
-            None,
-            TrialStatus::Completed,
-            vec![step],
-            past,
-            past,
-        );
-
+        let mut trial = Trial::new(ProjectId::new(), None, None);
+        let step = Step::new(trial.id().clone(), "捏ね".to_string(), 0);
+        let step_id = step.id().clone();
+        trial.add_step(step);
+        trial.complete();
         (trial, step_id)
     }
 
     fn make_trial_with_already_completed_step() -> (Trial, StepId) {
-        let project_id = ProjectId::new();
-        let trial_id = TrialId::new();
-        let step_id = StepId::new();
-        let past = Utc::now() - chrono::Duration::seconds(10);
-        let completed_past = Utc::now() - chrono::Duration::seconds(5);
-
-        let step = Step::from_raw(
-            step_id.clone(),
-            trial_id.clone(),
-            "捏ね".to_string(),
-            0,
-            None,
-            Some(completed_past),
-            vec![],
-            past,
-            past,
-        );
-
-        let trial = Trial::from_raw(
-            trial_id,
-            project_id,
-            None,
-            None,
-            TrialStatus::InProgress,
-            vec![step],
-            past,
-            past,
-        );
-
+        let mut trial = Trial::new(ProjectId::new(), None, None);
+        let mut step = Step::new(trial.id().clone(), "捏ね".to_string(), 0);
+        let step_id = step.id().clone();
+        step.complete(Utc::now());
+        trial.add_step(step);
         (trial, step_id)
     }
 

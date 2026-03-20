@@ -2,8 +2,6 @@
 //!
 //! Trial を完了ステータスに変更する。
 
-use chrono::Utc;
-
 use crate::domain::models::trial::{Trial, TrialStatus};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20,17 +18,9 @@ pub fn validate(state: &Trial) -> Result<(), Error> {
 }
 
 /// 状態遷移（validate 成功前提）
-pub fn execute(state: Trial) -> Trial {
-    Trial::from_raw(
-        state.id().clone(),
-        state.project_id().clone(),
-        state.name().map(|s| s.to_string()),
-        state.memo().map(|s| s.to_string()),
-        TrialStatus::Completed,
-        state.steps().to_vec(),
-        *state.created_at(),
-        Utc::now(),
-    )
+pub fn execute(mut state: Trial) -> Trial {
+    state.complete();
+    state
 }
 
 /// validate + execute
@@ -76,38 +66,19 @@ mod tests {
     #[test]
     fn test_complete_trial_with_incomplete_steps() {
         let project_id = ProjectId::new();
-        let trial = Trial::new(project_id.clone(), None, None);
+        let mut trial = Trial::new(project_id, None, None);
         let step = Step::new(trial.id().clone(), "捏ね".to_string(), 0);
-        let trial_with_steps = Trial::from_raw(
-            trial.id().clone(),
-            project_id,
-            trial.name().map(|s| s.to_string()),
-            trial.memo().map(|s| s.to_string()),
-            TrialStatus::InProgress,
-            vec![step],
-            *trial.created_at(),
-            *trial.updated_at(),
-        );
-        let result = run(trial_with_steps);
+        trial.add_step(step);
+        let result = run(trial);
         assert!(result.is_ok());
         assert_eq!(result.unwrap().status(), &TrialStatus::Completed);
     }
 
     #[test]
     fn test_returns_error_when_already_completed() {
-        let project_id = ProjectId::new();
-        let trial = Trial::new(project_id.clone(), None, None);
-        let completed_trial = Trial::from_raw(
-            trial.id().clone(),
-            project_id,
-            trial.name().map(|s| s.to_string()),
-            trial.memo().map(|s| s.to_string()),
-            TrialStatus::Completed,
-            vec![],
-            *trial.created_at(),
-            *trial.updated_at(),
-        );
-        let result = run(completed_trial);
+        let mut trial = Trial::new(ProjectId::new(), None, None);
+        trial.complete();
+        let result = run(trial);
         assert_eq!(result, Err(Error::AlreadyCompleted));
     }
 }

@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use chrono::{DateTime, Utc};
 
-use crate::domain::models::parameter::Parameter;
+use crate::domain::models::parameter::{Parameter, ParameterId};
 use crate::domain::models::trial::TrialId;
 
 /// ステップID
@@ -127,6 +127,30 @@ impl Step {
     /// Parameter を追加する
     pub fn add_parameter(&mut self, parameter: Parameter) {
         self.parameters.push(parameter);
+        self.updated_at = Utc::now();
+    }
+
+    /// Step の名前を変更する
+    pub fn set_name(&mut self, name: String) {
+        self.name = name;
+        self.updated_at = Utc::now();
+    }
+
+    /// Step の開始日時を設定する
+    pub fn set_started_at(&mut self, started_at: Option<DateTime<Utc>>) {
+        self.started_at = started_at;
+        self.updated_at = Utc::now();
+    }
+
+    /// Step を完了状態にする
+    pub fn complete(&mut self, at: DateTime<Utc>) {
+        self.completed_at = Some(at);
+        self.updated_at = Utc::now();
+    }
+
+    /// 指定した ID のパラメーターを削除する
+    pub fn remove_parameter(&mut self, parameter_id: &ParameterId) {
+        self.parameters.retain(|p| p.id() != parameter_id);
         self.updated_at = Utc::now();
     }
 }
