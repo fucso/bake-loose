@@ -2,8 +2,7 @@
 
 use chrono::{DateTime, Utc};
 
-use crate::domain::models::parameter::{Parameter, ParameterContent};
-use crate::domain::models::step::{Step, StepId};
+use crate::domain::models::parameter::ParameterContent;
 use crate::domain::models::trial::{Trial, TrialStatus};
 
 pub struct ParameterInput {
@@ -21,6 +20,8 @@ pub enum ParameterValidationError {
     EmptyKey,
     EmptyNote,
     EmptyText,
+    EmptyDurationNote,
+    InvalidDurationValue,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,10 +57,18 @@ fn validate_parameter_content(content: &ParameterContent) -> Result<(), Paramete
                 return Err(ParameterValidationError::EmptyKey);
             }
         }
-        ParameterContent::Duration { .. } => {
-            // DurationUnit は enum なので型レベルで保証される
+        ParameterContent::Duration { duration, note } => {
+            if duration.value < 0.0 {
+                return Err(ParameterValidationError::InvalidDurationValue);
+            }
+            if note.trim().is_empty() {
+                return Err(ParameterValidationError::EmptyDurationNote);
+            }
         }
-        ParameterContent::TimeMarker { note, .. } => {
+        ParameterContent::TimeMarker { at, note } => {
+            if at.value < 0.0 {
+                return Err(ParameterValidationError::InvalidDurationValue);
+            }
             if note.trim().is_empty() {
                 return Err(ParameterValidationError::EmptyNote);
             }
@@ -73,48 +82,18 @@ fn validate_parameter_content(content: &ParameterContent) -> Result<(), Paramete
     Ok(())
 }
 
-pub fn execute(state: Trial, command: Command) -> Trial {
-    let now = Utc::now();
-    let position = state
-        .steps()
-        .iter()
-        .map(|s| s.position())
-        .max()
-        .map(|max| max + 1)
-        .unwrap_or(0);
+pub fn execute(mut state: Trial, command: Command) -> Trial {
+    let step = state.add_step(command.name);
 
-    let step_id = StepId::new();
-    let parameters: Vec<Parameter> = command
-        .parameters
-        .into_iter()
-        .map(|p| Parameter::new(step_id.clone(), p.content))
-        .collect();
+    if let Some(started_at) = command.started_at {
+        step.start(Some(started_at));
+    }
 
-    let step = Step::from_raw(
-        step_id,
-        state.id().clone(),
-        command.name,
-        position,
-        command.started_at,
-        None,
-        parameters,
-        now,
-        now,
-    );
+    for param in command.parameters {
+        step.add_parameter(param.content);
+    }
 
-    let mut new_steps = state.steps().to_vec();
-    new_steps.push(step);
-
-    Trial::from_raw(
-        state.id().clone(),
-        state.project_id().clone(),
-        state.name().map(|s| s.to_string()),
-        state.memo().map(|s| s.to_string()),
-        state.status().clone(),
-        new_steps,
-        *state.created_at(),
-        now,
-    )
+    state
 }
 
 pub fn run(state: Trial, command: Command) -> Result<Trial, Error> {

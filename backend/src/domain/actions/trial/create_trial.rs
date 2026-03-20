@@ -1,9 +1,8 @@
 use chrono::{DateTime, Utc};
 
-use crate::domain::models::parameter::{Parameter, ParameterContent, ParameterValue};
+use crate::domain::models::parameter::{ParameterContent, ParameterValue};
 use crate::domain::models::project::ProjectId;
-use crate::domain::models::step::{Step, StepId};
-use crate::domain::models::trial::{Trial, TrialId, TrialStatus};
+use crate::domain::models::trial::Trial;
 
 pub struct ParameterInput {
     pub content: ParameterContent,
@@ -27,7 +26,9 @@ pub enum ParameterValidationError {
     EmptyKey,
     EmptyTextValue,
     EmptyTimeMarkerNote,
+    EmptyDurationNote,
     InvalidQuantity,
+    InvalidDurationValue,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -86,7 +87,14 @@ fn validate_parameter_content(
                 _ => {}
             }
         }
-        ParameterContent::TimeMarker { note, .. } => {
+        ParameterContent::TimeMarker { at, note } => {
+            if at.value < 0.0 {
+                return Err(Error::InvalidParameter {
+                    step_index,
+                    parameter_index,
+                    reason: ParameterValidationError::InvalidDurationValue,
+                });
+            }
             if note.trim().is_empty() {
                 return Err(Error::InvalidParameter {
                     step_index,
@@ -104,53 +112,42 @@ fn validate_parameter_content(
                 });
             }
         }
-        ParameterContent::Duration { .. } => {}
+        ParameterContent::Duration { duration, note } => {
+            if duration.value < 0.0 {
+                return Err(Error::InvalidParameter {
+                    step_index,
+                    parameter_index,
+                    reason: ParameterValidationError::InvalidDurationValue,
+                });
+            }
+            if note.trim().is_empty() {
+                return Err(Error::InvalidParameter {
+                    step_index,
+                    parameter_index,
+                    reason: ParameterValidationError::EmptyDurationNote,
+                });
+            }
+        }
     }
     Ok(())
 }
 
 pub fn execute(command: Command) -> Trial {
-    let now = Utc::now();
-    let trial_id = TrialId::new();
+    let mut trial = Trial::new(command.project_id, command.name, command.memo);
 
-    let steps: Vec<Step> = command
-        .steps
-        .into_iter()
-        .enumerate()
-        .map(|(position, step_input)| {
-            let step_id = StepId::new();
-            let step_now = Utc::now();
+    for step_input in command.steps {
+        let step = trial.add_step(step_input.name);
 
-            let parameters: Vec<Parameter> = step_input
-                .parameters
-                .into_iter()
-                .map(|param_input| Parameter::new(step_id.clone(), param_input.content))
-                .collect();
+        if let Some(started_at) = step_input.started_at {
+            step.start(Some(started_at));
+        }
 
-            Step::from_raw(
-                step_id,
-                trial_id.clone(),
-                step_input.name,
-                position as i16,
-                step_input.started_at,
-                None,
-                parameters,
-                step_now,
-                step_now,
-            )
-        })
-        .collect();
+        for param_input in step_input.parameters {
+            step.add_parameter(param_input.content);
+        }
+    }
 
-    Trial::from_raw(
-        trial_id,
-        command.project_id,
-        command.name,
-        command.memo,
-        TrialStatus::InProgress,
-        steps,
-        now,
-        now,
-    )
+    trial
 }
 
 pub fn run(command: Command) -> Result<Trial, Error> {
