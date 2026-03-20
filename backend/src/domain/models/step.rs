@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use chrono::{DateTime, Utc};
 
-use crate::domain::models::parameter::{Parameter, ParameterContent};
+use crate::domain::models::parameter::Parameter;
 use crate::domain::models::trial::TrialId;
 
 /// ステップID
@@ -119,17 +119,13 @@ impl Step {
     }
 
     /// Step を開始状態にする
-    ///
-    /// # Arguments
-    /// * `at` - 開始時刻。None の場合は現在時刻を使用
-    pub fn start(&mut self, at: Option<DateTime<Utc>>) {
-        self.started_at = Some(at.unwrap_or_else(Utc::now));
+    pub fn start(&mut self, at: DateTime<Utc>) {
+        self.started_at = Some(at);
         self.updated_at = Utc::now();
     }
 
     /// Parameter を追加する
-    pub fn add_parameter(&mut self, content: ParameterContent) {
-        let parameter = Parameter::new(self.id.clone(), content);
+    pub fn add_parameter(&mut self, parameter: Parameter) {
         self.parameters.push(parameter);
         self.updated_at = Utc::now();
     }
@@ -138,7 +134,9 @@ impl Step {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::models::parameter::{DurationUnit, DurationValue, ParameterValue};
+    use crate::domain::models::parameter::{
+        DurationUnit, DurationValue, ParameterContent, ParameterValue,
+    };
 
     fn make_trial_id() -> TrialId {
         TrialId::new()
@@ -170,22 +168,9 @@ mod tests {
         let mut step = Step::new(trial_id, "捏ね".to_string(), 0);
         let now = Utc::now();
 
-        step.start(Some(now));
+        step.start(now);
 
         assert_eq!(step.started_at(), Some(&now));
-    }
-
-    #[test]
-    fn test_step_start_without_time_uses_current_time() {
-        let trial_id = make_trial_id();
-        let mut step = Step::new(trial_id, "捏ね".to_string(), 0);
-        let before = Utc::now();
-
-        step.start(None);
-
-        let after = Utc::now();
-        let started = step.started_at().unwrap();
-        assert!(*started >= before && *started <= after);
     }
 
     #[test]
@@ -193,13 +178,17 @@ mod tests {
         let trial_id = make_trial_id();
         let mut step = Step::new(trial_id, "捏ね".to_string(), 0);
 
-        step.add_parameter(ParameterContent::KeyValue {
-            key: "強力粉".to_string(),
-            value: ParameterValue::Quantity {
-                amount: 300.0,
-                unit: "g".to_string(),
+        let parameter = Parameter::new(
+            step.id().clone(),
+            ParameterContent::KeyValue {
+                key: "強力粉".to_string(),
+                value: ParameterValue::Quantity {
+                    amount: 300.0,
+                    unit: "g".to_string(),
+                },
             },
-        });
+        );
+        step.add_parameter(parameter);
 
         assert_eq!(step.parameters().len(), 1);
     }
@@ -209,17 +198,25 @@ mod tests {
         let trial_id = make_trial_id();
         let mut step = Step::new(trial_id, "捏ね".to_string(), 0);
 
-        step.add_parameter(ParameterContent::KeyValue {
-            key: "強力粉".to_string(),
-            value: ParameterValue::Quantity {
-                amount: 300.0,
-                unit: "g".to_string(),
+        let param1 = Parameter::new(
+            step.id().clone(),
+            ParameterContent::KeyValue {
+                key: "強力粉".to_string(),
+                value: ParameterValue::Quantity {
+                    amount: 300.0,
+                    unit: "g".to_string(),
+                },
             },
-        });
-        step.add_parameter(ParameterContent::Duration {
-            duration: DurationValue::new(10.0, DurationUnit::Minute),
-            note: "捏ね時間".to_string(),
-        });
+        );
+        let param2 = Parameter::new(
+            step.id().clone(),
+            ParameterContent::Duration {
+                duration: DurationValue::new(10.0, DurationUnit::Minute),
+                note: "捏ね時間".to_string(),
+            },
+        );
+        step.add_parameter(param1);
+        step.add_parameter(param2);
 
         assert_eq!(step.parameters().len(), 2);
     }

@@ -1,7 +1,8 @@
 use chrono::{DateTime, Utc};
 
-use crate::domain::models::parameter::{ParameterContent, ParameterValue};
+use crate::domain::models::parameter::{Parameter, ParameterContent, ParameterValue};
 use crate::domain::models::project::ProjectId;
+use crate::domain::models::step::Step;
 use crate::domain::models::trial::Trial;
 
 pub struct ParameterInput {
@@ -136,15 +137,19 @@ pub fn execute(command: Command) -> Trial {
     let mut trial = Trial::new(command.project_id, command.name, command.memo);
 
     for step_input in command.steps {
-        let step = trial.add_step(step_input.name);
+        let position = trial.next_step_position();
+        let mut step = Step::new(trial.id().clone(), step_input.name, position);
 
         if let Some(started_at) = step_input.started_at {
-            step.start(Some(started_at));
+            step.start(started_at);
         }
 
         for param_input in step_input.parameters {
-            step.add_parameter(param_input.content);
+            let parameter = Parameter::new(step.id().clone(), param_input.content);
+            step.add_parameter(parameter);
         }
+
+        trial.add_step(step);
     }
 
     trial

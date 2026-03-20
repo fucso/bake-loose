@@ -123,13 +123,15 @@ impl Trial {
         &self.updated_at
     }
 
-    /// 新しい Step を追加し、追加した Step への可変参照を返す
-    pub fn add_step(&mut self, name: String) -> &mut Step {
-        let position = self.steps.len() as i16;
-        let step = Step::new(self.id.clone(), name, position);
+    /// Step を追加する
+    pub fn add_step(&mut self, step: Step) {
         self.steps.push(step);
         self.updated_at = chrono::Utc::now();
-        self.steps.last_mut().unwrap()
+    }
+
+    /// 次の Step の position を返す
+    pub fn next_step_position(&self) -> i16 {
+        self.steps.len() as i16
     }
 }
 

@@ -2,7 +2,8 @@
 
 use chrono::{DateTime, Utc};
 
-use crate::domain::models::parameter::ParameterContent;
+use crate::domain::models::parameter::{Parameter, ParameterContent};
+use crate::domain::models::step::Step;
 use crate::domain::models::trial::{Trial, TrialStatus};
 
 pub struct ParameterInput {
@@ -83,16 +84,19 @@ fn validate_parameter_content(content: &ParameterContent) -> Result<(), Paramete
 }
 
 pub fn execute(mut state: Trial, command: Command) -> Trial {
-    let step = state.add_step(command.name);
+    let position = state.next_step_position();
+    let mut step = Step::new(state.id().clone(), command.name, position);
 
     if let Some(started_at) = command.started_at {
-        step.start(Some(started_at));
+        step.start(started_at);
     }
 
     for param in command.parameters {
-        step.add_parameter(param.content);
+        let parameter = Parameter::new(step.id().clone(), param.content);
+        step.add_parameter(parameter);
     }
 
+    state.add_step(step);
     state
 }
 
