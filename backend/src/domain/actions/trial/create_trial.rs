@@ -131,7 +131,7 @@ pub fn execute(command: Command) -> Trial {
                 step_id,
                 trial_id.clone(),
                 step_input.name,
-                position as i32,
+                position as i16,
                 step_input.started_at,
                 None,
                 parameters,
@@ -161,7 +161,7 @@ pub fn run(command: Command) -> Result<Trial, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::models::parameter::{DurationValue, ParameterContent, ParameterValue};
+    use crate::domain::models::parameter::{DurationUnit, DurationValue, ParameterContent, ParameterValue};
     use crate::domain::models::project::ProjectId;
     use crate::domain::models::trial::TrialStatus;
 
@@ -279,8 +279,8 @@ mod tests {
                     },
                     ParameterInput {
                         content: ParameterContent::Duration {
-                            duration: DurationValue::new(10.0, "min".to_string()),
-                            note: None,
+                            duration: DurationValue::new(10.0, DurationUnit::Minute),
+                            note: "捏ね時間".to_string(),
                         },
                     },
                 ],
@@ -390,7 +390,7 @@ mod tests {
                 started_at: None,
                 parameters: vec![ParameterInput {
                     content: ParameterContent::TimeMarker {
-                        at: DurationValue::new(30.0, "min".to_string()),
+                        at: DurationValue::new(30.0, DurationUnit::Minute),
                         note: "".to_string(),
                     },
                 }],
@@ -419,13 +419,13 @@ mod tests {
                 parameters: vec![
                     ParameterInput {
                         content: ParameterContent::Duration {
-                            duration: DurationValue::new(10.0, "min".to_string()),
-                            note: None,
+                            duration: DurationValue::new(10.0, DurationUnit::Minute),
+                            note: "焼き時間".to_string(),
                         },
                     },
                     ParameterInput {
                         content: ParameterContent::TimeMarker {
-                            at: DurationValue::new(30.0, "min".to_string()),
+                            at: DurationValue::new(30.0, DurationUnit::Minute),
                             note: "".to_string(),
                         },
                     },

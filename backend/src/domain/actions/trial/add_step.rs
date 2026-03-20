@@ -21,7 +21,6 @@ pub enum ParameterValidationError {
     EmptyKey,
     EmptyNote,
     EmptyText,
-    EmptyUnit,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,15 +56,10 @@ fn validate_parameter_content(content: &ParameterContent) -> Result<(), Paramete
                 return Err(ParameterValidationError::EmptyKey);
             }
         }
-        ParameterContent::Duration { duration, .. } => {
-            if duration.unit.trim().is_empty() {
-                return Err(ParameterValidationError::EmptyUnit);
-            }
+        ParameterContent::Duration { .. } => {
+            // DurationUnit は enum なので型レベルで保証される
         }
-        ParameterContent::TimeMarker { at, note } => {
-            if at.unit.trim().is_empty() {
-                return Err(ParameterValidationError::EmptyUnit);
-            }
+        ParameterContent::TimeMarker { note, .. } => {
             if note.trim().is_empty() {
                 return Err(ParameterValidationError::EmptyNote);
             }
@@ -131,7 +125,7 @@ pub fn run(state: Trial, command: Command) -> Result<Trial, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::models::parameter::{DurationValue, ParameterContent, ParameterValue};
+    use crate::domain::models::parameter::{ParameterContent, ParameterValue};
     use crate::domain::models::project::ProjectId;
     use crate::domain::models::trial::{Trial, TrialId, TrialStatus};
     use chrono::TimeZone;
@@ -318,26 +312,4 @@ mod tests {
         assert_eq!(result, Err(Error::EmptyStepName));
     }
 
-    #[test]
-    fn test_parameter_duration_with_empty_unit_is_invalid() {
-        let trial = in_progress_trial();
-        let command = Command {
-            name: "発酵".to_string(),
-            started_at: None,
-            parameters: vec![ParameterInput {
-                content: ParameterContent::Duration {
-                    duration: DurationValue::new(90.0, "".to_string()),
-                    note: None,
-                },
-            }],
-        };
-        let result = run(trial, command);
-        assert_eq!(
-            result,
-            Err(Error::InvalidParameter {
-                parameter_index: 0,
-                reason: ParameterValidationError::EmptyUnit,
-            })
-        );
-    }
 }

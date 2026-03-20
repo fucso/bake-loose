@@ -22,15 +22,25 @@ impl Default for ParameterId {
     }
 }
 
-/// 数値と単位を持つ量
+/// 時間の単位
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DurationUnit {
+    Day,
+    Hour,
+    Minute,
+    Second,
+}
+
+/// 数値と単位を持つ時間量
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DurationValue {
     pub value: f64,
-    pub unit: String,
+    pub unit: DurationUnit,
 }
 
 impl DurationValue {
-    pub fn new(value: f64, unit: String) -> Self {
+    pub fn new(value: f64, unit: DurationUnit) -> Self {
         Self { value, unit }
     }
 }
@@ -44,6 +54,33 @@ pub enum ParameterValue {
 }
 
 /// パラメーターの内容（型付きバリアント）
+///
+/// # JSON 構造例
+///
+/// ## KeyValue (Text)
+/// ```json
+/// { "type": "key_value", "key": "発酵場所", "value": { "type": "text", "value": "冷蔵庫" } }
+/// ```
+///
+/// ## KeyValue (Quantity)
+/// ```json
+/// { "type": "key_value", "key": "強力粉", "value": { "type": "quantity", "amount": 300, "unit": "g" } }
+/// ```
+///
+/// ## Duration
+/// ```json
+/// { "type": "duration", "duration": { "value": 90, "unit": "minute" }, "note": "一次発酵" }
+/// ```
+///
+/// ## TimeMarker
+/// ```json
+/// { "type": "time_marker", "at": { "value": 30, "unit": "minute" }, "note": "焼成開始から" }
+/// ```
+///
+/// ## Text
+/// ```json
+/// { "type": "text", "value": "生地がべたつく場合は打ち粉を追加" }
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ParameterContent {
@@ -52,7 +89,7 @@ pub enum ParameterContent {
     /// 経過時間（例: 発酵時間 90分）
     Duration {
         duration: DurationValue,
-        note: Option<String>,
+        note: String,
     },
     /// 時間マーカー（例: 焼成開始から30分後）
     TimeMarker { at: DurationValue, note: String },
@@ -152,14 +189,14 @@ mod tests {
     #[test]
     fn test_parameter_content_duration_with_note() {
         let content = ParameterContent::Duration {
-            duration: DurationValue::new(90.0, "min".to_string()),
-            note: Some("一次発酵".to_string()),
+            duration: DurationValue::new(90.0, DurationUnit::Minute),
+            note: "一次発酵".to_string(),
         };
         match content {
             ParameterContent::Duration { duration, note } => {
                 assert_eq!(duration.value, 90.0);
-                assert_eq!(duration.unit, "min");
-                assert_eq!(note, Some("一次発酵".to_string()));
+                assert_eq!(duration.unit, DurationUnit::Minute);
+                assert_eq!(note, "一次発酵");
             }
             _ => panic!("expected Duration"),
         }
@@ -167,8 +204,8 @@ mod tests {
 
     #[test]
     fn test_duration_value_creation() {
-        let duration = DurationValue::new(45.0, "min".to_string());
+        let duration = DurationValue::new(45.0, DurationUnit::Minute);
         assert_eq!(duration.value, 45.0);
-        assert_eq!(duration.unit, "min");
+        assert_eq!(duration.unit, DurationUnit::Minute);
     }
 }

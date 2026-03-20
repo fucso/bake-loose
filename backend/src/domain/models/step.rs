@@ -29,7 +29,7 @@ pub struct Step {
     id: StepId,
     trial_id: TrialId,
     name: String,
-    position: i32,
+    position: i16,
     started_at: Option<chrono::DateTime<chrono::Utc>>,
     completed_at: Option<chrono::DateTime<chrono::Utc>>,
     parameters: Vec<Parameter>,
@@ -39,7 +39,7 @@ pub struct Step {
 
 impl Step {
     /// 新しいステップを作成する（ID は自動生成）
-    pub fn new(trial_id: TrialId, name: String, position: i32) -> Self {
+    pub fn new(trial_id: TrialId, name: String, position: i16) -> Self {
         let now = chrono::Utc::now();
         Self {
             id: StepId::new(),
@@ -60,7 +60,7 @@ impl Step {
         id: StepId,
         trial_id: TrialId,
         name: String,
-        position: i32,
+        position: i16,
         started_at: Option<chrono::DateTime<chrono::Utc>>,
         completed_at: Option<chrono::DateTime<chrono::Utc>>,
         parameters: Vec<Parameter>,
@@ -92,7 +92,7 @@ impl Step {
         &self.name
     }
 
-    pub fn position(&self) -> i32 {
+    pub fn position(&self) -> i16 {
         self.position
     }
 

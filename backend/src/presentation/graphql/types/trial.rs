@@ -85,7 +85,7 @@ impl Step {
     }
 
     async fn position(&self) -> i32 {
-        self.0.position()
+        self.0.position() as i32
     }
 
     async fn started_at(&self) -> Option<DateTime<Utc>> {
@@ -181,7 +181,7 @@ pub struct QuantityInput {
 pub struct DurationInput {
     pub value: f64,
     pub unit: String,
-    pub note: Option<String>,
+    pub note: String,
 }
 
 /// TimeMarker 入力

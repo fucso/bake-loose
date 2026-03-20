@@ -6,7 +6,7 @@ use async_graphql::{Context, ErrorExtensions, Object, Result, ID};
 use uuid::Uuid;
 
 use crate::domain::actions::trial::create_trial as create_trial_action;
-use crate::domain::models::parameter::{DurationValue, ParameterContent, ParameterValue};
+use crate::domain::models::parameter::{DurationUnit, DurationValue, ParameterContent, ParameterValue};
 use crate::domain::models::project::ProjectId;
 use crate::domain::models::step::StepId;
 use crate::domain::models::trial::TrialId;
@@ -210,6 +210,20 @@ fn parse_parameter_id(
     Ok(crate::domain::models::parameter::ParameterId(uuid))
 }
 
+/// 文字列を DurationUnit に変換する
+fn parse_duration_unit(unit: &str) -> Result<DurationUnit, async_graphql::Error> {
+    match unit.to_lowercase().as_str() {
+        "day" | "days" | "d" => Ok(DurationUnit::Day),
+        "hour" | "hours" | "h" => Ok(DurationUnit::Hour),
+        "minute" | "minutes" | "min" | "m" => Ok(DurationUnit::Minute),
+        "second" | "seconds" | "sec" | "s" => Ok(DurationUnit::Second),
+        _ => Err(async_graphql::Error::new(format!(
+            "不正な時間単位です: '{}'. day, hour, minute, second のいずれかを指定してください",
+            unit
+        ))),
+    }
+}
+
 /// GraphQL ParameterInput をドメインの ParameterContent に変換する
 fn convert_parameter_content(
     input: ParameterInput,
@@ -229,13 +243,15 @@ fn convert_parameter_content(
         };
         Ok(ParameterContent::KeyValue { key: kv.key, value })
     } else if let Some(d) = input.duration {
+        let unit = parse_duration_unit(&d.unit)?;
         Ok(ParameterContent::Duration {
-            duration: DurationValue::new(d.value, d.unit),
+            duration: DurationValue::new(d.value, unit),
             note: d.note,
         })
     } else if let Some(tm) = input.time_marker {
+        let unit = parse_duration_unit(&tm.unit)?;
         Ok(ParameterContent::TimeMarker {
-            at: DurationValue::new(tm.value, tm.unit),
+            at: DurationValue::new(tm.value, unit),
             note: tm.note,
         })
     } else if let Some(text) = input.text {

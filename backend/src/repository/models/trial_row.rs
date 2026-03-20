@@ -83,7 +83,7 @@ impl StepRow {
             StepId(self.id),
             TrialId(self.trial_id),
             self.name,
-            self.position,
+            self.position as i16,
             self.started_at,
             self.completed_at,
             parameters,

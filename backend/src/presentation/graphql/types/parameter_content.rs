@@ -113,7 +113,7 @@ impl QuantityValue {
 /// Duration パラメーター
 pub struct DurationParameter {
     duration: DurationValue,
-    note: Option<String>,
+    note: String,
 }
 
 #[Object]
@@ -122,8 +122,8 @@ impl DurationParameter {
         &self.duration
     }
 
-    async fn note(&self) -> Option<&str> {
-        self.note.as_deref()
+    async fn note(&self) -> &str {
+        &self.note
     }
 }
 
@@ -175,9 +175,16 @@ impl DurationValue {
 
 impl From<DomainDurationValue> for DurationValue {
     fn from(dv: DomainDurationValue) -> Self {
+        use crate::domain::models::parameter::DurationUnit;
+        let unit_str = match dv.unit {
+            DurationUnit::Day => "day",
+            DurationUnit::Hour => "hour",
+            DurationUnit::Minute => "minute",
+            DurationUnit::Second => "second",
+        };
         Self {
             value: dv.value,
-            unit: dv.unit,
+            unit: unit_str.to_string(),
         }
     }
 }

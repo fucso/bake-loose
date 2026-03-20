@@ -307,7 +307,7 @@ impl TrialRepository for PgTrialRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::models::parameter::{DurationValue, ParameterContent, ParameterValue};
+    use crate::domain::models::parameter::{DurationUnit, DurationValue, ParameterContent, ParameterValue};
     use crate::ports::{SortDirection, TrialSortColumn};
     use sqlx::PgPool;
 
@@ -403,8 +403,8 @@ mod tests {
         let param2 = Parameter::new(
             step.id().clone(),
             ParameterContent::Duration {
-                duration: DurationValue::new(15.0, "min".to_string()),
-                note: Some("手捏ね".to_string()),
+                duration: DurationValue::new(15.0, DurationUnit::Minute),
+                note: "手捏ね".to_string(),
             },
         );
 
@@ -575,11 +575,11 @@ mod tests {
                 },
             },
             ParameterContent::Duration {
-                duration: DurationValue::new(90.0, "min".to_string()),
-                note: None,
+                duration: DurationValue::new(90.0, DurationUnit::Minute),
+                note: "一次発酵".to_string(),
             },
             ParameterContent::TimeMarker {
-                at: DurationValue::new(30.0, "min".to_string()),
+                at: DurationValue::new(30.0, DurationUnit::Minute),
                 note: "温度を220度に下げる".to_string(),
             },
             ParameterContent::Text {
