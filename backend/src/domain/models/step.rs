@@ -138,11 +138,89 @@ impl Step {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::models::parameter::{DurationUnit, DurationValue, ParameterValue};
+
+    fn make_trial_id() -> TrialId {
+        TrialId::new()
+    }
 
     #[test]
     fn test_step_id_new_generates_unique_ids() {
         let id1 = StepId::new();
         let id2 = StepId::new();
         assert_ne!(id1, id2);
+    }
+
+    #[test]
+    fn test_step_new_creates_with_correct_initial_state() {
+        let trial_id = make_trial_id();
+        let step = Step::new(trial_id.clone(), "捏ね".to_string(), 0);
+
+        assert_eq!(step.name(), "捏ね");
+        assert_eq!(step.position(), 0);
+        assert_eq!(step.trial_id(), &trial_id);
+        assert!(step.started_at().is_none());
+        assert!(step.completed_at().is_none());
+        assert!(step.parameters().is_empty());
+    }
+
+    #[test]
+    fn test_step_start_sets_started_at() {
+        let trial_id = make_trial_id();
+        let mut step = Step::new(trial_id, "捏ね".to_string(), 0);
+        let now = Utc::now();
+
+        step.start(Some(now));
+
+        assert_eq!(step.started_at(), Some(&now));
+    }
+
+    #[test]
+    fn test_step_start_without_time_uses_current_time() {
+        let trial_id = make_trial_id();
+        let mut step = Step::new(trial_id, "捏ね".to_string(), 0);
+        let before = Utc::now();
+
+        step.start(None);
+
+        let after = Utc::now();
+        let started = step.started_at().unwrap();
+        assert!(*started >= before && *started <= after);
+    }
+
+    #[test]
+    fn test_step_add_parameter() {
+        let trial_id = make_trial_id();
+        let mut step = Step::new(trial_id, "捏ね".to_string(), 0);
+
+        step.add_parameter(ParameterContent::KeyValue {
+            key: "強力粉".to_string(),
+            value: ParameterValue::Quantity {
+                amount: 300.0,
+                unit: "g".to_string(),
+            },
+        });
+
+        assert_eq!(step.parameters().len(), 1);
+    }
+
+    #[test]
+    fn test_step_add_multiple_parameters() {
+        let trial_id = make_trial_id();
+        let mut step = Step::new(trial_id, "捏ね".to_string(), 0);
+
+        step.add_parameter(ParameterContent::KeyValue {
+            key: "強力粉".to_string(),
+            value: ParameterValue::Quantity {
+                amount: 300.0,
+                unit: "g".to_string(),
+            },
+        });
+        step.add_parameter(ParameterContent::Duration {
+            duration: DurationValue::new(10.0, DurationUnit::Minute),
+            note: "捏ね時間".to_string(),
+        });
+
+        assert_eq!(step.parameters().len(), 2);
     }
 }

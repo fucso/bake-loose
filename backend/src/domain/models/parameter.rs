@@ -208,4 +208,64 @@ mod tests {
         assert_eq!(duration.value, 45.0);
         assert_eq!(duration.unit, DurationUnit::Minute);
     }
+
+    #[test]
+    fn test_parameter_content_key_value_with_text() {
+        let content = ParameterContent::KeyValue {
+            key: "発酵場所".to_string(),
+            value: ParameterValue::Text {
+                value: "冷蔵庫".to_string(),
+            },
+        };
+        match content {
+            ParameterContent::KeyValue { key, value } => {
+                assert_eq!(key, "発酵場所");
+                match value {
+                    ParameterValue::Text { value } => {
+                        assert_eq!(value, "冷蔵庫");
+                    }
+                    _ => panic!("expected Text"),
+                }
+            }
+            _ => panic!("expected KeyValue"),
+        }
+    }
+
+    #[test]
+    fn test_parameter_content_time_marker() {
+        let content = ParameterContent::TimeMarker {
+            at: DurationValue::new(30.0, DurationUnit::Minute),
+            note: "温度を220度に下げる".to_string(),
+        };
+        match content {
+            ParameterContent::TimeMarker { at, note } => {
+                assert_eq!(at.value, 30.0);
+                assert_eq!(at.unit, DurationUnit::Minute);
+                assert_eq!(note, "温度を220度に下げる");
+            }
+            _ => panic!("expected TimeMarker"),
+        }
+    }
+
+    #[test]
+    fn test_parameter_content_text() {
+        let content = ParameterContent::Text {
+            value: "生地がべたつく場合は打ち粉を追加".to_string(),
+        };
+        match content {
+            ParameterContent::Text { value } => {
+                assert_eq!(value, "生地がべたつく場合は打ち粉を追加");
+            }
+            _ => panic!("expected Text"),
+        }
+    }
+
+    #[test]
+    fn test_duration_unit_variants() {
+        assert_eq!(DurationUnit::Day, DurationUnit::Day);
+        assert_eq!(DurationUnit::Hour, DurationUnit::Hour);
+        assert_eq!(DurationUnit::Minute, DurationUnit::Minute);
+        assert_eq!(DurationUnit::Second, DurationUnit::Second);
+        assert_ne!(DurationUnit::Day, DurationUnit::Hour);
+    }
 }
