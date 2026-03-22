@@ -36,7 +36,11 @@ pub fn validate(state: &Trial, command: &Command) -> Result<(), Error> {
 pub fn execute(mut state: Trial, command: Command) -> Trial {
     let completed_at = command.completed_at.unwrap_or_else(Utc::now);
 
-    if let Some(step) = state.steps_mut().iter_mut().find(|s| s.id() == &command.step_id) {
+    if let Some(step) = state
+        .steps_mut()
+        .iter_mut()
+        .find(|s| s.id() == &command.step_id)
+    {
         step.complete(completed_at);
     }
 

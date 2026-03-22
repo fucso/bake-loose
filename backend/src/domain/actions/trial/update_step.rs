@@ -122,7 +122,11 @@ pub fn validate(state: &Trial, command: &Command) -> Result<(), Error> {
 
 /// 状態遷移（validate 成功前提）
 pub fn execute(mut state: Trial, command: Command) -> Trial {
-    if let Some(step) = state.steps_mut().iter_mut().find(|s| s.id() == &command.step_id) {
+    if let Some(step) = state
+        .steps_mut()
+        .iter_mut()
+        .find(|s| s.id() == &command.step_id)
+    {
         // 名前の更新
         if let Some(name) = command.name {
             step.set_name(name);
@@ -309,13 +313,12 @@ mod tests {
     #[test]
     fn test_step_updated_at_is_changed() {
         let (trial, step_id) = make_trial_with_step();
-        let original_updated_at = trial
+        let original_updated_at = *trial
             .steps()
             .iter()
             .find(|s| s.id() == &step_id)
             .unwrap()
-            .updated_at()
-            .clone();
+            .updated_at();
 
         std::thread::sleep(std::time::Duration::from_millis(1));
 
@@ -334,7 +337,7 @@ mod tests {
     #[test]
     fn test_trial_updated_at_is_changed() {
         let (trial, step_id) = make_trial_with_step();
-        let original_updated_at = trial.updated_at().clone();
+        let original_updated_at = *trial.updated_at();
 
         std::thread::sleep(std::time::Duration::from_millis(1));
 

@@ -6,7 +6,9 @@ use async_graphql::{Context, ErrorExtensions, Object, Result, ID};
 use uuid::Uuid;
 
 use crate::domain::actions::trial::create_trial as create_trial_action;
-use crate::domain::models::parameter::{DurationUnit, DurationValue, ParameterContent, ParameterValue};
+use crate::domain::models::parameter::{
+    DurationUnit, DurationValue, ParameterContent, ParameterValue,
+};
 use crate::domain::models::project::ProjectId;
 use crate::domain::models::step::StepId;
 use crate::domain::models::trial::TrialId;

@@ -294,5 +294,4 @@ mod tests {
         let result = run(trial, command);
         assert_eq!(result, Err(Error::EmptyStepName));
     }
-
 }

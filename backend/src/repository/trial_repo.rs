@@ -307,7 +307,9 @@ impl TrialRepository for PgTrialRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::models::parameter::{DurationUnit, DurationValue, ParameterContent, ParameterValue};
+    use crate::domain::models::parameter::{
+        DurationUnit, DurationValue, ParameterContent, ParameterValue,
+    };
     use crate::ports::{SortDirection, TrialSortColumn};
     use sqlx::PgPool;
 
@@ -560,7 +562,7 @@ mod tests {
         let trial = Trial::new(ProjectId(project_id), None, None);
         let step = Step::new(trial.id().clone(), "テスト".to_string(), 0);
 
-        let contents = vec![
+        let contents = [
             ParameterContent::KeyValue {
                 key: "水温".to_string(),
                 value: ParameterValue::Quantity {

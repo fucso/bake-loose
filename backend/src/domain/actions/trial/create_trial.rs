@@ -163,7 +163,9 @@ pub fn run(command: Command) -> Result<Trial, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::models::parameter::{DurationUnit, DurationValue, ParameterContent, ParameterValue};
+    use crate::domain::models::parameter::{
+        DurationUnit, DurationValue, ParameterContent, ParameterValue,
+    };
     use crate::domain::models::project::ProjectId;
     use crate::domain::models::trial::TrialStatus;
 

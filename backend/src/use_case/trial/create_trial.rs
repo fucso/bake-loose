@@ -75,7 +75,9 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
 mod tests {
     use super::*;
     use crate::domain::actions::trial::create_trial::{ParameterInput, StepInput};
-    use crate::domain::models::parameter::{DurationUnit, DurationValue, ParameterContent, ParameterValue};
+    use crate::domain::models::parameter::{
+        DurationUnit, DurationValue, ParameterContent, ParameterValue,
+    };
     use crate::domain::models::project::Project;
     use crate::use_case::test::MockUnitOfWork;
 

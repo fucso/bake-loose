@@ -49,11 +49,7 @@ mod tests {
     }
 
     fn make_completed_trial() -> Trial {
-        let mut trial = Trial::new(
-            ProjectId::new(),
-            Some("完了済み試行".to_string()),
-            None,
-        );
+        let mut trial = Trial::new(ProjectId::new(), Some("完了済み試行".to_string()), None);
         trial.complete();
         trial
     }
