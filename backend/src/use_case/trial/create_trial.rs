@@ -1,6 +1,6 @@
 //! create_trial ユースケース
 
-use crate::domain::actions::trial::create_trial;
+use crate::domain::actions::trial::{add_step, create_trial};
 use crate::domain::models::project::ProjectId;
 use crate::domain::models::trial::Trial;
 use crate::ports::project_repository::ProjectRepository;
@@ -12,13 +12,21 @@ pub struct Input {
     pub project_id: ProjectId,
     pub name: Option<String>,
     pub memo: Option<String>,
-    pub steps: Vec<create_trial::StepInput>,
+    pub steps: Vec<add_step::Command>,
+}
+
+/// Step バリデーションエラー
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StepValidationError {
+    pub step_index: usize,
+    pub error: add_step::Error,
 }
 
 /// ユースケースのエラー
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
     Domain(create_trial::Error),
+    StepValidation(StepValidationError),
     ProjectNotFound,
     Infrastructure(String),
 }
@@ -42,14 +50,13 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
         return Err(Error::ProjectNotFound);
     }
 
-    // 3. ドメインアクション実行
+    // 3. Trial 作成（ドメインアクション）
     let command = create_trial::Command {
         project_id: input.project_id,
         name: input.name,
         memo: input.memo,
-        steps: input.steps,
     };
-    let trial = match create_trial::run(command) {
+    let mut trial = match create_trial::run(command) {
         Ok(t) => t,
         Err(e) => {
             let _ = uow.rollback().await;
@@ -57,13 +64,27 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
         }
     };
 
-    // 4. 永続化
+    // 4. Steps の追加（add_step ドメインアクションをループ呼び出し）
+    for (step_index, step_command) in input.steps.into_iter().enumerate() {
+        trial = match add_step::run(trial, step_command) {
+            Ok(t) => t,
+            Err(e) => {
+                let _ = uow.rollback().await;
+                return Err(Error::StepValidation(StepValidationError {
+                    step_index,
+                    error: e,
+                }));
+            }
+        };
+    }
+
+    // 5. 永続化
     if let Err(e) = uow.trial_repository().save(&trial).await {
         let _ = uow.rollback().await;
         return Err(Error::Infrastructure(format!("{:?}", e)));
     }
 
-    // 5. コミット
+    // 6. コミット
     uow.commit()
         .await
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
@@ -74,7 +95,6 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::actions::trial::create_trial::{ParameterInput, StepInput};
     use crate::domain::models::parameter::{
         DurationUnit, DurationValue, ParameterContent, ParameterValue,
     };
@@ -126,10 +146,10 @@ mod tests {
             name: None,
             memo: None,
             steps: vec![
-                StepInput {
+                add_step::Command {
                     name: "捏ね".to_string(),
                     started_at: None,
-                    parameters: vec![ParameterInput {
+                    parameters: vec![add_step::ParameterInput {
                         content: ParameterContent::KeyValue {
                             key: "強力粉".to_string(),
                             value: ParameterValue::Quantity {
@@ -139,10 +159,10 @@ mod tests {
                         },
                     }],
                 },
-                StepInput {
+                add_step::Command {
                     name: "一次発酵".to_string(),
                     started_at: None,
-                    parameters: vec![ParameterInput {
+                    parameters: vec![add_step::ParameterInput {
                         content: ParameterContent::Duration {
                             duration: DurationValue::new(60.0, DurationUnit::Minute),
                             note: "一次発酵時間".to_string(),
@@ -182,15 +202,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_returns_domain_error() {
+    async fn test_returns_step_validation_error_when_step_name_empty() {
         let (mut uow, project_id) = setup_uow_with_project().await;
 
         let input = Input {
             project_id,
             name: None,
             memo: None,
-            steps: vec![StepInput {
-                name: "".to_string(), // 空のステップ名 → ドメインエラー
+            steps: vec![add_step::Command {
+                name: "".to_string(), // 空のステップ名 → StepValidationError
                 started_at: None,
                 parameters: vec![],
             }],
@@ -199,9 +219,48 @@ mod tests {
         let result = execute(&mut uow, input).await;
 
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            Error::Domain(create_trial::Error::EmptyStepName { step_index: 0 })
-        );
+        let err = result.unwrap_err();
+        match err {
+            Error::StepValidation(e) => {
+                assert_eq!(e.step_index, 0);
+                assert_eq!(e.error, add_step::Error::EmptyStepName);
+            }
+            _ => panic!("Expected StepValidation error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_step_validation_error_contains_step_index() {
+        let (mut uow, project_id) = setup_uow_with_project().await;
+
+        let input = Input {
+            project_id,
+            name: None,
+            memo: None,
+            steps: vec![
+                add_step::Command {
+                    name: "捏ね".to_string(),
+                    started_at: None,
+                    parameters: vec![],
+                },
+                add_step::Command {
+                    name: "".to_string(), // 2番目のステップが空
+                    started_at: None,
+                    parameters: vec![],
+                },
+            ],
+        };
+
+        let result = execute(&mut uow, input).await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        match err {
+            Error::StepValidation(e) => {
+                assert_eq!(e.step_index, 1); // 2番目のステップ（index=1）
+                assert_eq!(e.error, add_step::Error::EmptyStepName);
+            }
+            _ => panic!("Expected StepValidation error"),
+        }
     }
 }

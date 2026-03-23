@@ -5,7 +5,6 @@
 use async_graphql::{Context, ErrorExtensions, Object, Result, ID};
 use uuid::Uuid;
 
-use crate::domain::actions::trial::create_trial as create_trial_action;
 use crate::domain::models::parameter::{
     DurationUnit, DurationValue, ParameterContent, ParameterValue,
 };
@@ -18,6 +17,7 @@ use crate::presentation::graphql::types::trial::{
     AddStepInput, CompleteStepInput, CreateTrialInput, ParameterInput, Trial, UpdateStepInput,
     UpdateTrialInput,
 };
+use crate::domain::actions::trial::add_step as add_step_action;
 use crate::use_case::trial::{
     add_step, complete_step, complete_trial, create_trial, update_step, update_trial,
 };
@@ -42,9 +42,9 @@ impl TrialMutation {
                     .parameters
                     .unwrap_or_default()
                     .into_iter()
-                    .map(convert_parameter_input)
+                    .map(convert_to_add_step_action_parameter)
                     .collect::<Result<Vec<_>, _>>()?;
-                Ok(create_trial_action::StepInput {
+                Ok(add_step_action::Command {
                     name: s.name,
                     started_at: s.started_at,
                     parameters,
@@ -265,11 +265,11 @@ fn convert_parameter_content(
     }
 }
 
-fn convert_parameter_input(
+fn convert_to_add_step_action_parameter(
     input: ParameterInput,
-) -> Result<create_trial_action::ParameterInput, async_graphql::Error> {
+) -> Result<add_step_action::ParameterInput, async_graphql::Error> {
     let content = convert_parameter_content(input)?;
-    Ok(create_trial_action::ParameterInput { content })
+    Ok(add_step_action::ParameterInput { content })
 }
 
 fn convert_to_add_step_parameter(

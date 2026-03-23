@@ -143,11 +143,20 @@ impl From<list_trials_by_project::Error> for async_graphql::Error {
 impl UserFacingError for create_trial::Error {
     fn to_user_facing(&self) -> GraphQLError {
         match self {
-            create_trial::Error::Domain(e) => match e {
-                crate::domain::actions::trial::create_trial::Error::EmptyStepName { .. } => {
+            create_trial::Error::Domain(_) => {
+                // 空の Error enum（将来の拡張用）
+                GraphQLError::new("トライアルの作成に失敗しました", "VALIDATION_ERROR")
+            }
+            create_trial::Error::StepValidation(e) => match &e.error {
+                crate::domain::actions::trial::add_step::Error::TrialAlreadyCompleted => {
+                    // 新規作成した Trial は InProgress なので到達しないがパターンマッチのために定義
+                    log::error!("Unexpected TrialAlreadyCompleted error during create_trial");
+                    GraphQLError::new("内部エラーが発生しました", "INTERNAL_ERROR")
+                }
+                crate::domain::actions::trial::add_step::Error::EmptyStepName => {
                     GraphQLError::new("ステップ名を入力してください", "VALIDATION_ERROR")
                 }
-                crate::domain::actions::trial::create_trial::Error::InvalidParameter { .. } => {
+                crate::domain::actions::trial::add_step::Error::InvalidParameter { .. } => {
                     GraphQLError::new("パラメーターが不正です", "VALIDATION_ERROR")
                 }
             },
