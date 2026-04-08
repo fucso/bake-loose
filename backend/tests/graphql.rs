@@ -3,4 +3,5 @@
 mod graphql {
     pub mod projects;
     pub mod schema;
+    pub mod trial;
 }

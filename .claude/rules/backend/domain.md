@@ -40,7 +40,49 @@ pub struct Project {
 pub struct ProjectId(pub Uuid);
 ```
 
-**モデルのメソッド**: ファクトリ（`new()`）とゲッターのみ。ロジックはアクションに集約。
+**モデルのメソッド**:
+- **ファクトリ**: `new()` - 新規作成時に使用
+- **ゲッター**: フィールドへのアクセス
+- **ミューテーションメソッド**: `set_xxx()`, `add_xxx()`, `remove_xxx()`, `complete()` など - 状態変更を担当
+  - 内部で `updated_at` を自動更新
+  - バリデーションは含まない（アクションで事前に検証）
+
+**`from_raw()` メソッド**: リポジトリ層でのDB再構築専用。Action層やUseCase層では使用禁止。
+
+```rust
+// ✅ Repository層: from_raw() で DB から再構築
+impl TrialRepository for PgTrialRepository {
+    async fn find(&self, id: &TrialId) -> Option<Trial> {
+        Trial::from_raw(row.id, row.name, ...)  // OK
+    }
+}
+
+// ✅ Action層: ミューテーションメソッドで状態変更
+pub fn execute(mut state: Trial, command: Command) -> Trial {
+    state.set_name(Some(command.new_name));  // OK
+    state
+}
+
+// ❌ Action層で from_raw() は使用禁止
+pub fn execute(state: Trial, command: Command) -> Trial {
+    Trial::from_raw(state.id(), command.new_name, ...)  // NG
+}
+```
+
+**親子関係のある集約の構築順序**: 必ず親→子→孫の順で構築する。
+
+```rust
+// ✅ 正しい順序: Trial (親) → Step (子) → Parameter (孫)
+let trial = Trial::new(project_id, name, memo);
+let step = Step::new(trial.id().clone(), step_name, position);
+let parameter = Parameter::new(step.id().clone(), content);
+step.add_parameter(parameter);
+trial.add_step(step);
+
+// ❌ 誤った順序: 子を先に作成
+let step = Step::new(trial_id, ...);  // trial_id がまだ存在しない
+let trial = Trial::new(...);
+```
 
 ## アクション定義
 
@@ -86,11 +128,22 @@ pub fn run(state: Project, command: Command) -> Result<Project, Error> {
 use sqlx::PgPool;
 pub async fn run(pool: &PgPool, ...) { ... }
 
-// ❌ 可変参照による状態変更
-pub fn update_name(&mut self, name: String) { self.name = name; }
+// ❌ Action層で from_raw() を使用
+pub fn execute(state: Trial, command: Command) -> Trial {
+    Trial::from_raw(state.id(), command.new_name, ...)  // from_raw はリポジトリ層専用
+}
 
-// ✅ 必要なリソースは引数で受け取り、新しいインスタンスを返す
-pub fn run(state: Project, command: Command) -> Result<Project, Error> { ... }
+// ❌ ミューテーションメソッド内でバリデーション
+pub fn set_name(&mut self, name: String) {
+    if name.is_empty() { panic!("..."); }  // バリデーションはActionで行う
+    self.name = name;
+}
+
+// ✅ Action層: ミューテーションメソッドで状態変更
+pub fn execute(mut state: Project, command: Command) -> Project {
+    state.set_name(command.new_name);
+    state
+}
 ```
 
 ## チェックリスト
@@ -101,3 +154,6 @@ pub fn run(state: Project, command: Command) -> Result<Project, Error> { ... }
 - [ ] 1アクション1ファイル
 - [ ] validate / execute / run が分離されている
 - [ ] エラー型は種類のみ（メッセージを含まない）
+- [ ] `from_raw()` をAction層で使用していない（リポジトリ層専用）
+- [ ] 親子関係のある集約は親→子→孫の順で構築
+- [ ] 状態変更はミューテーションメソッド経由

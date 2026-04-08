@@ -6,7 +6,9 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use crate::domain::models::project::{Project, ProjectId};
+use crate::domain::models::trial::{Trial, TrialId};
 use crate::ports::project_repository::ProjectRepository;
+use crate::ports::trial_repository::{TrialRepository, TrialSort};
 use crate::ports::{ProjectSort, ProjectSortColumn, RepositoryError, SortDirection, UnitOfWork};
 
 /// テスト用の MockProjectRepository
@@ -65,16 +67,77 @@ impl ProjectRepository for MockProjectRepository {
     }
 }
 
+/// テスト用の MockTrialRepository
+///
+/// MockUnitOfWork 内のデータを共有するため Arc<Mutex> を使用
+#[derive(Clone)]
+pub struct MockTrialRepository {
+    trials: Arc<Mutex<Vec<Trial>>>,
+}
+
+impl MockTrialRepository {
+    fn new(trials: Arc<Mutex<Vec<Trial>>>) -> Self {
+        Self { trials }
+    }
+}
+
+#[async_trait::async_trait]
+impl TrialRepository for MockTrialRepository {
+    async fn find_by_id(&self, id: &TrialId) -> Result<Option<Trial>, RepositoryError> {
+        let trials = self.trials.lock().await;
+        Ok(trials.iter().find(|t| t.id() == id).cloned())
+    }
+
+    async fn find_by_project_id(
+        &self,
+        project_id: &ProjectId,
+        _sort: TrialSort,
+    ) -> Result<Vec<Trial>, RepositoryError> {
+        let trials = self.trials.lock().await;
+        Ok(trials
+            .iter()
+            .filter(|t| t.project_id() == project_id)
+            .cloned()
+            .collect())
+    }
+
+    async fn save(&self, trial: &Trial) -> Result<(), RepositoryError> {
+        let mut trials = self.trials.lock().await;
+        trials.retain(|t| t.id() != trial.id());
+        trials.push(trial.clone());
+        Ok(())
+    }
+
+    async fn delete(&self, id: &TrialId) -> Result<(), RepositoryError> {
+        let mut trials = self.trials.lock().await;
+        trials.retain(|t| t.id() != id);
+        Ok(())
+    }
+}
+
 /// テスト用の MockUnitOfWork
 pub struct MockUnitOfWork {
     projects: Arc<Mutex<Vec<Project>>>,
+    trials: Arc<Mutex<Vec<Trial>>>,
     transaction_started: bool,
+}
+
+impl MockUnitOfWork {
+    /// Trial データを初期設定して MockUnitOfWork を作成する
+    pub fn with_trials(trials: Vec<Trial>) -> Self {
+        Self {
+            projects: Arc::new(Mutex::new(Vec::new())),
+            trials: Arc::new(Mutex::new(trials)),
+            transaction_started: false,
+        }
+    }
 }
 
 impl Default for MockUnitOfWork {
     fn default() -> Self {
         Self {
             projects: Arc::new(Mutex::new(Vec::new())),
+            trials: Arc::new(Mutex::new(Vec::new())),
             transaction_started: false,
         }
     }
@@ -83,9 +146,14 @@ impl Default for MockUnitOfWork {
 #[async_trait::async_trait]
 impl UnitOfWork for MockUnitOfWork {
     type ProjectRepo = MockProjectRepository;
+    type TrialRepo = MockTrialRepository;
 
     fn project_repository(&mut self) -> Self::ProjectRepo {
         MockProjectRepository::new(self.projects.clone())
+    }
+
+    fn trial_repository(&mut self) -> Self::TrialRepo {
+        MockTrialRepository::new(self.trials.clone())
     }
 
     async fn begin(&mut self) -> Result<(), RepositoryError> {

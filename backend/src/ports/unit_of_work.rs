@@ -4,6 +4,7 @@
 
 use crate::ports::error::RepositoryError;
 use crate::ports::project_repository::ProjectRepository;
+use crate::ports::trial_repository::TrialRepository;
 
 /// UnitOfWork トレイト
 ///
@@ -31,6 +32,9 @@ pub trait UnitOfWork: Send + Sync {
     /// ProjectRepository の具体型
     type ProjectRepo: ProjectRepository;
 
+    /// TrialRepository の具体型
+    type TrialRepo: TrialRepository;
+
     /// ProjectRepository を取得する
     ///
     /// トランザクションが開始されている場合はトランザクション内で操作し、
@@ -38,6 +42,14 @@ pub trait UnitOfWork: Send + Sync {
     ///
     /// 注: 呼び出すたびに新しいリポジトリインスタンスを返す。
     fn project_repository(&mut self) -> Self::ProjectRepo;
+
+    /// TrialRepository を取得する
+    ///
+    /// トランザクションが開始されている場合はトランザクション内で操作し、
+    /// そうでなければ pool を直接使用する。
+    ///
+    /// 注: 呼び出すたびに新しいリポジトリインスタンスを返す。
+    fn trial_repository(&mut self) -> Self::TrialRepo;
 
     /// トランザクションを開始する
     ///

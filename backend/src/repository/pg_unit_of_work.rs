@@ -12,6 +12,7 @@ use crate::ports::UnitOfWork;
 
 use super::executor::PgExecutor;
 use super::project_repo::PgProjectRepository;
+use super::trial_repo::PgTrialRepository;
 
 /// PostgreSQL 用の UnitOfWork 実装
 ///
@@ -42,9 +43,14 @@ impl PgUnitOfWork {
 #[async_trait]
 impl UnitOfWork for PgUnitOfWork {
     type ProjectRepo = PgProjectRepository;
+    type TrialRepo = PgTrialRepository;
 
     fn project_repository(&mut self) -> Self::ProjectRepo {
         PgProjectRepository::new(self.executor())
+    }
+
+    fn trial_repository(&mut self) -> Self::TrialRepo {
+        PgTrialRepository::new(self.executor())
     }
 
     async fn begin(&mut self) -> Result<(), RepositoryError> {
