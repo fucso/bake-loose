@@ -181,7 +181,7 @@ impl UserFacingError for update_trial::Error {
     fn to_user_facing(&self) -> GraphQLError {
         match self {
             update_trial::Error::Domain(e) => match e {
-                crate::domain::actions::trial::update_trial::Error::AlreadyCompleted => {
+                crate::domain::actions::trial::update_trial::Error::TrialAlreadyCompleted => {
                     GraphQLError::new("既に完了しています", "VALIDATION_ERROR")
                 }
             },
@@ -206,7 +206,7 @@ impl UserFacingError for complete_trial::Error {
     fn to_user_facing(&self) -> GraphQLError {
         match self {
             complete_trial::Error::Domain(e) => match e {
-                crate::domain::actions::trial::complete_trial::Error::AlreadyCompleted => {
+                crate::domain::actions::trial::complete_trial::Error::TrialAlreadyCompleted => {
                     GraphQLError::new("既に完了しています", "VALIDATION_ERROR")
                 }
             },

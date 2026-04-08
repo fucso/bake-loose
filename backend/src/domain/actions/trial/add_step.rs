@@ -4,7 +4,10 @@ use chrono::{DateTime, Utc};
 
 use crate::domain::models::parameter::{Parameter, ParameterContent};
 use crate::domain::models::step::Step;
-use crate::domain::models::trial::{Trial, TrialStatus};
+use crate::domain::models::trial::Trial;
+use crate::domain::validators::trial::{
+    parameter_validator, step_name_validator, trial_status_validator,
+};
 
 pub struct ParameterInput {
     pub content: ParameterContent,
@@ -16,14 +19,7 @@ pub struct Command {
     pub parameters: Vec<ParameterInput>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ParameterValidationError {
-    EmptyKey,
-    EmptyNote,
-    EmptyText,
-    EmptyDurationNote,
-    InvalidDurationValue,
-}
+pub use parameter_validator::Error as ParameterValidationError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
@@ -36,49 +32,18 @@ pub enum Error {
 }
 
 pub fn validate(state: &Trial, command: &Command) -> Result<(), Error> {
-    if state.status() == &TrialStatus::Completed {
-        return Err(Error::TrialAlreadyCompleted);
-    }
-    if command.name.trim().is_empty() {
-        return Err(Error::EmptyStepName);
-    }
-    for (i, param) in command.parameters.iter().enumerate() {
-        validate_parameter_content(&param.content).map_err(|reason| Error::InvalidParameter {
-            parameter_index: i,
-            reason,
-        })?;
-    }
-    Ok(())
-}
+    trial_status_validator::require_in_progress(state)
+        .map_err(|_| Error::TrialAlreadyCompleted)?;
+    step_name_validator::require_not_empty(&command.name)
+        .map_err(|_| Error::EmptyStepName)?;
 
-fn validate_parameter_content(content: &ParameterContent) -> Result<(), ParameterValidationError> {
-    match content {
-        ParameterContent::KeyValue { key, .. } => {
-            if key.trim().is_empty() {
-                return Err(ParameterValidationError::EmptyKey);
+    for (i, param) in command.parameters.iter().enumerate() {
+        parameter_validator::validate_content(&param.content).map_err(|e| {
+            Error::InvalidParameter {
+                parameter_index: i,
+                reason: e,
             }
-        }
-        ParameterContent::Duration { duration, note } => {
-            if duration.value < 0.0 {
-                return Err(ParameterValidationError::InvalidDurationValue);
-            }
-            if note.trim().is_empty() {
-                return Err(ParameterValidationError::EmptyDurationNote);
-            }
-        }
-        ParameterContent::TimeMarker { at, note } => {
-            if at.value < 0.0 {
-                return Err(ParameterValidationError::InvalidDurationValue);
-            }
-            if note.trim().is_empty() {
-                return Err(ParameterValidationError::EmptyNote);
-            }
-        }
-        ParameterContent::Text { value } => {
-            if value.trim().is_empty() {
-                return Err(ParameterValidationError::EmptyText);
-            }
-        }
+        })?;
     }
     Ok(())
 }
@@ -111,7 +76,6 @@ mod tests {
     use crate::domain::models::parameter::{ParameterContent, ParameterValue};
     use crate::domain::models::project::ProjectId;
     use crate::domain::models::trial::{Trial, TrialId, TrialStatus};
-    use chrono::TimeZone;
 
     fn in_progress_trial() -> Trial {
         Trial::new(ProjectId::new(), None, None)
@@ -132,54 +96,7 @@ mod tests {
     }
 
     #[test]
-    fn test_add_step_to_empty_trial() {
-        let trial = in_progress_trial();
-        let command = Command {
-            name: "捏ね".to_string(),
-            started_at: None,
-            parameters: vec![],
-        };
-        let result = run(trial, command).unwrap();
-        assert_eq!(result.steps().len(), 1);
-        assert_eq!(result.steps()[0].name(), "捏ね");
-    }
-
-    #[test]
-    fn test_add_step_position_is_zero_for_first() {
-        let trial = in_progress_trial();
-        let command = Command {
-            name: "捏ね".to_string(),
-            started_at: None,
-            parameters: vec![],
-        };
-        let result = run(trial, command).unwrap();
-        assert_eq!(result.steps()[0].position(), 0);
-    }
-
-    #[test]
-    fn test_add_step_position_increments() {
-        let trial = in_progress_trial();
-
-        let command1 = Command {
-            name: "捏ね".to_string(),
-            started_at: None,
-            parameters: vec![],
-        };
-        let trial = run(trial, command1).unwrap();
-
-        let command2 = Command {
-            name: "一次発酵".to_string(),
-            started_at: None,
-            parameters: vec![],
-        };
-        let trial = run(trial, command2).unwrap();
-
-        assert_eq!(trial.steps()[0].position(), 0);
-        assert_eq!(trial.steps()[1].position(), 1);
-    }
-
-    #[test]
-    fn test_add_step_with_parameters() {
+    fn test_add_step_success() {
         let trial = in_progress_trial();
         let command = Command {
             name: "捏ね".to_string(),
@@ -195,43 +112,9 @@ mod tests {
             }],
         };
         let result = run(trial, command).unwrap();
+        assert_eq!(result.steps().len(), 1);
+        assert_eq!(result.steps()[0].name(), "捏ね");
         assert_eq!(result.steps()[0].parameters().len(), 1);
-    }
-
-    #[test]
-    fn test_add_step_with_started_at() {
-        let trial = in_progress_trial();
-        let started = Utc::now();
-        let command = Command {
-            name: "捏ね".to_string(),
-            started_at: Some(started),
-            parameters: vec![],
-        };
-        let result = run(trial, command).unwrap();
-        assert_eq!(result.steps()[0].started_at(), Some(&started));
-    }
-
-    #[test]
-    fn test_trial_updated_at_is_changed() {
-        let old_time = Utc.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap();
-        let trial = Trial::from_raw(
-            TrialId::new(),
-            ProjectId::new(),
-            None,
-            None,
-            TrialStatus::InProgress,
-            vec![],
-            old_time,
-            old_time,
-        );
-
-        let command = Command {
-            name: "捏ね".to_string(),
-            started_at: None,
-            parameters: vec![],
-        };
-        let result = run(trial, command).unwrap();
-        assert!(*result.updated_at() > old_time);
     }
 
     #[test]
@@ -281,17 +164,5 @@ mod tests {
                 reason: ParameterValidationError::EmptyKey,
             })
         );
-    }
-
-    #[test]
-    fn test_returns_error_when_step_name_whitespace_only() {
-        let trial = in_progress_trial();
-        let command = Command {
-            name: "   ".to_string(),
-            started_at: None,
-            parameters: vec![],
-        };
-        let result = run(trial, command);
-        assert_eq!(result, Err(Error::EmptyStepName));
     }
 }

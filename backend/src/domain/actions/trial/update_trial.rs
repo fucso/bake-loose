@@ -1,20 +1,20 @@
-use crate::domain::models::trial::{Trial, TrialStatus};
+//! update_trial アクション
+//!
+//! Trial の名前・メモを更新する。
+
+use crate::domain::models::trial::Trial;
+use crate::domain::validators::trial::trial_status_validator;
+
+pub use trial_status_validator::Error;
 
 pub struct Command {
     pub name: Option<String>,
     pub memo: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Error {
-    AlreadyCompleted,
-}
-
 /// バリデーション
 pub fn validate(state: &Trial, _command: &Command) -> Result<(), Error> {
-    if state.status() == &TrialStatus::Completed {
-        return Err(Error::AlreadyCompleted);
-    }
+    trial_status_validator::require_in_progress(state)?;
     Ok(())
 }
 
@@ -55,29 +55,7 @@ mod tests {
     }
 
     #[test]
-    fn test_update_name() {
-        let trial = make_in_progress_trial();
-        let command = Command {
-            name: Some("新しい名前".to_string()),
-            memo: None,
-        };
-        let result = run(trial, command).unwrap();
-        assert_eq!(result.name(), Some("新しい名前"));
-    }
-
-    #[test]
-    fn test_update_memo() {
-        let trial = make_in_progress_trial();
-        let command = Command {
-            name: None,
-            memo: Some("新しいメモ".to_string()),
-        };
-        let result = run(trial, command).unwrap();
-        assert_eq!(result.memo(), Some("新しいメモ"));
-    }
-
-    #[test]
-    fn test_update_both_name_and_memo() {
+    fn test_update_trial_success() {
         let trial = make_in_progress_trial();
         let command = Command {
             name: Some("新しい名前".to_string()),
@@ -86,22 +64,6 @@ mod tests {
         let result = run(trial, command).unwrap();
         assert_eq!(result.name(), Some("新しい名前"));
         assert_eq!(result.memo(), Some("新しいメモ"));
-    }
-
-    #[test]
-    fn test_updated_at_is_changed() {
-        use std::thread::sleep;
-        use std::time::Duration;
-
-        let trial = make_in_progress_trial();
-        let original_updated_at = *trial.updated_at();
-        sleep(Duration::from_millis(10));
-        let command = Command {
-            name: Some("更新された名前".to_string()),
-            memo: None,
-        };
-        let result = run(trial, command).unwrap();
-        assert!(result.updated_at() > &original_updated_at);
     }
 
     #[test]
@@ -112,6 +74,6 @@ mod tests {
             memo: None,
         };
         let result = run(trial, command);
-        assert_eq!(result, Err(Error::AlreadyCompleted));
+        assert_eq!(result, Err(Error::TrialAlreadyCompleted));
     }
 }

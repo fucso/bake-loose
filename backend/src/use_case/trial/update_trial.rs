@@ -169,7 +169,7 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err(),
-            Error::Domain(domain_update_trial::Error::AlreadyCompleted)
+            Error::Domain(domain_update_trial::Error::TrialAlreadyCompleted)
         );
     }
 }

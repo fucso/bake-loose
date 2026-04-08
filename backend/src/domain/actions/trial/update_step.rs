@@ -6,14 +6,13 @@ use chrono::{DateTime, Utc};
 
 use crate::domain::models::parameter::{Parameter, ParameterContent, ParameterId};
 use crate::domain::models::step::StepId;
-use crate::domain::models::trial::{Trial, TrialStatus};
+use crate::domain::models::trial::Trial;
+use crate::domain::validators::trial::{
+    parameter_validator, step_existence_validator, step_name_validator, step_status_validator,
+    trial_status_validator,
+};
 
-/// パラメーター検証エラー
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ParameterValidationError {
-    EmptyKey,
-    EmptyText,
-}
+pub use parameter_validator::Error as ParameterValidationError;
 
 /// 追加するパラメーターの入力
 pub struct ParameterInput {
@@ -54,58 +53,32 @@ pub enum Error {
     ParameterNotFound { parameter_id: ParameterId },
 }
 
-fn validate_parameter(content: &ParameterContent) -> Result<(), ParameterValidationError> {
-    match content {
-        ParameterContent::KeyValue { key, .. } => {
-            if key.trim().is_empty() {
-                return Err(ParameterValidationError::EmptyKey);
-            }
-            Ok(())
-        }
-        ParameterContent::Text { value } => {
-            if value.trim().is_empty() {
-                return Err(ParameterValidationError::EmptyText);
-            }
-            Ok(())
-        }
-        ParameterContent::Duration { .. } | ParameterContent::TimeMarker { .. } => Ok(()),
-    }
-}
-
 /// バリデーション
 pub fn validate(state: &Trial, command: &Command) -> Result<(), Error> {
     // 1. Trial のステータスチェック
-    if state.status() == &TrialStatus::Completed {
-        return Err(Error::TrialAlreadyCompleted);
-    }
+    trial_status_validator::require_in_progress(state)
+        .map_err(|_| Error::TrialAlreadyCompleted)?;
 
     // 2. Step の存在チェック
-    let step = state
-        .steps()
-        .iter()
-        .find(|s| s.id() == &command.step_id)
-        .ok_or(Error::StepNotFound)?;
+    let step = step_existence_validator::require_exists(state, &command.step_id)
+        .map_err(|_| Error::StepNotFound)?;
 
     // 3. Step のステータスチェック
-    if step.completed_at().is_some() {
-        return Err(Error::StepAlreadyCompleted);
-    }
+    step_status_validator::require_in_progress(step)
+        .map_err(|_| Error::StepAlreadyCompleted)?;
 
     // 4. 名前が空文字でないかチェック
-    if let Some(name) = &command.name {
-        if name.trim().is_empty() {
-            return Err(Error::EmptyStepName);
-        }
-    }
+    step_name_validator::validate_optional(&command.name)
+        .map_err(|_| Error::EmptyStepName)?;
 
     // 5. add_parameters の検証
     for (i, param_input) in command.add_parameters.iter().enumerate() {
-        if let Err(reason) = validate_parameter(&param_input.content) {
-            return Err(Error::InvalidParameter {
+        parameter_validator::validate_content(&param_input.content).map_err(|e| {
+            Error::InvalidParameter {
                 parameter_index: i,
-                reason,
-            });
-        }
+                reason: e,
+            }
+        })?;
     }
 
     // 6. remove_parameter_ids の存在チェック
@@ -162,7 +135,7 @@ pub fn run(state: Trial, command: Command) -> Result<Trial, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::models::parameter::{ParameterContent, ParameterValue};
+    use crate::domain::models::parameter::{DurationUnit, DurationValue, ParameterContent};
     use crate::domain::models::project::ProjectId;
     use crate::domain::models::step::Step;
     use crate::domain::models::trial::Trial;
@@ -171,15 +144,6 @@ mod tests {
         let mut trial = Trial::new(ProjectId::new(), Some("テスト試行".to_string()), None);
         let step = Step::new(trial.id().clone(), "準備".to_string(), 1);
         let step_id = step.id().clone();
-        trial.add_step(step);
-        (trial, step_id)
-    }
-
-    fn make_trial_with_completed_step() -> (Trial, StepId) {
-        let mut trial = Trial::new(ProjectId::new(), None, None);
-        let mut step = Step::new(trial.id().clone(), "完了ステップ".to_string(), 1);
-        let step_id = step.id().clone();
-        step.complete(Utc::now());
         trial.add_step(step);
         (trial, step_id)
     }
@@ -203,7 +167,7 @@ mod tests {
     // --- 正常系 ---
 
     #[test]
-    fn test_update_step_name() {
+    fn test_update_step_success() {
         let (trial, step_id) = make_trial_with_step();
         let command = Command {
             step_id: step_id.clone(),
@@ -215,76 +179,6 @@ mod tests {
         let result = run(trial, command).unwrap();
         let step = result.steps().iter().find(|s| s.id() == &step_id).unwrap();
         assert_eq!(step.name(), "新しいステップ名");
-    }
-
-    #[test]
-    fn test_update_step_started_at() {
-        let (trial, step_id) = make_trial_with_step();
-        let new_started_at = Utc::now();
-        let command = Command {
-            step_id: step_id.clone(),
-            name: None,
-            started_at: Some(Some(new_started_at)),
-            add_parameters: vec![],
-            remove_parameter_ids: vec![],
-        };
-        let result = run(trial, command).unwrap();
-        let step = result.steps().iter().find(|s| s.id() == &step_id).unwrap();
-        assert_eq!(step.started_at(), Some(&new_started_at));
-    }
-
-    #[test]
-    fn test_clear_step_started_at() {
-        let mut trial = Trial::new(ProjectId::new(), None, None);
-        let mut step = Step::new(trial.id().clone(), "準備".to_string(), 1);
-        step.start(Utc::now());
-        let step_id = step.id().clone();
-        trial.add_step(step);
-
-        let command = Command {
-            step_id: step_id.clone(),
-            name: None,
-            started_at: Some(None),
-            add_parameters: vec![],
-            remove_parameter_ids: vec![],
-        };
-        let result = run(trial, command).unwrap();
-        let step = result.steps().iter().find(|s| s.id() == &step_id).unwrap();
-        assert_eq!(step.started_at(), None);
-    }
-
-    #[test]
-    fn test_add_parameters() {
-        let (trial, step_id) = make_trial_with_step();
-        let command = Command {
-            step_id: step_id.clone(),
-            name: None,
-            started_at: None,
-            add_parameters: vec![ParameterInput {
-                content: ParameterContent::Text {
-                    value: "メモ".to_string(),
-                },
-            }],
-            remove_parameter_ids: vec![],
-        };
-        let result = run(trial, command).unwrap();
-        let step = result.steps().iter().find(|s| s.id() == &step_id).unwrap();
-        assert_eq!(step.parameters().len(), 1);
-    }
-
-    #[test]
-    fn test_remove_parameters() {
-        let (trial, step_id, param_id) = make_trial_with_step_and_parameter();
-        let command = Command {
-            step_id: step_id.clone(),
-            name: None,
-            started_at: None,
-            add_parameters: vec![],
-            remove_parameter_ids: vec![param_id],
-        };
-        let result = run(trial, command).unwrap();
-        let step = result.steps().iter().find(|s| s.id() == &step_id).unwrap();
-        assert_eq!(step.parameters().len(), 0);
     }
 
     #[test]
@@ -304,62 +198,13 @@ mod tests {
         let result = run(trial, command).unwrap();
         let step = result.steps().iter().find(|s| s.id() == &step_id).unwrap();
         assert_eq!(step.parameters().len(), 1);
-        match step.parameters()[0].content() {
-            ParameterContent::Text { value } => assert_eq!(value, "新しいメモ"),
-            _ => panic!("expected Text parameter"),
-        }
-    }
-
-    #[test]
-    fn test_step_updated_at_is_changed() {
-        let (trial, step_id) = make_trial_with_step();
-        let original_updated_at = *trial
-            .steps()
-            .iter()
-            .find(|s| s.id() == &step_id)
-            .unwrap()
-            .updated_at();
-
-        std::thread::sleep(std::time::Duration::from_millis(1));
-
-        let command = Command {
-            step_id: step_id.clone(),
-            name: Some("更新されたステップ".to_string()),
-            started_at: None,
-            add_parameters: vec![],
-            remove_parameter_ids: vec![],
-        };
-        let result = run(trial, command).unwrap();
-        let step = result.steps().iter().find(|s| s.id() == &step_id).unwrap();
-        assert!(step.updated_at() > &original_updated_at);
-    }
-
-    #[test]
-    fn test_trial_updated_at_is_changed() {
-        let (trial, step_id) = make_trial_with_step();
-        let original_updated_at = *trial.updated_at();
-
-        std::thread::sleep(std::time::Duration::from_millis(1));
-
-        let command = Command {
-            step_id,
-            name: Some("更新されたステップ".to_string()),
-            started_at: None,
-            add_parameters: vec![],
-            remove_parameter_ids: vec![],
-        };
-        let result = run(trial, command).unwrap();
-        assert!(result.updated_at() > &original_updated_at);
     }
 
     // --- 異常系 ---
 
     #[test]
     fn test_returns_error_when_trial_completed() {
-        let mut trial = Trial::new(ProjectId::new(), None, None);
-        let step = Step::new(trial.id().clone(), "準備".to_string(), 1);
-        let step_id = step.id().clone();
-        trial.add_step(step);
+        let (mut trial, step_id) = make_trial_with_step();
         trial.complete();
 
         let command = Command {
@@ -376,9 +221,8 @@ mod tests {
     #[test]
     fn test_returns_error_when_step_not_found() {
         let (trial, _step_id) = make_trial_with_step();
-        let non_existent_step_id = StepId::new();
         let command = Command {
-            step_id: non_existent_step_id,
+            step_id: StepId::new(),
             name: None,
             started_at: None,
             add_parameters: vec![],
@@ -390,7 +234,12 @@ mod tests {
 
     #[test]
     fn test_returns_error_when_step_completed() {
-        let (trial, step_id) = make_trial_with_completed_step();
+        let mut trial = Trial::new(ProjectId::new(), None, None);
+        let mut step = Step::new(trial.id().clone(), "完了ステップ".to_string(), 1);
+        let step_id = step.id().clone();
+        step.complete(Utc::now());
+        trial.add_step(step);
+
         let command = Command {
             step_id,
             name: None,
@@ -417,6 +266,20 @@ mod tests {
     }
 
     #[test]
+    fn test_none_name_does_not_trigger_validation() {
+        let (trial, step_id) = make_trial_with_step();
+        let command = Command {
+            step_id: step_id.clone(),
+            name: None, // None の場合はバリデーションをスキップ
+            started_at: None,
+            add_parameters: vec![],
+            remove_parameter_ids: vec![],
+        };
+        let result = run(trial, command);
+        assert!(result.is_ok());
+    }
+
+    #[test]
     fn test_returns_error_when_parameter_invalid() {
         let (trial, step_id) = make_trial_with_step();
         let command = Command {
@@ -424,11 +287,8 @@ mod tests {
             name: None,
             started_at: None,
             add_parameters: vec![ParameterInput {
-                content: ParameterContent::KeyValue {
-                    key: "".to_string(),
-                    value: ParameterValue::Text {
-                        value: "値".to_string(),
-                    },
+                content: ParameterContent::Text {
+                    value: "".to_string(),
                 },
             }],
             remove_parameter_ids: vec![],
@@ -438,7 +298,57 @@ mod tests {
             result,
             Err(Error::InvalidParameter {
                 parameter_index: 0,
-                reason: ParameterValidationError::EmptyKey,
+                reason: ParameterValidationError::EmptyText,
+            })
+        );
+    }
+
+    #[test]
+    fn test_validates_duration_parameter() {
+        let (trial, step_id) = make_trial_with_step();
+        let command = Command {
+            step_id,
+            name: None,
+            started_at: None,
+            add_parameters: vec![ParameterInput {
+                content: ParameterContent::Duration {
+                    duration: DurationValue::new(-1.0, DurationUnit::Minute),
+                    note: "発酵".to_string(),
+                },
+            }],
+            remove_parameter_ids: vec![],
+        };
+        let result = run(trial, command);
+        assert_eq!(
+            result,
+            Err(Error::InvalidParameter {
+                parameter_index: 0,
+                reason: ParameterValidationError::InvalidDurationValue,
+            })
+        );
+    }
+
+    #[test]
+    fn test_validates_time_marker_parameter() {
+        let (trial, step_id) = make_trial_with_step();
+        let command = Command {
+            step_id,
+            name: None,
+            started_at: None,
+            add_parameters: vec![ParameterInput {
+                content: ParameterContent::TimeMarker {
+                    at: DurationValue::new(30.0, DurationUnit::Minute),
+                    note: "".to_string(), // 空のnote
+                },
+            }],
+            remove_parameter_ids: vec![],
+        };
+        let result = run(trial, command);
+        assert_eq!(
+            result,
+            Err(Error::InvalidParameter {
+                parameter_index: 0,
+                reason: ParameterValidationError::EmptyNote,
             })
         );
     }

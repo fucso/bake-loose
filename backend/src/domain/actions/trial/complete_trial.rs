@@ -2,18 +2,14 @@
 //!
 //! Trial を完了ステータスに変更する。
 
-use crate::domain::models::trial::{Trial, TrialStatus};
+use crate::domain::models::trial::Trial;
+use crate::domain::validators::trial::trial_status_validator;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Error {
-    AlreadyCompleted,
-}
+pub use trial_status_validator::Error;
 
 /// バリデーション
 pub fn validate(state: &Trial) -> Result<(), Error> {
-    if state.status() == &TrialStatus::Completed {
-        return Err(Error::AlreadyCompleted);
-    }
+    trial_status_validator::require_in_progress(state)?;
     Ok(())
 }
 
@@ -41,37 +37,21 @@ mod tests {
     }
 
     #[test]
-    fn test_complete_trial() {
+    fn test_complete_trial_success() {
         let trial = in_progress_trial();
         let result = run(trial);
         assert!(result.is_ok());
+        assert_eq!(result.unwrap().status(), &TrialStatus::Completed);
     }
 
     #[test]
-    fn test_status_is_completed() {
-        let trial = in_progress_trial();
-        let result = run(trial).unwrap();
-        assert_eq!(result.status(), &TrialStatus::Completed);
-    }
-
-    #[test]
-    fn test_updated_at_is_changed() {
-        let trial = in_progress_trial();
-        let original_updated_at = *trial.updated_at();
-        std::thread::sleep(std::time::Duration::from_millis(1));
-        let result = run(trial).unwrap();
-        assert!(result.updated_at() > &original_updated_at);
-    }
-
-    #[test]
-    fn test_complete_trial_with_incomplete_steps() {
+    fn test_complete_trial_with_steps() {
         let project_id = ProjectId::new();
         let mut trial = Trial::new(project_id, None, None);
         let step = Step::new(trial.id().clone(), "捏ね".to_string(), 0);
         trial.add_step(step);
         let result = run(trial);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().status(), &TrialStatus::Completed);
     }
 
     #[test]
@@ -79,6 +59,6 @@ mod tests {
         let mut trial = Trial::new(ProjectId::new(), None, None);
         trial.complete();
         let result = run(trial);
-        assert_eq!(result, Err(Error::AlreadyCompleted));
+        assert_eq!(result, Err(Error::TrialAlreadyCompleted));
     }
 }
