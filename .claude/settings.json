@@ -1,0 +1,14 @@
+{
+  "enabledPlugins": {
+    "iddue@iddue": true
+  },
+  "extraKnownMarketplaces": {
+    "iddue": {
+      "source": {
+        "source": "github",
+        "repo": "enechange/iddue"
+      },
+      "autoUpdate": true
+    }
+  }
+}
