@@ -16,7 +16,7 @@ WORKTREE_PATH="${1:?worktree_path を指定してください}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 run() {
-    bash "${SCRIPT_DIR}/exec.sh" "${WORKTREE_PATH}" "$1"
+    bash "${SCRIPT_DIR}/exec.sh" "${WORKTREE_PATH}" "cd backend && $1"
 }
 
 echo "--- cargo fmt --check ---"
