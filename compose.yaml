@@ -27,7 +27,7 @@ services:
       - ./backend:/app
       - cargo_cache:/usr/local/cargo/registry
       - target_cache:/app/target
-      - ./.agents/worktrees:/worktrees
+      - ./.worktree:/worktrees
     ports:
       - "8080:8080"
     depends_on:

@@ -1,0 +1,37 @@
+{
+  "overall_status": "ok",
+  "aspects": [
+    {
+      "id": "requirements",
+      "status": "ok",
+      "findings": [
+        {
+          "level": "WARNING",
+          "file": ".claude/worktree-hooks/exec.sh",
+          "message": "完了条件の最後の項目「/iddue:start で実際に1つの Issue を worktree 実装した際に、上記フックがエラーなく機能することを確認できる」について、実際に docker compose 環境で exec.sh / quality-check.sh を実行して動作確認した形跡（ログ・report 等）が diff / target_dir 内に見当たらない。スクリプト自体のロジックは compose.yaml のマウント設定と整合しているが、実環境での動作確認は別途必要。"
+        }
+      ]
+    },
+    {
+      "id": "design",
+      "status": "ok",
+      "findings": []
+    },
+    {
+      "id": "code-quality",
+      "status": "ok",
+      "findings": [
+        {
+          "level": "INFO",
+          "file": "compose.yaml",
+          "message": "backend サービスの target_cache ボリュームは /app/target のみマウントされており、/worktrees/*/backend 配下（worktree 実装のビルド）はこのキャッシュを共有しない。quality-check.sh 実行のたびに cargo clippy/test がキャッシュなしのフルビルドになり、実行時間が長くなる可能性がある。"
+        },
+        {
+          "level": "INFO",
+          "file": ".claude/worktree-hooks/exec.sh",
+          "message": "呼び出し元（worktree-development スキル既定の exec.sh）は $3 以降に任意オプション（例: --docker）を渡す設計だが、本フックは $1・$2 のみを参照し以降の引数を黙って無視する。現状の要件では問題ないが、将来オプション引数を利用する場合は明示的な対応が必要。"
+        }
+      ]
+    }
+  ]
+}
