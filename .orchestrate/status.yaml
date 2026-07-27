@@ -1,0 +1,32 @@
+status: pending
+main_issue_branch: "iddue/21"
+started_at: "2026-07-27T16:11:35.377Z"
+updated_at: "2026-07-27T16:11:35.382Z"
+
+active_tasks:
+
+completed_tasks:
+
+pending_tasks:
+  - 23
+  - 24
+  - 25
+  - 26
+  - 27
+  - 28
+  - 29
+  - 30
+  - 31
+  - 32
+  - 34
+  - 35
+  - 36
+  - 37
+  - 38
+  - 39
+  - 40
+  - 41
+
+skipped_tasks:
+
+failed_tasks:
