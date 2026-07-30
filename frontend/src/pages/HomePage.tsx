@@ -5,7 +5,7 @@ type HealthStatus = {
   message: string
 } | null
 
-function App() {
+function HomePage() {
   const [health, setHealth] = useState<HealthStatus>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -18,8 +18,7 @@ function App() {
   }, [])
 
   return (
-    <div style={{ fontFamily: 'system-ui, sans-serif', padding: '2rem' }}>
-      <h1>bake-loose</h1>
+    <div>
       <p>パン・ピザ作りの試行錯誤を記録するラボノート</p>
 
       <h2>Backend Status</h2>
@@ -34,4 +33,4 @@ function App() {
   )
 }
 
-export default App
+export default HomePage
