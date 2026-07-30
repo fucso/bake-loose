@@ -4,6 +4,7 @@
 //! domain層とports層にのみ依存する。
 
 pub mod project;
+pub mod trial;
 
 #[cfg(test)]
 pub mod test;
