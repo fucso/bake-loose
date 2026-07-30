@@ -90,6 +90,11 @@ impl Step {
         &self.name
     }
 
+    /// name を設定する
+    pub fn set_name(&mut self, name: String) {
+        self.name = name;
+    }
+
     pub fn position(&self) -> i32 {
         self.position
     }
@@ -158,6 +163,13 @@ mod tests {
         let started_at = Utc::now() - chrono::Duration::hours(1);
         let step = Step::new(TrialId::new(), "こね".to_string(), 0, Some(started_at));
         assert_eq!(step.started_at(), Some(&started_at));
+    }
+
+    #[test]
+    fn test_set_name_updates_name() {
+        let mut step = Step::new(TrialId::new(), "こね".to_string(), 0, None);
+        step.set_name("発酵".to_string());
+        assert_eq!(step.name(), "発酵");
     }
 
     #[test]
