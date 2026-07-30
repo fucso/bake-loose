@@ -1,3 +1,25 @@
+# Sub-Issue #29 実装レポート
+
+## 実装概要
+
+Trial に Step（任意個の Parameter 付き）を追加する `add_step` ドメインアクションを実装した。
+`backend/src/domain/actions/trial/add_step.rs` を新規作成し、`Trial → Step → Parameter` の順（親→子→孫）で構築するルールを遵守した。
+
+- `position` は既存の `steps().len()` から自動採番する
+- `started_at` は未指定時 `Step::new` 内で `Utc::now()` が採用される（既存モデル実装を利用）
+- バリデーション: Trial 完了済み（`TrialAlreadyCompleted`）、空/長すぎる Step 名（`InvalidStepName`）、不正な Parameter（`InvalidParameter { parameter_index, reason }`）をエラーとして返す
+- 複数バリデーターを組み合わせるため、AGENTS.md/domain.md の規約に従いアクション固有の `Error` enum に集約し、ネストしたバリデーターの Error 型は `pub use` で再エクスポートした
+
+## 変更ファイル
+
+| ファイル | 変更内容 |
+|---------|---------|
+| `backend/src/domain/actions/trial.rs` | `pub mod add_step;` を追加 |
+| `backend/src/domain/actions/trial/add_step.rs` | 新規追加。`add_step` ドメインアクション（Command/Error/validate/execute/run）とテスト16件 |
+
+## 品質チェック結果
+
+```
 === 品質チェック ===
 環境名: iddue/29
 パス: .worktree/iddue/29
@@ -109,4 +131,36 @@ running 1 test
 test src/ports/unit_of_work.rs - ports::unit_of_work::UnitOfWork (line 17) ... ignored
 
 test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
 
+## レビュー結果
+
+✅ レビュー OK（全観点 CRITICAL なし）
+
+- requirements: OK（Issue の完了条件を全てカバー）
+- design: OK（構築順序・エラー型集約パターンが AGENTS.md/domain.md の規約と一致）
+- code-quality: OK（INFO 1件: テスト名の意図が伝わりにくいとの指摘があり、`test_execute_does_not_add_step_to_original_trial` を `test_execute_preserves_trial_id_and_adds_step` にリネームして解消済み）
+
+## コミット情報
+
+- Branch: iddue/29
+- Commit: 2cc59c4c1338003af4d19c5f6bc5cb68358b43d3
+- Message: [Issue#29] action: add_step
+
+## 引き継ぎ事項
+
+- 本 Issue はドメイン層（`domain/actions/trial/add_step.rs`）のみのスコープであり、use_case 層・presentation 層への配線は未実装（既存の Trial 関連 use_case もまだ存在しない）。後続で Trial 系 use_case を実装する Issue が add_step アクションを利用する想定。
+- `add_step::Command.parameters` は `Vec<ParameterContent>` を直接受け取る設計とした。use_case 層で GraphQL 入力型からこの型へ変換する処理が必要になる。
+- 依存 Issue #24（Trial/Step モデル）・#25（Parameter モデル）は既に iddue/21 ブランチ上に実装済みであったため、本 Issue ではモデル変更は行っていない。
+
+## ステータス
+
+completed
+
+## Metadata
+
+- **開始:** 2026-07-30 22:45:47 JST
+- **終了:** 2026-07-30 22:53:57 JST
+- **実行時間:** 8分10秒
+- **消費トークン:** output 55687 / cache_read 8708244 / cache_write 328838
+- **Claude ログ:** /Users/sohosoki/.claude/projects/-Users-sohosoki-dev-fucso-bake-loose/abf13922-5e64-44f4-b7a9-974f5fb90c7d.jsonl
