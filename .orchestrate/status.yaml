@@ -1,0 +1,18 @@
+status: pending
+main_issue_branch: "iddue/46"
+started_at: "2026-07-30T13:55:16.323Z"
+updated_at: "2026-07-30T13:55:16.329Z"
+
+active_tasks:
+
+completed_tasks:
+
+pending_tasks:
+  - 47
+  - 48
+  - 49
+  - 50
+
+skipped_tasks:
+
+failed_tasks:
