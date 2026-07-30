@@ -1,13 +1,21 @@
 import { useEffect, useState } from 'react'
+import { useQuery } from 'urql'
 
 type HealthStatus = {
   status: string
   message: string
 } | null
 
+const GRAPHQL_SMOKE_TEST_QUERY = `
+  query GraphqlSmokeTest {
+    __typename
+  }
+`
+
 function App() {
   const [health, setHealth] = useState<HealthStatus>(null)
   const [error, setError] = useState<string | null>(null)
+  const [graphqlResult] = useQuery({ query: GRAPHQL_SMOKE_TEST_QUERY })
 
   useEffect(() => {
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080'
@@ -30,6 +38,17 @@ function App() {
         </pre>
       )}
       {!health && !error && <p>Loading...</p>}
+
+      <h2>GraphQL Status</h2>
+      {graphqlResult.error && (
+        <p style={{ color: 'red' }}>Error: {graphqlResult.error.message}</p>
+      )}
+      {graphqlResult.data && (
+        <pre style={{ background: '#f0f0f0', padding: '1rem', borderRadius: '4px' }}>
+          {JSON.stringify(graphqlResult.data, null, 2)}
+        </pre>
+      )}
+      {graphqlResult.fetching && <p>Loading...</p>}
     </div>
   )
 }
