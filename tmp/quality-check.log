@@ -1,0 +1,86 @@
+=== 品質チェック ===
+環境名: iddue/26
+パス: .worktree/iddue/26
+
+変更ファイル: backend/src/domain/actions.rs
+--- cargo fmt --check ---
+--- cargo clippy --all-targets -- -D warnings ---
+    Checking bake-loose v0.1.0 (/worktrees/iddue/26/backend)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.49s
+--- cargo test ---
+   Compiling bake-loose v0.1.0 (/worktrees/iddue/26/backend)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.78s
+     Running unittests src/lib.rs (/app/target/debug/deps/bake_loose-3c55537dbfac9141)
+
+running 41 tests
+test domain::actions::project::create_project::tests::test_name_validation ... ok
+test domain::models::project::tests::test_project_id_new_generates_unique_ids ... ok
+test domain::actions::project::create_project::tests::test_execute_generates_unique_id ... ok
+test domain::actions::trial::create_trial::tests::test_execute_generates_unique_id_and_links_project ... ok
+test domain::actions::trial::create_trial::tests::test_execute_allows_no_name_and_memo ... ok
+test domain::actions::project::create_project::tests::test_run_creates_project_with_valid_name ... ok
+test domain::models::project::tests::test_project_new_creates_with_auto_id ... ok
+test domain::actions::trial::create_trial::tests::test_run_creates_trial_in_progress_with_no_steps ... ok
+test domain::models::step::tests::test_step_new_defaults_started_at_to_now_when_unspecified ... ok
+test domain::models::step::tests::test_step_id_new_generates_unique_ids ... ok
+test domain::models::step::tests::test_step_new_uses_specified_started_at ... ok
+test domain::models::step::tests::test_is_completed_reflects_completed_at ... ok
+test domain::models::trial::tests::test_add_step_appends_to_steps ... ok
+test domain::models::trial::tests::test_complete_transitions_status_to_completed ... ok
+test domain::models::trial::tests::test_steps_mut_allows_mutating_step_by_id ... ok
+test domain::models::step::tests::test_set_started_at_can_set_and_clear ... ok
+test domain::models::trial::tests::test_trial_new_creates_in_progress_with_no_steps ... ok
+test domain::models::trial::tests::test_trial_id_new_generates_unique_ids ... ok
+test domain::validators::trial::step_existence_validator::tests::test_require_exists_err_when_step_not_found ... ok
+test domain::validators::trial::step_existence_validator::tests::test_require_exists_ok_when_step_exists ... ok
+test domain::validators::trial::step_name_validator::tests::test_validate_name ... ok
+test domain::validators::trial::step_status_validator::tests::test_require_in_progress_err_when_completed ... ok
+test domain::validators::trial::step_status_validator::tests::test_require_in_progress_ok_when_not_completed ... ok
+test domain::validators::trial::trial_status_validator::tests::test_require_in_progress_err_when_completed ... ok
+test domain::validators::trial::trial_status_validator::tests::test_require_in_progress_ok_when_in_progress ... ok
+test repository::project_repo::tests::test_find_by_id_returns_none_when_not_exists ... ok
+test use_case::project::create_project::tests::test_execute_creates_project_successfully ... ok
+test use_case::project::create_project::tests::test_execute_returns_domain_error_for_empty_name ... ok
+test use_case::project::create_project::tests::test_execute_returns_domain_error_for_too_long_name ... ok
+test use_case::project::create_project::tests::test_execute_returns_duplicate_error_when_name_exists ... ok
+test use_case::project::get_project::tests::test_get_project_not_found ... ok
+test use_case::project::get_project::tests::test_get_project_returns_specified_project_from_multiple ... ok
+test repository::project_repo::tests::test_exists_by_name_returns_false_when_not_exists ... ok
+test use_case::project::list_projects::tests::test_list_projects_returns_sorted_by_name_asc ... ok
+test use_case::project::list_projects::tests::test_list_projects_empty ... ok
+test repository::project_repo::tests::test_find_by_id_returns_project_when_exists ... ok
+test repository::project_repo::tests::test_exists_by_name_returns_true_when_exists ... ok
+test repository::project_repo::tests::test_save_inserts_new_project ... ok
+test repository::project_repo::tests::test_save_updates_existing_project ... ok
+test repository::project_repo::tests::test_find_all_with_name_asc ... ok
+test repository::project_repo::tests::test_find_all_with_created_at_desc ... ok
+
+test result: ok. 41 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.82s
+
+     Running unittests src/main.rs (/app/target/debug/deps/bake_loose-82ecda5e0dcaf25f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/graphql.rs (/app/target/debug/deps/graphql-ce0b81d6bfc999d6)
+
+running 8 tests
+test graphql::projects::create::test_returns_error_for_duplicate_name ... ok
+test graphql::projects::get::test_returns_null_when_not_found ... ok
+test graphql::projects::list::test_returns_projects_from_fixture ... ok
+test graphql::projects::create::test_returns_error_for_too_long_name ... ok
+test graphql::projects::create::test_creates_project_successfully ... ok
+test graphql::projects::get::test_returns_project ... ok
+test graphql::projects::list::test_returns_empty_list ... ok
+test graphql::projects::create::test_returns_error_for_empty_name ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.47s
+
+   Doc-tests bake_loose
+
+running 1 test
+test src/ports/unit_of_work.rs - ports::unit_of_work::UnitOfWork (line 17) ... ignored
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
