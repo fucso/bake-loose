@@ -1,9 +1,33 @@
 status: in_progress
 main_issue_branch: "iddue/21"
 started_at: "2026-07-27T16:11:35.377Z"
-updated_at: "2026-07-30T14:17:10.744Z"
+updated_at: "2026-07-30T14:18:06.398Z"
 
 active_tasks:
+  - issue: 35
+    branch: "iddue/35"
+    worker_pid: 98255
+    started_at: "2026-07-30T14:18:05.886Z"
+  - issue: 36
+    branch: "iddue/36"
+    worker_pid: 98484
+    started_at: "2026-07-30T14:18:05.977Z"
+  - issue: 37
+    branch: "iddue/37"
+    worker_pid: 98652
+    started_at: "2026-07-30T14:18:06.068Z"
+  - issue: 38
+    branch: "iddue/38"
+    worker_pid: 98079
+    started_at: "2026-07-30T14:18:06.203Z"
+  - issue: 39
+    branch: "iddue/39"
+    worker_pid: 98034
+    started_at: "2026-07-30T14:18:06.297Z"
+  - issue: 40
+    branch: "iddue/40"
+    worker_pid: 98888
+    started_at: "2026-07-30T14:18:06.396Z"
 
 completed_tasks:
   - 23
@@ -19,12 +43,6 @@ completed_tasks:
   - 34
 
 pending_tasks:
-  - 35
-  - 36
-  - 37
-  - 38
-  - 39
-  - 40
   - 41
 
 skipped_tasks:
