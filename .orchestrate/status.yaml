@@ -1,13 +1,9 @@
 status: in_progress
 main_issue_branch: "iddue/21"
 started_at: "2026-07-27T16:11:35.377Z"
-updated_at: "2026-07-30T14:05:24.597Z"
+updated_at: "2026-07-30T14:17:10.744Z"
 
 active_tasks:
-  - issue: 34
-    branch: "iddue/34"
-    worker_pid: 90960
-    started_at: "2026-07-30T14:05:24.590Z"
 
 completed_tasks:
   - 23
@@ -20,6 +16,7 @@ completed_tasks:
   - 29
   - 30
   - 32
+  - 34
 
 pending_tasks:
   - 35
