@@ -1,7 +1,7 @@
 status: in_progress
 main_issue_branch: "iddue/46"
 started_at: "2026-07-30T13:55:16.323Z"
-updated_at: "2026-07-30T14:08:42.492Z"
+updated_at: "2026-07-30T14:08:58.946Z"
 
 active_tasks:
   - issue: 48
@@ -12,13 +12,10 @@ active_tasks:
     branch: "iddue/49"
     worker_pid: 83425
     started_at: "2026-07-30T13:56:55.677Z"
-  - issue: 50
-    branch: "iddue/50"
-    worker_pid: 83237
-    started_at: "2026-07-30T13:56:55.755Z"
 
 completed_tasks:
   - 47
+  - 50
 
 pending_tasks:
 
