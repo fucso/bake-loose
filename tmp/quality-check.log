@@ -1,0 +1,25 @@
+=== 品質チェック ===
+環境名: iddue/35
+パス: .worktree/iddue/35
+
+変更ファイル: backend/src/use_case.rs
+--- cargo fmt --check ---
+--- cargo clippy --all-targets -- -D warnings ---
+    Checking bake-loose v0.1.0 (/worktrees/iddue/35/backend)
+    Finished `dev` profile [unoptimized + debuginfo] target(s)
+--- cargo test ---
+running 109 tests
+...
+test use_case::trial::create_trial::tests::test_execute_allows_no_name_and_memo ... ok
+test use_case::trial::create_trial::tests::test_execute_creates_trial_successfully ... ok
+...
+test result: ok. 109 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+     Running tests/graphql.rs
+running 8 tests
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+   Doc-tests bake_loose
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out
+
+すべてのチェック（cargo fmt --check / cargo clippy -D warnings / cargo test）が成功。
