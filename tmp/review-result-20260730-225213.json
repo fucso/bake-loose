@@ -1,0 +1,27 @@
+{
+  "overall_status": "ok",
+  "aspects": [
+    {
+      "id": "requirements",
+      "status": "ok",
+      "findings": []
+    },
+    {
+      "id": "design",
+      "status": "ok",
+      "findings": []
+    },
+    {
+      "id": "code-quality",
+      "status": "ok",
+      "findings": [
+        {
+          "level": "INFO",
+          "file": "backend/src/domain/actions/trial/add_step.rs",
+          "line": 214,
+          "message": "test_execute_does_not_add_step_to_original_trial は trial を execute() に値渡ししているため元の trial は所有権が移動しており、テスト名が示す「元の trial が変更されないこと」自体は検証できていない（実質的には戻り値の id/steps を確認しているだけ）。テスト名を実態に合わせるか、意図がある場合はコメントで補足すると良い。"
+        }
+      ]
+    }
+  ]
+}
