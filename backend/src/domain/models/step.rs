@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use super::parameter::{Parameter, ParameterId};
 use super::trial::TrialId;
 
 /// StepID
@@ -24,7 +25,7 @@ impl Default for StepId {
 }
 
 /// Step（Trial に紐づく試行の1工程）
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Step {
     id: StepId,
     trial_id: TrialId,
@@ -32,10 +33,11 @@ pub struct Step {
     position: i32,
     started_at: Option<DateTime<Utc>>,
     completed_at: Option<DateTime<Utc>>,
+    parameters: Vec<Parameter>,
 }
 
 impl Step {
-    /// 新しいStepを作成する（ID は自動生成）
+    /// 新しいStepを作成する（ID は自動生成、parameters は空）
     ///
     /// started_at が未指定の場合は Utc::now() を採用する
     pub fn new(
@@ -51,6 +53,7 @@ impl Step {
             position,
             started_at: Some(started_at.unwrap_or_else(Utc::now)),
             completed_at: None,
+            parameters: Vec::new(),
         }
     }
 
@@ -62,6 +65,7 @@ impl Step {
         position: i32,
         started_at: Option<DateTime<Utc>>,
         completed_at: Option<DateTime<Utc>>,
+        parameters: Vec<Parameter>,
     ) -> Self {
         Self {
             id,
@@ -70,6 +74,7 @@ impl Step {
             position,
             started_at,
             completed_at,
+            parameters,
         }
     }
 
@@ -105,6 +110,20 @@ impl Step {
     /// started_at を設定・クリアする
     pub fn set_started_at(&mut self, started_at: Option<DateTime<Utc>>) {
         self.started_at = started_at;
+    }
+
+    pub fn parameters(&self) -> &[Parameter] {
+        &self.parameters
+    }
+
+    /// Parameter を追加する
+    pub fn add_parameter(&mut self, parameter: Parameter) {
+        self.parameters.push(parameter);
+    }
+
+    /// Parameter を削除する（該当IDが存在しない場合は何もしない）
+    pub fn remove_parameter(&mut self, parameter_id: &ParameterId) {
+        self.parameters.retain(|p| p.id() != parameter_id);
     }
 }
 
@@ -159,7 +178,62 @@ mod tests {
             0,
             Some(Utc::now()),
             Some(Utc::now()),
+            Vec::new(),
         );
         assert!(completed.is_completed());
+    }
+
+    #[test]
+    fn test_new_step_has_no_parameters() {
+        let step = Step::new(TrialId::new(), "こね".to_string(), 0, None);
+        assert!(step.parameters().is_empty());
+    }
+
+    #[test]
+    fn test_add_parameter_appends_to_parameters() {
+        use super::super::parameter::{Parameter, ParameterContent};
+
+        let mut step = Step::new(TrialId::new(), "こね".to_string(), 0, None);
+        let parameter = Parameter::new(
+            step.id().clone(),
+            ParameterContent::Text {
+                value: "打ち粉を追加".to_string(),
+            },
+        );
+        let parameter_id = parameter.id().clone();
+
+        step.add_parameter(parameter);
+
+        assert_eq!(step.parameters().len(), 1);
+        assert_eq!(step.parameters()[0].id(), &parameter_id);
+    }
+
+    #[test]
+    fn test_remove_parameter_removes_matching_id() {
+        use super::super::parameter::{Parameter, ParameterContent};
+
+        let mut step = Step::new(TrialId::new(), "こね".to_string(), 0, None);
+        let parameter = Parameter::new(
+            step.id().clone(),
+            ParameterContent::Text {
+                value: "打ち粉を追加".to_string(),
+            },
+        );
+        let parameter_id = parameter.id().clone();
+        step.add_parameter(parameter);
+        assert_eq!(step.parameters().len(), 1);
+
+        step.remove_parameter(&parameter_id);
+
+        assert!(step.parameters().is_empty());
+    }
+
+    #[test]
+    fn test_remove_parameter_is_noop_when_id_not_found() {
+        use super::super::parameter::ParameterId;
+
+        let mut step = Step::new(TrialId::new(), "こね".to_string(), 0, None);
+        step.remove_parameter(&ParameterId::new());
+        assert!(step.parameters().is_empty());
     }
 }
