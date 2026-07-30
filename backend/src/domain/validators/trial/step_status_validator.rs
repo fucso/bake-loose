@@ -36,6 +36,7 @@ mod tests {
             0,
             Some(chrono::Utc::now()),
             Some(chrono::Utc::now()),
+            Vec::new(),
         );
         assert_eq!(require_in_progress(&step), Err(Error::StepAlreadyCompleted));
     }

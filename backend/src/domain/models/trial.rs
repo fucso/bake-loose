@@ -31,7 +31,7 @@ pub enum TrialStatus {
 }
 
 /// Trial（Project に紐づく試行。Step を含む aggregate root）
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Trial {
     id: TrialId,
     project_id: ProjectId,
