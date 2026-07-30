@@ -1,0 +1,166 @@
+# Sub-Issue #29 実装レポート
+
+## 実装概要
+
+Trial に Step（任意個の Parameter 付き）を追加する `add_step` ドメインアクションを実装した。
+`backend/src/domain/actions/trial/add_step.rs` を新規作成し、`Trial → Step → Parameter` の順（親→子→孫）で構築するルールを遵守した。
+
+- `position` は既存の `steps().len()` から自動採番する
+- `started_at` は未指定時 `Step::new` 内で `Utc::now()` が採用される（既存モデル実装を利用）
+- バリデーション: Trial 完了済み（`TrialAlreadyCompleted`）、空/長すぎる Step 名（`InvalidStepName`）、不正な Parameter（`InvalidParameter { parameter_index, reason }`）をエラーとして返す
+- 複数バリデーターを組み合わせるため、AGENTS.md/domain.md の規約に従いアクション固有の `Error` enum に集約し、ネストしたバリデーターの Error 型は `pub use` で再エクスポートした
+
+## 変更ファイル
+
+| ファイル | 変更内容 |
+|---------|---------|
+| `backend/src/domain/actions/trial.rs` | `pub mod add_step;` を追加 |
+| `backend/src/domain/actions/trial/add_step.rs` | 新規追加。`add_step` ドメインアクション（Command/Error/validate/execute/run）とテスト16件 |
+
+## 品質チェック結果
+
+```
+=== 品質チェック ===
+環境名: iddue/29
+パス: .worktree/iddue/29
+
+変更ファイル: backend/src/domain/actions/trial.rs
+tmp/quality-check.log
+--- cargo fmt --check ---
+--- cargo clippy --all-targets -- -D warnings ---
+--- cargo test ---
+
+running 74 tests
+test domain::actions::project::create_project::tests::test_execute_generates_unique_id ... ok
+test domain::actions::project::create_project::tests::test_name_validation ... ok
+test domain::actions::trial::add_step::tests::test_run_defaults_started_at_to_now_when_unspecified ... ok
+test domain::actions::trial::add_step::tests::test_run_allows_no_parameters ... ok
+test domain::actions::trial::add_step::tests::test_run_attaches_parameters_to_step ... ok
+test domain::actions::trial::add_step::tests::test_run_appends_step_with_position_zero_for_first_step ... ok
+test domain::actions::project::create_project::tests::test_run_creates_project_with_valid_name ... ok
+test domain::actions::trial::add_step::tests::test_run_err_when_step_name_is_empty ... ok
+test domain::actions::trial::add_step::tests::test_run_err_when_parameter_invalid ... ok
+test domain::actions::trial::add_step::tests::test_run_auto_increments_position_for_subsequent_steps ... ok
+test domain::actions::trial::add_step::tests::test_execute_preserves_trial_id_and_adds_step ... ok
+test domain::actions::trial::add_step::tests::test_validate_does_not_mutate_state ... ok
+test domain::actions::trial::add_step::tests::test_run_uses_specified_started_at ... ok
+test domain::actions::trial::add_step::tests::test_run_err_when_trial_already_completed ... ok
+test domain::models::parameter::tests::test_duration_unit_variants ... ok
+test domain::actions::trial::create_trial::tests::test_execute_allows_no_name_and_memo ... ok
+test domain::actions::trial::create_trial::tests::test_execute_generates_unique_id_and_links_project ... ok
+test domain::actions::trial::add_step::tests::test_run_err_when_step_name_too_long ... ok
+test domain::models::parameter::tests::test_duration_value_creation ... ok
+test domain::models::parameter::tests::test_parameter_content_key_value_with_quantity ... ok
+test domain::actions::trial::create_trial::tests::test_run_creates_trial_in_progress_with_no_steps ... ok
+test domain::models::parameter::tests::test_parameter_content_key_value_with_text ... ok
+test domain::models::parameter::tests::test_parameter_content_text ... ok
+test domain::models::parameter::tests::test_parameter_content_duration_with_note ... ok
+test domain::models::parameter::tests::test_parameter_content_time_marker ... ok
+test domain::models::parameter::tests::test_parameter_id_new_generates_unique_ids ... ok
+test domain::models::parameter::tests::test_parameter_new_and_from_raw ... ok
+test domain::models::project::tests::test_project_new_creates_with_auto_id ... ok
+test domain::models::step::tests::test_add_parameter_appends_to_parameters ... ok
+test domain::models::project::tests::test_project_id_new_generates_unique_ids ... ok
+test domain::models::step::tests::test_is_completed_reflects_completed_at ... ok
+test domain::models::step::tests::test_new_step_has_no_parameters ... ok
+test domain::models::step::tests::test_remove_parameter_is_noop_when_id_not_found ... ok
+test domain::models::step::tests::test_remove_parameter_removes_matching_id ... ok
+test domain::models::step::tests::test_set_started_at_can_set_and_clear ... ok
+test domain::models::step::tests::test_step_id_new_generates_unique_ids ... ok
+test domain::models::step::tests::test_step_new_defaults_started_at_to_now_when_unspecified ... ok
+test domain::models::step::tests::test_step_new_uses_specified_started_at ... ok
+test domain::models::trial::tests::test_add_step_appends_to_steps ... ok
+test domain::models::trial::tests::test_complete_transitions_status_to_completed ... ok
+test domain::models::trial::tests::test_steps_mut_allows_mutating_step_by_id ... ok
+test domain::models::trial::tests::test_trial_id_new_generates_unique_ids ... ok
+test domain::models::trial::tests::test_trial_new_creates_in_progress_with_no_steps ... ok
+test domain::validators::trial::parameter_validator::tests::test_validate_err_for_duration_with_negative_value ... ok
+test domain::validators::trial::parameter_validator::tests::test_validate_err_for_time_marker_with_negative_value ... ok
+test domain::validators::trial::parameter_validator::tests::test_validate_ok_for_duration_with_non_negative_value ... ok
+test domain::validators::trial::parameter_validator::tests::test_validate_ok_for_key_value_quantity_with_unit ... ok
+test domain::validators::trial::parameter_validator::tests::test_validate_ok_for_key_value_text ... ok
+test domain::validators::trial::parameter_validator::tests::test_validate_err_for_key_value_quantity_with_empty_unit ... ok
+test domain::validators::trial::parameter_validator::tests::test_validate_ok_for_text ... ok
+test domain::validators::trial::parameter_validator::tests::test_validate_ok_for_time_marker_with_non_negative_value ... ok
+test domain::validators::trial::step_existence_validator::tests::test_require_exists_err_when_step_not_found ... ok
+test domain::validators::trial::step_existence_validator::tests::test_require_exists_ok_when_step_exists ... ok
+test domain::validators::trial::step_name_validator::tests::test_validate_name ... ok
+test domain::validators::trial::step_status_validator::tests::test_require_in_progress_err_when_completed ... ok
+test domain::validators::trial::step_status_validator::tests::test_require_in_progress_ok_when_not_completed ... ok
+test domain::validators::trial::trial_status_validator::tests::test_require_in_progress_err_when_completed ... ok
+test domain::validators::trial::trial_status_validator::tests::test_require_in_progress_ok_when_in_progress ... ok
+test repository::project_repo::tests::test_find_by_id_returns_project_when_exists ... ok
+test use_case::project::create_project::tests::test_execute_creates_project_successfully ... ok
+test use_case::project::create_project::tests::test_execute_returns_domain_error_for_empty_name ... ok
+test use_case::project::create_project::tests::test_execute_returns_domain_error_for_too_long_name ... ok
+test use_case::project::create_project::tests::test_execute_returns_duplicate_error_when_name_exists ... ok
+test use_case::project::get_project::tests::test_get_project_not_found ... ok
+test repository::project_repo::tests::test_save_inserts_new_project ... ok
+test use_case::project::get_project::tests::test_get_project_returns_specified_project_from_multiple ... ok
+test repository::project_repo::tests::test_save_updates_existing_project ... ok
+test use_case::project::list_projects::tests::test_list_projects_empty ... ok
+test use_case::project::list_projects::tests::test_list_projects_returns_sorted_by_name_asc ... ok
+test repository::project_repo::tests::test_find_all_with_name_asc ... ok
+test repository::project_repo::tests::test_exists_by_name_returns_false_when_not_exists ... ok
+test repository::project_repo::tests::test_find_by_id_returns_none_when_not_exists ... ok
+test repository::project_repo::tests::test_exists_by_name_returns_true_when_exists ... ok
+test repository::project_repo::tests::test_find_all_with_created_at_desc ... ok
+
+test result: ok. 74 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.31s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 8 tests
+test graphql::projects::create::test_returns_error_for_too_long_name ... ok
+test graphql::projects::list::test_returns_empty_list ... ok
+test graphql::projects::create::test_returns_error_for_duplicate_name ... ok
+test graphql::projects::get::test_returns_project ... ok
+test graphql::projects::get::test_returns_null_when_not_found ... ok
+test graphql::projects::list::test_returns_projects_from_fixture ... ok
+test graphql::projects::create::test_creates_project_successfully ... ok
+test graphql::projects::create::test_returns_error_for_empty_name ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.00s
+
+
+running 1 test
+test src/ports/unit_of_work.rs - ports::unit_of_work::UnitOfWork (line 17) ... ignored
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
+
+## レビュー結果
+
+✅ レビュー OK（全観点 CRITICAL なし）
+
+- requirements: OK（Issue の完了条件を全てカバー）
+- design: OK（構築順序・エラー型集約パターンが AGENTS.md/domain.md の規約と一致）
+- code-quality: OK（INFO 1件: テスト名の意図が伝わりにくいとの指摘があり、`test_execute_does_not_add_step_to_original_trial` を `test_execute_preserves_trial_id_and_adds_step` にリネームして解消済み）
+
+## コミット情報
+
+- Branch: iddue/29
+- Commit: 2cc59c4c1338003af4d19c5f6bc5cb68358b43d3
+- Message: [Issue#29] action: add_step
+
+## 引き継ぎ事項
+
+- 本 Issue はドメイン層（`domain/actions/trial/add_step.rs`）のみのスコープであり、use_case 層・presentation 層への配線は未実装（既存の Trial 関連 use_case もまだ存在しない）。後続で Trial 系 use_case を実装する Issue が add_step アクションを利用する想定。
+- `add_step::Command.parameters` は `Vec<ParameterContent>` を直接受け取る設計とした。use_case 層で GraphQL 入力型からこの型へ変換する処理が必要になる。
+- 依存 Issue #24（Trial/Step モデル）・#25（Parameter モデル）は既に iddue/21 ブランチ上に実装済みであったため、本 Issue ではモデル変更は行っていない。
+
+## ステータス
+
+completed
+
+## Metadata
+
+- **開始:** 2026-07-30 22:45:47 JST
+- **終了:** 2026-07-30 22:53:57 JST
+- **実行時間:** 8分10秒
+- **消費トークン:** output 55687 / cache_read 8708244 / cache_write 328838
+- **Claude ログ:** /Users/sohosoki/.claude/projects/-Users-sohosoki-dev-fucso-bake-loose/abf13922-5e64-44f4-b7a9-974f5fb90c7d.jsonl
