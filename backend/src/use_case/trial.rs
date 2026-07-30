@@ -4,4 +4,5 @@
 
 pub mod add_step;
 pub mod create_trial;
+pub mod update_step;
 pub mod update_trial;
