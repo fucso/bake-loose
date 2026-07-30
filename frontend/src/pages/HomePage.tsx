@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useQuery } from 'urql'
 import { Button } from '@/components/ui/button'
 
 type HealthStatus = {
@@ -6,9 +7,16 @@ type HealthStatus = {
   message: string
 } | null
 
+const GRAPHQL_SMOKE_TEST_QUERY = `
+  query GraphqlSmokeTest {
+    __typename
+  }
+`
+
 function HomePage() {
   const [health, setHealth] = useState<HealthStatus>(null)
   const [error, setError] = useState<string | null>(null)
+  const [graphqlResult] = useQuery({ query: GRAPHQL_SMOKE_TEST_QUERY })
 
   const checkHealth = () => {
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080'
@@ -39,6 +47,17 @@ function HomePage() {
       <Button className="mt-4" onClick={checkHealth}>
         再確認
       </Button>
+
+      <h2 className="mt-6 text-lg font-semibold">GraphQL Status</h2>
+      {graphqlResult.error && (
+        <p className="text-destructive">Error: {graphqlResult.error.message}</p>
+      )}
+      {graphqlResult.data && (
+        <pre className="mt-2 rounded-md bg-muted p-4 text-sm">
+          {JSON.stringify(graphqlResult.data, null, 2)}
+        </pre>
+      )}
+      {graphqlResult.fetching && <p>Loading...</p>}
     </div>
   )
 }
