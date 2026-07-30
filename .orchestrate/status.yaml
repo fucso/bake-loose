@@ -1,21 +1,9 @@
-status: failed
+status: in_progress
 main_issue_branch: "iddue/21"
 started_at: "2026-07-27T16:11:35.377Z"
 updated_at: "2026-07-30T14:25:54.872Z"
 
 active_tasks:
-  - issue: 36
-    branch: "iddue/36"
-    worker_pid: 98484
-    started_at: "2026-07-30T14:18:05.977Z"
-  - issue: 39
-    branch: "iddue/39"
-    worker_pid: 98034
-    started_at: "2026-07-30T14:18:06.297Z"
-  - issue: 40
-    branch: "iddue/40"
-    worker_pid: 98888
-    started_at: "2026-07-30T14:18:06.396Z"
 
 completed_tasks:
   - 23
@@ -31,12 +19,14 @@ completed_tasks:
   - 34
   - 35
   - 38
+  - 36
+  - 39
+  - 40
 
 pending_tasks:
+  - 37
   - 41
 
 skipped_tasks:
 
 failed_tasks:
-  - issue: 37
-    error_message: "worker-crashed"
