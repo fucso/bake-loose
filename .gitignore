@@ -12,3 +12,10 @@
 
 # IDDUE workflow
 .iddue/
+
+# Frontend build artifacts
+frontend/dist/
+frontend/dev-dist/
+frontend/node_modules/
+frontend/.pnpm-store/
+frontend/tsconfig.tsbuildinfo
