@@ -1,0 +1,20 @@
+{
+  "overall_status": "ok",
+  "aspects": [
+    {
+      "id": "requirements",
+      "status": "ok",
+      "findings": []
+    },
+    {
+      "id": "design",
+      "status": "ok",
+      "findings": []
+    },
+    {
+      "id": "code-quality",
+      "status": "ok",
+      "findings": []
+    }
+  ]
+}
