@@ -107,6 +107,16 @@ impl Trial {
         self.steps.push(step);
     }
 
+    /// name を設定・クリアする
+    pub fn set_name(&mut self, name: Option<String>) {
+        self.name = name;
+    }
+
+    /// memo を設定・クリアする
+    pub fn set_memo(&mut self, memo: Option<String>) {
+        self.memo = memo;
+    }
+
     /// Trial を完了状態にする
     pub fn complete(&mut self) {
         self.status = TrialStatus::Completed;
@@ -152,6 +162,28 @@ mod tests {
 
         assert_eq!(trial.steps().len(), 1);
         assert_eq!(trial.steps()[0].id(), &step_id);
+    }
+
+    #[test]
+    fn test_set_name_can_set_and_clear() {
+        let mut trial = Trial::new(ProjectId::new(), Some("元の名前".to_string()), None);
+
+        trial.set_name(Some("新しい名前".to_string()));
+        assert_eq!(trial.name(), Some("新しい名前"));
+
+        trial.set_name(None);
+        assert_eq!(trial.name(), None);
+    }
+
+    #[test]
+    fn test_set_memo_can_set_and_clear() {
+        let mut trial = Trial::new(ProjectId::new(), None, Some("元のメモ".to_string()));
+
+        trial.set_memo(Some("新しいメモ".to_string()));
+        assert_eq!(trial.memo(), Some("新しいメモ"));
+
+        trial.set_memo(None);
+        assert_eq!(trial.memo(), None);
     }
 
     #[test]
