@@ -4,10 +4,6 @@ started_at: "2026-07-27T16:11:35.377Z"
 updated_at: "2026-07-30T13:49:17.278Z"
 
 active_tasks:
-  - issue: 28
-    branch: "iddue/28"
-    worker_pid: 63864
-    started_at: "2026-07-30T13:19:30.439Z"
   - issue: 31
     branch: "iddue/31"
     worker_pid: 63720
@@ -31,6 +27,7 @@ completed_tasks:
   - 25
   - 26
   - 27
+  - 28
 
 pending_tasks:
   - 34
