@@ -106,6 +106,13 @@ impl Step {
     pub fn set_started_at(&mut self, started_at: Option<DateTime<Utc>>) {
         self.started_at = started_at;
     }
+
+    /// Step を完了状態にする
+    ///
+    /// completed_at が未指定の場合は Utc::now() を採用する
+    pub fn complete(&mut self, completed_at: Option<DateTime<Utc>>) {
+        self.completed_at = Some(completed_at.unwrap_or_else(Utc::now));
+    }
 }
 
 #[cfg(test)]
@@ -144,6 +151,27 @@ mod tests {
 
         step.set_started_at(None);
         assert_eq!(step.started_at(), None);
+    }
+
+    #[test]
+    fn test_complete_uses_specified_completed_at() {
+        let mut step = Step::new(TrialId::new(), "こね".to_string(), 0, None);
+        let completed_at = Utc::now();
+
+        step.complete(Some(completed_at));
+
+        assert_eq!(step.completed_at(), Some(&completed_at));
+        assert!(step.is_completed());
+    }
+
+    #[test]
+    fn test_complete_defaults_completed_at_to_now_when_unspecified() {
+        let mut step = Step::new(TrialId::new(), "こね".to_string(), 0, None);
+
+        step.complete(None);
+
+        assert!(step.completed_at().is_some());
+        assert!(step.is_completed());
     }
 
     #[test]
