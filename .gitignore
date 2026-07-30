@@ -12,3 +12,9 @@
 
 # IDDUE workflow
 .iddue/
+
+# Node.js / frontend
+node_modules/
+dist/
+.pnpm-store/
+*.tsbuildinfo
