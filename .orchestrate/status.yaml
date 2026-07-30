@@ -8,10 +8,6 @@ active_tasks:
     branch: "iddue/36"
     worker_pid: 98484
     started_at: "2026-07-30T14:18:05.977Z"
-  - issue: 38
-    branch: "iddue/38"
-    worker_pid: 98079
-    started_at: "2026-07-30T14:18:06.203Z"
   - issue: 39
     branch: "iddue/39"
     worker_pid: 98034
@@ -34,6 +30,7 @@ completed_tasks:
   - 32
   - 34
   - 35
+  - 38
 
 pending_tasks:
   - 41
