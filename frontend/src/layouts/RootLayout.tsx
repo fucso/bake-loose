@@ -2,17 +2,13 @@ import { Link, Outlet } from 'react-router-dom'
 
 function RootLayout() {
   return (
-    <div style={{ fontFamily: 'system-ui, sans-serif' }}>
-      <header style={{ padding: '1rem 2rem', borderBottom: '1px solid #ddd' }}>
-        <h1 style={{ margin: 0 }}>bake-loose</h1>
-        <nav style={{ marginTop: '0.5rem' }}>
-          <Link to="/" style={{ marginRight: '1rem' }}>
-            Home
-          </Link>
-          <Link to="/projects">Projects</Link>
-        </nav>
+    <div className="font-sans">
+      <header className="border-b px-8 py-4">
+        <Link to="/" className="text-xl font-bold">
+          bake-loose
+        </Link>
       </header>
-      <main style={{ padding: '2rem' }}>
+      <main className="p-8">
         <Outlet />
       </main>
     </div>
