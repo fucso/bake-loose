@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, FixedOffset};
 
 use crate::domain::models::parameter::{Parameter, ParameterContent, ParameterId};
 use crate::domain::models::step::StepId;
@@ -17,7 +17,7 @@ pub struct Command {
     /// Some の場合のみ変更
     pub name: Option<String>,
     /// None: 変更なし / Some(None): クリア / Some(Some(t)): t に設定
-    pub started_at: Option<Option<DateTime<Utc>>>,
+    pub started_at: Option<Option<DateTime<FixedOffset>>>,
     pub add_parameters: Vec<ParameterInput>,
     pub remove_parameter_ids: Vec<ParameterId>,
 }
@@ -77,7 +77,7 @@ pub fn execute(mut state: Trial, command: Command) -> Trial {
         step.set_name(name);
     }
     if let Some(started_at) = command.started_at {
-        step.set_started_at(started_at);
+        step.start(started_at);
     }
     for param in command.add_parameters {
         let parameter = Parameter::new(step.id().clone(), param.content);
@@ -149,7 +149,7 @@ mod tests {
     #[test]
     fn test_update_step_started_at_sets_value() {
         let (trial, step_id) = trial_with_step();
-        let new_started_at = Utc::now() - chrono::Duration::hours(1);
+        let new_started_at = crate::domain::timezone::now_jst() - chrono::Duration::hours(1);
         let command = Command {
             started_at: Some(Some(new_started_at)),
             ..base_command(step_id.clone())
@@ -229,8 +229,8 @@ mod tests {
             trial.id().clone(),
             "こね".to_string(),
             0,
-            Some(Utc::now()),
-            Some(Utc::now()),
+            Some(crate::domain::timezone::now_jst()),
+            Some(crate::domain::timezone::now_jst()),
             Vec::new(),
         );
         let step_id = completed_step.id().clone();

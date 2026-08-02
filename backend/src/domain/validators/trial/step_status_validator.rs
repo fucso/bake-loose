@@ -34,8 +34,8 @@ mod tests {
             TrialId::new(),
             "こね".to_string(),
             0,
-            Some(chrono::Utc::now()),
-            Some(chrono::Utc::now()),
+            Some(crate::domain::timezone::now_jst()),
+            Some(crate::domain::timezone::now_jst()),
             Vec::new(),
         );
         assert_eq!(require_in_progress(&step), Err(Error::StepAlreadyCompleted));

@@ -3,7 +3,7 @@
 //! ドメインモデルの Trial/Step/Parameter をラップした GraphQL 型。
 
 use async_graphql::{Enum, InputObject, Json, MaybeUndefined, Object, ID};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, FixedOffset};
 
 use crate::domain::models::parameter::{Parameter as DomainParameter, ParameterContent};
 use crate::domain::models::step::Step as DomainStep;
@@ -67,17 +67,17 @@ impl Step {
     }
 
     /// Trial内での位置（0始まり）
-    async fn position(&self) -> i32 {
+    async fn position(&self) -> i16 {
         self.0.position()
     }
 
-    /// 開始日時
-    async fn started_at(&self) -> Option<DateTime<Utc>> {
+    /// 開始日時（JST）
+    async fn started_at(&self) -> Option<DateTime<FixedOffset>> {
         self.0.started_at().copied()
     }
 
-    /// 完了日時
-    async fn completed_at(&self) -> Option<DateTime<Utc>> {
+    /// 完了日時（JST）
+    async fn completed_at(&self) -> Option<DateTime<FixedOffset>> {
         self.0.completed_at().copied()
     }
 
@@ -168,7 +168,7 @@ pub struct UpdateTrialInput {
 #[derive(InputObject)]
 pub struct AddStepInput {
     pub name: String,
-    pub started_at: Option<DateTime<Utc>>,
+    pub started_at: Option<DateTime<FixedOffset>>,
     #[graphql(default)]
     pub parameters: Vec<Json<ParameterContent>>,
 }
@@ -179,7 +179,7 @@ pub struct AddStepInput {
 #[derive(InputObject)]
 pub struct UpdateStepInput {
     pub name: Option<String>,
-    pub started_at: MaybeUndefined<DateTime<Utc>>,
+    pub started_at: MaybeUndefined<DateTime<FixedOffset>>,
     #[graphql(default)]
     pub add_parameters: Vec<Json<ParameterContent>>,
     #[graphql(default)]

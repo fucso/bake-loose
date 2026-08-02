@@ -1,7 +1,7 @@
 //! TrialMutation リゾルバー
 
 use async_graphql::{Context, ErrorExtensions, MaybeUndefined, Object, Result, ID};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, FixedOffset};
 use uuid::Uuid;
 
 use crate::domain::actions::trial::{
@@ -171,7 +171,7 @@ impl TrialMutation {
         ctx: &Context<'_>,
         trial_id: ID,
         step_id: ID,
-        completed_at: Option<DateTime<Utc>>,
+        completed_at: Option<DateTime<FixedOffset>>,
     ) -> Result<Step> {
         let mut uow = ctx.create_unit_of_work()?;
         let trial_id = TrialId(parse_uuid(&trial_id, "trial")?);

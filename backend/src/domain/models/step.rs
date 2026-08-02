@@ -1,11 +1,12 @@
 //! Step ドメインモデル
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::parameter::{Parameter, ParameterId};
 use super::trial::TrialId;
+use crate::domain::timezone::{now_jst, to_jst};
 
 /// StepID
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -30,28 +31,28 @@ pub struct Step {
     id: StepId,
     trial_id: TrialId,
     name: String,
-    position: i32,
-    started_at: Option<DateTime<Utc>>,
-    completed_at: Option<DateTime<Utc>>,
+    position: i16,
+    started_at: Option<DateTime<FixedOffset>>,
+    completed_at: Option<DateTime<FixedOffset>>,
     parameters: Vec<Parameter>,
 }
 
 impl Step {
     /// 新しいStepを作成する（ID は自動生成、parameters は空）
     ///
-    /// started_at が未指定の場合は Utc::now() を採用する
+    /// started_at が未指定の場合は現在時刻（JST）を採用する
     pub fn new(
         trial_id: TrialId,
         name: String,
-        position: i32,
-        started_at: Option<DateTime<Utc>>,
+        position: i16,
+        started_at: Option<DateTime<FixedOffset>>,
     ) -> Self {
         Self {
             id: StepId::new(),
             trial_id,
             name,
             position,
-            started_at: Some(started_at.unwrap_or_else(Utc::now)),
+            started_at: Some(started_at.map(to_jst).unwrap_or_else(now_jst)),
             completed_at: None,
             parameters: Vec::new(),
         }
@@ -62,9 +63,9 @@ impl Step {
         id: StepId,
         trial_id: TrialId,
         name: String,
-        position: i32,
-        started_at: Option<DateTime<Utc>>,
-        completed_at: Option<DateTime<Utc>>,
+        position: i16,
+        started_at: Option<DateTime<FixedOffset>>,
+        completed_at: Option<DateTime<FixedOffset>>,
         parameters: Vec<Parameter>,
     ) -> Self {
         Self {
@@ -95,15 +96,15 @@ impl Step {
         self.name = name;
     }
 
-    pub fn position(&self) -> i32 {
+    pub fn position(&self) -> i16 {
         self.position
     }
 
-    pub fn started_at(&self) -> Option<&DateTime<Utc>> {
+    pub fn started_at(&self) -> Option<&DateTime<FixedOffset>> {
         self.started_at.as_ref()
     }
 
-    pub fn completed_at(&self) -> Option<&DateTime<Utc>> {
+    pub fn completed_at(&self) -> Option<&DateTime<FixedOffset>> {
         self.completed_at.as_ref()
     }
 
@@ -112,9 +113,9 @@ impl Step {
         self.completed_at.is_some()
     }
 
-    /// started_at を設定・クリアする
-    pub fn set_started_at(&mut self, started_at: Option<DateTime<Utc>>) {
-        self.started_at = started_at;
+    /// Step の開始日時を設定・クリアする（JSTに正規化して保持する）
+    pub fn start(&mut self, started_at: Option<DateTime<FixedOffset>>) {
+        self.started_at = started_at.map(to_jst);
     }
 
     pub fn parameters(&self) -> &[Parameter] {
@@ -133,15 +134,16 @@ impl Step {
 
     /// Step を完了状態にする
     ///
-    /// completed_at が未指定の場合は Utc::now() を採用する
-    pub fn complete(&mut self, completed_at: Option<DateTime<Utc>>) {
-        self.completed_at = Some(completed_at.unwrap_or_else(Utc::now));
+    /// completed_at が未指定の場合は現在時刻（JST）を採用する
+    pub fn complete(&mut self, completed_at: Option<DateTime<FixedOffset>>) {
+        self.completed_at = Some(completed_at.map(to_jst).unwrap_or_else(now_jst));
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::timezone::now_jst;
 
     #[test]
     fn test_step_id_new_generates_unique_ids() {
@@ -160,7 +162,7 @@ mod tests {
 
     #[test]
     fn test_step_new_uses_specified_started_at() {
-        let started_at = Utc::now() - chrono::Duration::hours(1);
+        let started_at = now_jst() - chrono::Duration::hours(1);
         let step = Step::new(TrialId::new(), "こね".to_string(), 0, Some(started_at));
         assert_eq!(step.started_at(), Some(&started_at));
     }
@@ -173,21 +175,21 @@ mod tests {
     }
 
     #[test]
-    fn test_set_started_at_can_set_and_clear() {
+    fn test_start_can_set_and_clear() {
         let mut step = Step::new(TrialId::new(), "こね".to_string(), 0, None);
 
-        let new_started_at = Utc::now();
-        step.set_started_at(Some(new_started_at));
+        let new_started_at = now_jst();
+        step.start(Some(new_started_at));
         assert_eq!(step.started_at(), Some(&new_started_at));
 
-        step.set_started_at(None);
+        step.start(None);
         assert_eq!(step.started_at(), None);
     }
 
     #[test]
     fn test_complete_uses_specified_completed_at() {
         let mut step = Step::new(TrialId::new(), "こね".to_string(), 0, None);
-        let completed_at = Utc::now();
+        let completed_at = now_jst();
 
         step.complete(Some(completed_at));
 
@@ -216,8 +218,8 @@ mod tests {
             trial_id,
             "こね".to_string(),
             0,
-            Some(Utc::now()),
-            Some(Utc::now()),
+            Some(now_jst()),
+            Some(now_jst()),
             Vec::new(),
         );
         assert!(completed.is_completed());
@@ -249,8 +251,8 @@ mod tests {
     }
 
     #[test]
-    fn test_remove_parameter_removes_matching_id() {
-        use super::super::parameter::{Parameter, ParameterContent};
+    fn test_remove_parameter_only_removes_matching_id() {
+        use super::super::parameter::{Parameter, ParameterContent, ParameterId};
 
         let mut step = Step::new(TrialId::new(), "こね".to_string(), 0, None);
         let parameter = Parameter::new(
@@ -261,19 +263,13 @@ mod tests {
         );
         let parameter_id = parameter.id().clone();
         step.add_parameter(parameter);
+
+        // 存在しないIDを remove しても既存の Parameter は残る
+        step.remove_parameter(&ParameterId::new());
         assert_eq!(step.parameters().len(), 1);
 
+        // 該当IDを remove すると削除される
         step.remove_parameter(&parameter_id);
-
-        assert!(step.parameters().is_empty());
-    }
-
-    #[test]
-    fn test_remove_parameter_is_noop_when_id_not_found() {
-        use super::super::parameter::ParameterId;
-
-        let mut step = Step::new(TrialId::new(), "こね".to_string(), 0, None);
-        step.remove_parameter(&ParameterId::new());
-        assert!(step.parameters().is_empty());
+        assert_eq!(step.parameters().len(), 0);
     }
 }

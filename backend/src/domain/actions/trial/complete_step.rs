@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, FixedOffset};
 
 use crate::domain::models::step::StepId;
 use crate::domain::models::trial::Trial;
@@ -8,7 +8,7 @@ use crate::domain::validators::trial::{
 
 pub struct Command {
     pub step_id: StepId,
-    pub completed_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<DateTime<FixedOffset>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,7 +61,7 @@ mod tests {
     #[test]
     fn test_run_completes_step_with_specified_completed_at() {
         let (trial, step_id) = trial_with_step();
-        let completed_at = Utc::now();
+        let completed_at = crate::domain::timezone::now_jst();
         let command = Command {
             step_id: step_id.clone(),
             completed_at: Some(completed_at),

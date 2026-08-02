@@ -203,7 +203,7 @@ impl TrialRepository for PgTrialRepository {
                     .bind(step.id().0)
                     .bind(trial.id().0)
                     .bind(step.name())
-                    .bind(step.position() as i16)
+                    .bind(step.position())
                     .bind(step.started_at().copied())
                     .bind(step.completed_at().copied()),
                 )

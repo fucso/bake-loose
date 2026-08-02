@@ -1,6 +1,6 @@
 //! complete_step ユースケース
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, FixedOffset};
 
 use crate::domain::actions::trial::complete_step;
 use crate::domain::models::step::StepId;
@@ -13,7 +13,7 @@ use crate::ports::unit_of_work::UnitOfWork;
 pub struct Input {
     pub trial_id: TrialId,
     pub step_id: StepId,
-    pub completed_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<DateTime<FixedOffset>>,
 }
 
 /// ユースケースのエラー

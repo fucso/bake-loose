@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, FixedOffset};
 
 use crate::domain::models::parameter::{Parameter, ParameterContent};
 use crate::domain::models::step::Step;
@@ -12,7 +12,7 @@ pub use step_name_validator::Error as StepNameError;
 
 pub struct Command {
     pub name: String,
-    pub started_at: Option<DateTime<Utc>>,
+    pub started_at: Option<DateTime<FixedOffset>>,
     pub parameters: Vec<ParameterContent>,
 }
 
@@ -43,7 +43,7 @@ pub fn validate(state: &Trial, command: &Command) -> Result<(), Error> {
 ///
 /// position は既存 Step 数から自動採番する
 pub fn execute(mut state: Trial, command: Command) -> Trial {
-    let position = state.steps().len() as i32;
+    let position = state.steps().len() as i16;
     let mut step = Step::new(
         state.id().clone(),
         command.name,
@@ -94,7 +94,7 @@ mod tests {
         let trial = run(trial, command("発酵")).unwrap();
         let trial = run(trial, command("焼成")).unwrap();
 
-        let positions: Vec<i32> = trial.steps().iter().map(|s| s.position()).collect();
+        let positions: Vec<i16> = trial.steps().iter().map(|s| s.position()).collect();
         assert_eq!(positions, vec![0, 1, 2]);
     }
 
@@ -109,7 +109,7 @@ mod tests {
     #[test]
     fn test_run_uses_specified_started_at() {
         let trial = Trial::new(ProjectId::new(), None, None);
-        let started_at = Utc::now() - chrono::Duration::hours(1);
+        let started_at = crate::domain::timezone::now_jst() - chrono::Duration::hours(1);
         let mut cmd = command("こね");
         cmd.started_at = Some(started_at);
 

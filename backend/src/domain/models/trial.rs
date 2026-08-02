@@ -194,13 +194,13 @@ mod tests {
         let target_id = target_step.id().clone();
         trial.add_step(target_step);
 
-        let new_started_at = chrono::Utc::now();
+        let new_started_at = crate::domain::timezone::now_jst();
         let step = trial
             .steps_mut()
             .iter_mut()
             .find(|s| s.id() == &target_id)
             .expect("target step must exist");
-        step.set_started_at(Some(new_started_at));
+        step.start(Some(new_started_at));
 
         let updated = trial.steps().iter().find(|s| s.id() == &target_id).unwrap();
         assert_eq!(updated.started_at(), Some(&new_started_at));

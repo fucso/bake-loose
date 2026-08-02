@@ -240,15 +240,6 @@ mod tests {
     }
 
     #[test]
-    fn test_duration_unit_variants() {
-        assert_eq!(DurationUnit::Day, DurationUnit::Day);
-        assert_eq!(DurationUnit::Hour, DurationUnit::Hour);
-        assert_eq!(DurationUnit::Minute, DurationUnit::Minute);
-        assert_eq!(DurationUnit::Second, DurationUnit::Second);
-        assert_ne!(DurationUnit::Day, DurationUnit::Hour);
-    }
-
-    #[test]
     fn test_duration_value_creation() {
         let duration = DurationValue::new(45.0, DurationUnit::Minute);
         assert_eq!(duration.value, 45.0);
