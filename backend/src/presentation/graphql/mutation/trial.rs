@@ -12,6 +12,7 @@ use crate::domain::models::parameter::{ParameterContent, ParameterId};
 use crate::domain::models::project::ProjectId;
 use crate::domain::models::step::StepId;
 use crate::domain::models::trial::TrialId;
+use crate::domain::timezone::JstDateTime;
 use crate::presentation::graphql::context::ContextExt;
 use crate::presentation::graphql::error::UserFacingError;
 use crate::presentation::graphql::types::trial::{
@@ -101,7 +102,7 @@ impl TrialMutation {
         let parameters: Vec<ParameterContent> = input.parameters.into_iter().map(|p| p.0).collect();
         let command = add_step_action::Command {
             name: input.name,
-            started_at: input.started_at,
+            started_at: input.started_at.map(JstDateTime::from_fixed_offset),
             parameters,
         };
         let use_case_input = add_step::Input { trial_id, command };
@@ -145,7 +146,8 @@ impl TrialMutation {
         let command = update_step_action::Command {
             step_id: step_id.clone(),
             name: input.name,
-            started_at: to_double_option(input.started_at),
+            started_at: to_double_option(input.started_at)
+                .map(|opt| opt.map(JstDateTime::from_fixed_offset)),
             add_parameters,
             remove_parameter_ids,
         };
@@ -180,7 +182,7 @@ impl TrialMutation {
         let use_case_input = complete_step::Input {
             trial_id,
             step_id: step_id.clone(),
-            completed_at,
+            completed_at: completed_at.map(JstDateTime::from_fixed_offset),
         };
 
         let trial = complete_step::execute(&mut uow, use_case_input)

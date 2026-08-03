@@ -204,8 +204,8 @@ impl TrialRepository for PgTrialRepository {
                     .bind(trial.id().0)
                     .bind(step.name())
                     .bind(step.position())
-                    .bind(step.started_at().copied())
-                    .bind(step.completed_at().copied()),
+                    .bind(step.started_at().copied().map(|d| d.into_fixed_offset()))
+                    .bind(step.completed_at().copied().map(|d| d.into_fixed_offset())),
                 )
                 .await
                 .map_err(|e| RepositoryError::Internal {

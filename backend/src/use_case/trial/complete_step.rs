@@ -1,10 +1,9 @@
 //! complete_step ユースケース
 
-use chrono::{DateTime, FixedOffset};
-
 use crate::domain::actions::trial::complete_step;
 use crate::domain::models::step::StepId;
 use crate::domain::models::trial::{Trial, TrialId};
+use crate::domain::timezone::JstDateTime;
 use crate::ports::trial_repository::TrialRepository;
 use crate::ports::unit_of_work::UnitOfWork;
 
@@ -13,7 +12,7 @@ use crate::ports::unit_of_work::UnitOfWork;
 pub struct Input {
     pub trial_id: TrialId,
     pub step_id: StepId,
-    pub completed_at: Option<DateTime<FixedOffset>>,
+    pub completed_at: Option<JstDateTime>,
 }
 
 /// ユースケースのエラー

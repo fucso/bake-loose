@@ -1,14 +1,13 @@
-use chrono::{DateTime, FixedOffset};
-
 use crate::domain::models::step::StepId;
 use crate::domain::models::trial::Trial;
+use crate::domain::timezone::JstDateTime;
 use crate::domain::validators::trial::{
     step_existence_validator, step_status_validator, trial_status_validator,
 };
 
 pub struct Command {
     pub step_id: StepId,
-    pub completed_at: Option<DateTime<FixedOffset>>,
+    pub completed_at: Option<JstDateTime>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,7 +60,7 @@ mod tests {
     #[test]
     fn test_run_completes_step_with_specified_completed_at() {
         let (trial, step_id) = trial_with_step();
-        let completed_at = crate::domain::timezone::now_jst();
+        let completed_at = crate::domain::timezone::JstDateTime::now();
         let command = Command {
             step_id: step_id.clone(),
             completed_at: Some(completed_at),

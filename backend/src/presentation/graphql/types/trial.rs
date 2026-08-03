@@ -73,12 +73,15 @@ impl Step {
 
     /// 開始日時（JST）
     async fn started_at(&self) -> Option<DateTime<FixedOffset>> {
-        self.0.started_at().copied()
+        self.0.started_at().copied().map(|d| d.into_fixed_offset())
     }
 
     /// 完了日時（JST）
     async fn completed_at(&self) -> Option<DateTime<FixedOffset>> {
-        self.0.completed_at().copied()
+        self.0
+            .completed_at()
+            .copied()
+            .map(|d| d.into_fixed_offset())
     }
 
     /// 完了済みかどうか

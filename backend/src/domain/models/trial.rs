@@ -194,7 +194,7 @@ mod tests {
         let target_id = target_step.id().clone();
         trial.add_step(target_step);
 
-        let new_started_at = crate::domain::timezone::now_jst();
+        let new_started_at = crate::domain::timezone::JstDateTime::now();
         let step = trial
             .steps_mut()
             .iter_mut()

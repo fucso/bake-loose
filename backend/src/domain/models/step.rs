@@ -1,12 +1,11 @@
 //! Step ドメインモデル
 
-use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::parameter::{Parameter, ParameterId};
 use super::trial::TrialId;
-use crate::domain::timezone::{now_jst, to_jst};
+use crate::domain::timezone::JstDateTime;
 
 /// StepID
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -32,27 +31,27 @@ pub struct Step {
     trial_id: TrialId,
     name: String,
     position: i16,
-    started_at: Option<DateTime<FixedOffset>>,
-    completed_at: Option<DateTime<FixedOffset>>,
+    started_at: Option<JstDateTime>,
+    completed_at: Option<JstDateTime>,
     parameters: Vec<Parameter>,
 }
 
 impl Step {
     /// 新しいStepを作成する（ID は自動生成、parameters は空）
     ///
-    /// started_at が未指定の場合は現在時刻（JST）を採用する
+    /// started_at が未指定の場合は現在時刻を採用する
     pub fn new(
         trial_id: TrialId,
         name: String,
         position: i16,
-        started_at: Option<DateTime<FixedOffset>>,
+        started_at: Option<JstDateTime>,
     ) -> Self {
         Self {
             id: StepId::new(),
             trial_id,
             name,
             position,
-            started_at: Some(started_at.map(to_jst).unwrap_or_else(now_jst)),
+            started_at: Some(started_at.unwrap_or_else(JstDateTime::now)),
             completed_at: None,
             parameters: Vec::new(),
         }
@@ -64,8 +63,8 @@ impl Step {
         trial_id: TrialId,
         name: String,
         position: i16,
-        started_at: Option<DateTime<FixedOffset>>,
-        completed_at: Option<DateTime<FixedOffset>>,
+        started_at: Option<JstDateTime>,
+        completed_at: Option<JstDateTime>,
         parameters: Vec<Parameter>,
     ) -> Self {
         Self {
@@ -100,11 +99,11 @@ impl Step {
         self.position
     }
 
-    pub fn started_at(&self) -> Option<&DateTime<FixedOffset>> {
+    pub fn started_at(&self) -> Option<&JstDateTime> {
         self.started_at.as_ref()
     }
 
-    pub fn completed_at(&self) -> Option<&DateTime<FixedOffset>> {
+    pub fn completed_at(&self) -> Option<&JstDateTime> {
         self.completed_at.as_ref()
     }
 
@@ -113,9 +112,9 @@ impl Step {
         self.completed_at.is_some()
     }
 
-    /// Step の開始日時を設定・クリアする（JSTに正規化して保持する）
-    pub fn start(&mut self, started_at: Option<DateTime<FixedOffset>>) {
-        self.started_at = started_at.map(to_jst);
+    /// Step の開始日時を設定・クリアする
+    pub fn start(&mut self, started_at: Option<JstDateTime>) {
+        self.started_at = started_at;
     }
 
     pub fn parameters(&self) -> &[Parameter] {
@@ -134,16 +133,15 @@ impl Step {
 
     /// Step を完了状態にする
     ///
-    /// completed_at が未指定の場合は現在時刻（JST）を採用する
-    pub fn complete(&mut self, completed_at: Option<DateTime<FixedOffset>>) {
-        self.completed_at = Some(completed_at.map(to_jst).unwrap_or_else(now_jst));
+    /// completed_at が未指定の場合は現在時刻を採用する
+    pub fn complete(&mut self, completed_at: Option<JstDateTime>) {
+        self.completed_at = Some(completed_at.unwrap_or_else(JstDateTime::now));
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::timezone::now_jst;
 
     #[test]
     fn test_step_id_new_generates_unique_ids() {
@@ -162,7 +160,7 @@ mod tests {
 
     #[test]
     fn test_step_new_uses_specified_started_at() {
-        let started_at = now_jst() - chrono::Duration::hours(1);
+        let started_at = JstDateTime::now() - chrono::Duration::hours(1);
         let step = Step::new(TrialId::new(), "こね".to_string(), 0, Some(started_at));
         assert_eq!(step.started_at(), Some(&started_at));
     }
@@ -178,7 +176,7 @@ mod tests {
     fn test_start_can_set_and_clear() {
         let mut step = Step::new(TrialId::new(), "こね".to_string(), 0, None);
 
-        let new_started_at = now_jst();
+        let new_started_at = JstDateTime::now();
         step.start(Some(new_started_at));
         assert_eq!(step.started_at(), Some(&new_started_at));
 
@@ -189,7 +187,7 @@ mod tests {
     #[test]
     fn test_complete_uses_specified_completed_at() {
         let mut step = Step::new(TrialId::new(), "こね".to_string(), 0, None);
-        let completed_at = now_jst();
+        let completed_at = JstDateTime::now();
 
         step.complete(Some(completed_at));
 
@@ -218,8 +216,8 @@ mod tests {
             trial_id,
             "こね".to_string(),
             0,
-            Some(now_jst()),
-            Some(now_jst()),
+            Some(JstDateTime::now()),
+            Some(JstDateTime::now()),
             Vec::new(),
         );
         assert!(completed.is_completed());

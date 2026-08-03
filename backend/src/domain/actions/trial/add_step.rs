@@ -1,8 +1,7 @@
-use chrono::{DateTime, FixedOffset};
-
 use crate::domain::models::parameter::{Parameter, ParameterContent};
 use crate::domain::models::step::Step;
 use crate::domain::models::trial::Trial;
+use crate::domain::timezone::JstDateTime;
 use crate::domain::validators::trial::{
     parameter_validator, step_name_validator, trial_status_validator,
 };
@@ -12,7 +11,7 @@ pub use step_name_validator::Error as StepNameError;
 
 pub struct Command {
     pub name: String,
-    pub started_at: Option<DateTime<FixedOffset>>,
+    pub started_at: Option<JstDateTime>,
     pub parameters: Vec<ParameterContent>,
 }
 
@@ -109,7 +108,7 @@ mod tests {
     #[test]
     fn test_run_uses_specified_started_at() {
         let trial = Trial::new(ProjectId::new(), None, None);
-        let started_at = crate::domain::timezone::now_jst() - chrono::Duration::hours(1);
+        let started_at = crate::domain::timezone::JstDateTime::now() - chrono::Duration::hours(1);
         let mut cmd = command("こね");
         cmd.started_at = Some(started_at);
 

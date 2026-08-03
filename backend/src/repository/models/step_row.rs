@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::domain::models::parameter::Parameter;
 use crate::domain::models::step::{Step, StepId};
 use crate::domain::models::trial::TrialId;
-use crate::domain::timezone::to_jst;
+use crate::domain::timezone::JstDateTime;
 
 /// steps テーブルの行を表すDBモデル
 #[derive(Debug, FromRow)]
@@ -30,8 +30,8 @@ impl StepRow {
             TrialId(self.trial_id),
             self.name,
             self.position,
-            self.started_at.map(to_jst),
-            self.completed_at.map(to_jst),
+            self.started_at.map(JstDateTime::from_utc),
+            self.completed_at.map(JstDateTime::from_utc),
             parameters,
         )
     }
