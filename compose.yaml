@@ -41,6 +41,7 @@ services:
       target: development
     environment:
       VITE_API_URL: http://localhost:8080
+      VITE_GRAPHQL_ENDPOINT: http://localhost:8080/graphql
     volumes:
       - ./frontend:/app
       - /app/node_modules
