@@ -1,0 +1,84 @@
+version: 1
+insights:
+  - id: "insight-001"
+    category: "style"
+    severity: "INFO"
+    title: "モノレポ構成でのトップレベル.gitignore変更を避ける"
+    guideline: |
+      サブディレクトリ（例: frontend/, backend/）に専用の .gitignore が存在する場合、
+      そのサブディレクトリ配下にのみ関係するパターンはサブディレクトリの .gitignore に記載する。
+      リポジトリトップレベルの .gitignore には、リポジトリ全体に関係するパターンのみを記載し、
+      特定サブディレクトリのみに関係するパターンを追加しない。
+    anti_pattern: |
+      frontend/ 配下にのみ関係する node_modules や build 成果物のパターンを、
+      frontend/.gitignore が存在するにもかかわらずリポジトリトップレベルの .gitignore に追加する。
+    good_pattern: |
+      frontend/ 配下のみに関係するパターンは frontend/.gitignore に追加し、
+      トップレベルの .gitignore はリポジトリ全体で共通のパターン（エディタ設定、OS生成ファイルなど）のみを保持する。
+    scope:
+      - ".gitignore"
+      - "frontend/.gitignore"
+      - "backend/.gitignore"
+    status: active
+    frequency: 1
+    last_seen: "2026-08-04"
+    added_from_pr: 51
+    evidence:
+      - pr: 51
+        comment_url: "https://github.com/fucso/bake-loose/pull/51#discussion_r3684105887"
+        summary: "frontend/.gitignore が有効なら関連パターンはそちらに書くべきで、トップレベルの .gitignore への追加は不要という指摘"
+
+  - id: "insight-002"
+    category: "design"
+    severity: "WARNING"
+    title: "副作用を伴う検証UIはページ単位に留め共通レイアウトに置かない"
+    guideline: |
+      GraphQL/バックエンド接続確認などのヘルスチェックやスモークテストのような、
+      API呼び出しを伴う検証UIはページ単位のコンポーネントに実装する。
+      RootLayout など全ページ共通のレイアウトコンポーネントに実装すると、
+      ページ遷移のたびに不要なAPI呼び出しが発生してしまう。
+    anti_pattern: |
+      ヘルスチェックのような常時実行される検証処理を RootLayout などの共通レイアウトに実装し、
+      ページ遷移のたびにAPIコールが走ってしまう。
+    good_pattern: |
+      ヘルスチェックは HomePage など特定のページコンポーネントに留め、
+      そのページを訪れたときにのみ検証が実行されるようにする。
+    scope:
+      - "frontend/src/pages/**"
+      - "frontend/src/layouts/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-08-04"
+    added_from_pr: 51
+    evidence:
+      - pr: 51
+        comment_url: "https://github.com/fucso/bake-loose/pull/51#discussion_r3684321144"
+        summary: "ヘルスチェックをページではなくレイアウトに実装すべきか問う指摘（結論：API呼び出し重複を避けるためページに留めるべきと判断）"
+
+  - id: "insight-003"
+    category: "design"
+    severity: "WARNING"
+    title: "ヘッダーはブランド要素のみクリック可能にし個別ページへのリンクは設けない"
+    guideline: |
+      共通ヘッダー（RootLayout 等）には各ページへの直接的なナビゲーションリンクを設けない。
+      アプリ名・ロゴなどブランドを表すコンポーネントのみクリック可能にし、
+      クリックするとトップページに戻る動線とする。
+    anti_pattern: |
+      ヘッダーに各ページへの個別リンクを並べる、またはアプリ名のコンポーネントがクリックしても
+      トップページに戻らない。
+    good_pattern: |
+      ヘッダーにはアプリ名（例: BakeLoose）のコンポーネントのみを配置し、
+      クリックするとトップページ（ホーム）に遷移するようにする。個別ページへのリンクはヘッダーに含めない。
+    scope:
+      - "frontend/src/layouts/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-08-04"
+    added_from_pr: 51
+    evidence:
+      - pr: 51
+        comment_url: "https://github.com/fucso/bake-loose/pull/51#discussion_r3684344773"
+        summary: "BakeLooseロゴのクリックでトップページに戻るようにすべきという指摘"
+      - pr: 51
+        comment_url: "https://github.com/fucso/bake-loose/pull/51#discussion_r3684346619"
+        summary: "ヘッダーに各ページへの個別リンクは不要という指摘"
