@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { Provider } from 'urql'
-import { createMockClient } from '@/mocks/urql'
+import { createMockClient } from '../../test/mocks/urql'
 import HomePage from './HomePage'
 
 describe('HomePage', () => {
