@@ -23,12 +23,23 @@ impl From<trial_status_validator::Error> for Error {
     }
 }
 
+impl From<step_existence_validator::Error> for Error {
+    fn from(_: step_existence_validator::Error) -> Self {
+        Error::StepNotFound
+    }
+}
+
+impl From<step_status_validator::Error> for Error {
+    fn from(_: step_status_validator::Error) -> Self {
+        Error::StepAlreadyCompleted
+    }
+}
+
 /// バリデーション
 pub fn validate(state: &Trial, command: &Command) -> Result<(), Error> {
     trial_status_validator::require_in_progress(state)?;
-    let step = step_existence_validator::require_exists(state, &command.step_id)
-        .map_err(|_| Error::StepNotFound)?;
-    step_status_validator::require_in_progress(step).map_err(|_| Error::StepAlreadyCompleted)?;
+    let step = step_existence_validator::require_exists(state, &command.step_id)?;
+    step_status_validator::require_in_progress(step)?;
     Ok(())
 }
 

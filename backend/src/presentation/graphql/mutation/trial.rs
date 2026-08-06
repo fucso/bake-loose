@@ -5,8 +5,7 @@ use chrono::{DateTime, FixedOffset};
 use uuid::Uuid;
 
 use crate::domain::actions::trial::{
-    add_step as add_step_action, update_step as update_step_action,
-    update_trial as update_trial_action,
+    add_step as add_step_action, update_trial as update_trial_action,
 };
 use crate::domain::models::parameter::{ParameterContent, ParameterId};
 use crate::domain::models::project::ProjectId;
@@ -132,18 +131,16 @@ impl TrialMutation {
         let trial_id = TrialId(parse_uuid(&trial_id, "trial")?);
         let step_id = StepId(parse_uuid(&step_id, "step")?);
 
-        let add_parameters = input
-            .add_parameters
-            .into_iter()
-            .map(|p| update_step_action::ParameterInput { content: p.0 })
-            .collect();
+        let add_parameters: Vec<ParameterContent> =
+            input.add_parameters.into_iter().map(|p| p.0).collect();
         let remove_parameter_ids = input
             .remove_parameter_ids
             .iter()
             .map(|id| parse_uuid(id, "parameter").map(ParameterId))
             .collect::<Result<Vec<_>>>()?;
 
-        let command = update_step_action::Command {
+        let use_case_input = update_step::Input {
+            trial_id,
             step_id: step_id.clone(),
             name: input.name,
             started_at: to_double_option(input.started_at)
@@ -151,7 +148,6 @@ impl TrialMutation {
             add_parameters,
             remove_parameter_ids,
         };
-        let use_case_input = update_step::Input { trial_id, command };
 
         let trial = update_step::execute(&mut uow, use_case_input)
             .await

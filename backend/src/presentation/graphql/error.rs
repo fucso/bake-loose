@@ -6,8 +6,9 @@ use async_graphql::ErrorExtensions;
 
 use crate::domain::actions::project::create_project as create_project_action;
 use crate::domain::actions::trial::{
-    add_step as add_step_action, complete_step as complete_step_action,
-    complete_trial as complete_trial_action, update_step as update_step_action,
+    add_parameter as add_parameter_action, add_step as add_step_action,
+    complete_step as complete_step_action, complete_trial as complete_trial_action,
+    remove_parameter as remove_parameter_action, update_step as update_step_action,
     update_trial as update_trial_action,
 };
 use crate::use_case::project::{create_project, get_project, list_projects};
@@ -252,29 +253,56 @@ impl UserFacingError for update_step::Error {
                 format!("Step名は{}文字以内で入力してください", max),
                 "VALIDATION_ERROR",
             ),
-            update_step::Error::Domain(update_step_action::Error::InvalidParameter {
+            update_step::Error::AddParameterDomain {
+                source: add_parameter_action::Error::TrialAlreadyCompleted,
+                ..
+            } => GraphQLError::new("完了済みのTrialのStepは更新できません", "VALIDATION_ERROR"),
+            update_step::Error::AddParameterDomain {
+                source: add_parameter_action::Error::StepNotFound,
+                ..
+            } => GraphQLError::new("指定されたStepが見つかりません", "NOT_FOUND"),
+            update_step::Error::AddParameterDomain {
+                source: add_parameter_action::Error::StepAlreadyCompleted,
+                ..
+            } => GraphQLError::new("完了済みのStepは更新できません", "VALIDATION_ERROR"),
+            update_step::Error::AddParameterDomain {
                 parameter_index,
-                reason: update_step_action::ParameterValidationError::NegativeDurationValue,
-            }) => GraphQLError::new(
+                source:
+                    add_parameter_action::Error::InvalidParameter(
+                        add_parameter_action::ParameterValidationError::NegativeDurationValue,
+                    ),
+            } => GraphQLError::new(
                 format!(
                     "{}番目のパラメーターの時間は0以上で入力してください",
                     parameter_index + 1
                 ),
                 "VALIDATION_ERROR",
             ),
-            update_step::Error::Domain(update_step_action::Error::InvalidParameter {
+            update_step::Error::AddParameterDomain {
                 parameter_index,
-                reason: update_step_action::ParameterValidationError::EmptyQuantityUnit,
-            }) => GraphQLError::new(
+                source:
+                    add_parameter_action::Error::InvalidParameter(
+                        add_parameter_action::ParameterValidationError::EmptyQuantityUnit,
+                    ),
+            } => GraphQLError::new(
                 format!(
                     "{}番目のパラメーターの単位を入力してください",
                     parameter_index + 1
                 ),
                 "VALIDATION_ERROR",
             ),
-            update_step::Error::Domain(update_step_action::Error::ParameterNotFound { .. }) => {
-                GraphQLError::new("指定されたParameterが見つかりません", "NOT_FOUND")
-            }
+            update_step::Error::RemoveParameterDomain(
+                remove_parameter_action::Error::TrialAlreadyCompleted,
+            ) => GraphQLError::new("完了済みのTrialのStepは更新できません", "VALIDATION_ERROR"),
+            update_step::Error::RemoveParameterDomain(
+                remove_parameter_action::Error::StepNotFound,
+            ) => GraphQLError::new("指定されたStepが見つかりません", "NOT_FOUND"),
+            update_step::Error::RemoveParameterDomain(
+                remove_parameter_action::Error::StepAlreadyCompleted,
+            ) => GraphQLError::new("完了済みのStepは更新できません", "VALIDATION_ERROR"),
+            update_step::Error::RemoveParameterDomain(
+                remove_parameter_action::Error::ParameterNotFound,
+            ) => GraphQLError::new("指定されたParameterが見つかりません", "NOT_FOUND"),
             update_step::Error::Infrastructure(e) => {
                 log::error!("Infrastructure error: {}", e);
                 GraphQLError::new("内部エラーが発生しました", "INTERNAL_ERROR")

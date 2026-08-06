@@ -1,20 +1,15 @@
-//! Step の name/started_at を更新するアクション
+//! Step からパラメーターを削除するアクション
 
+use crate::domain::models::parameter::ParameterId;
 use crate::domain::models::step::StepId;
 use crate::domain::models::trial::Trial;
-use crate::domain::timezone::JstDateTime;
 use crate::domain::validators::trial::{
-    step_existence_validator, step_name_validator, step_status_validator, trial_status_validator,
+    step_existence_validator, step_status_validator, trial_status_validator,
 };
 
-pub use step_name_validator::Error as StepNameValidationError;
-
-/// 指定したフィールドのみを部分更新する（`None` は未指定＝変更なし）
 pub struct Command {
     pub step_id: StepId,
-    pub name: Option<String>,
-    /// None: 変更なし / Some(None): クリア / Some(Some(t)): t に設定
-    pub started_at: Option<Option<JstDateTime>>,
+    pub parameter_id: ParameterId,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -22,7 +17,7 @@ pub enum Error {
     TrialAlreadyCompleted,
     StepNotFound,
     StepAlreadyCompleted,
-    InvalidStepName(StepNameValidationError),
+    ParameterNotFound,
 }
 
 impl From<trial_status_validator::Error> for Error {
@@ -49,8 +44,12 @@ pub fn validate(state: &Trial, command: &Command) -> Result<(), Error> {
     let step = step_existence_validator::require_exists(state, &command.step_id)?;
     step_status_validator::require_in_progress(step)?;
 
-    if let Some(name) = &command.name {
-        step_name_validator::validate(name).map_err(Error::InvalidStepName)?;
+    if !step
+        .parameters()
+        .iter()
+        .any(|p| p.id() == &command.parameter_id)
+    {
+        return Err(Error::ParameterNotFound);
     }
     Ok(())
 }
@@ -62,13 +61,7 @@ pub fn execute(mut state: Trial, command: Command) -> Trial {
         .iter_mut()
         .find(|s| s.id() == &command.step_id)
         .expect("validated to exist");
-
-    if let Some(name) = command.name {
-        step.set_name(name);
-    }
-    if let Some(started_at) = command.started_at {
-        step.start(started_at);
-    }
+    step.remove_parameter(&command.parameter_id);
 
     state
 }
@@ -82,80 +75,61 @@ pub fn run(state: Trial, command: Command) -> Result<Trial, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::models::parameter::{Parameter, ParameterContent};
     use crate::domain::models::project::ProjectId;
     use crate::domain::models::step::Step;
 
-    fn trial_with_step() -> (Trial, StepId) {
+    fn trial_with_step_and_parameter() -> (Trial, StepId, ParameterId) {
         let mut trial = Trial::new(ProjectId::new(), None, None);
-        let step = Step::new(trial.id().clone(), "こね".to_string(), 0, None);
+        let mut step = Step::new(trial.id().clone(), "こね".to_string(), 0, None);
         let step_id = step.id().clone();
+        let parameter = Parameter::new(
+            step_id.clone(),
+            ParameterContent::Text {
+                value: "打ち粉を追加".to_string(),
+            },
+        );
+        let parameter_id = parameter.id().clone();
+        step.add_parameter(parameter);
         trial.add_step(step);
-        (trial, step_id)
-    }
-
-    fn base_command(step_id: StepId) -> Command {
-        Command {
-            step_id,
-            name: None,
-            started_at: None,
-        }
+        (trial, step_id, parameter_id)
     }
 
     #[test]
-    fn test_update_step_name() {
-        let (trial, step_id) = trial_with_step();
+    fn test_remove_parameter_removes_from_step() {
+        let (trial, step_id, parameter_id) = trial_with_step_and_parameter();
         let command = Command {
-            name: Some("新名称".to_string()),
-            ..base_command(step_id.clone())
+            step_id: step_id.clone(),
+            parameter_id,
         };
 
         let updated = run(trial, command).unwrap();
         let step = updated.steps().iter().find(|s| s.id() == &step_id).unwrap();
-        assert_eq!(step.name(), "新名称");
-    }
-
-    #[test]
-    fn test_update_step_started_at_clear() {
-        let (trial, step_id) = trial_with_step();
-        let command = Command {
-            started_at: Some(None),
-            ..base_command(step_id.clone())
-        };
-
-        let updated = run(trial, command).unwrap();
-        let step = updated.steps().iter().find(|s| s.id() == &step_id).unwrap();
-        assert_eq!(step.started_at(), None);
-    }
-
-    #[test]
-    fn test_update_step_started_at_sets_value() {
-        let (trial, step_id) = trial_with_step();
-        let new_started_at =
-            crate::domain::timezone::JstDateTime::now() - chrono::Duration::hours(1);
-        let command = Command {
-            started_at: Some(Some(new_started_at)),
-            ..base_command(step_id.clone())
-        };
-
-        let updated = run(trial, command).unwrap();
-        let step = updated.steps().iter().find(|s| s.id() == &step_id).unwrap();
-        assert_eq!(step.started_at(), Some(&new_started_at));
+        assert!(step.parameters().is_empty());
     }
 
     #[test]
     fn test_returns_error_when_trial_completed() {
-        let (mut trial, step_id) = trial_with_step();
+        let (mut trial, step_id, parameter_id) = trial_with_step_and_parameter();
         trial.complete();
+        let command = Command {
+            step_id,
+            parameter_id,
+        };
 
-        let result = run(trial, base_command(step_id));
+        let result = run(trial, command);
         assert_eq!(result, Err(Error::TrialAlreadyCompleted));
     }
 
     #[test]
     fn test_returns_error_when_step_not_found() {
-        let (trial, _) = trial_with_step();
+        let (trial, _, parameter_id) = trial_with_step_and_parameter();
+        let command = Command {
+            step_id: StepId::new(),
+            parameter_id,
+        };
 
-        let result = run(trial, base_command(StepId::new()));
+        let result = run(trial, command);
         assert_eq!(result, Err(Error::StepNotFound));
     }
 
@@ -173,20 +147,24 @@ mod tests {
         );
         let step_id = completed_step.id().clone();
         trial.add_step(completed_step);
+        let command = Command {
+            step_id,
+            parameter_id: ParameterId::new(),
+        };
 
-        let result = run(trial, base_command(step_id));
+        let result = run(trial, command);
         assert_eq!(result, Err(Error::StepAlreadyCompleted));
     }
 
     #[test]
-    fn test_returns_error_when_new_name_empty() {
-        let (trial, step_id) = trial_with_step();
+    fn test_returns_error_when_parameter_not_found() {
+        let (trial, step_id, _) = trial_with_step_and_parameter();
         let command = Command {
-            name: Some("".to_string()),
-            ..base_command(step_id)
+            step_id,
+            parameter_id: ParameterId::new(),
         };
 
         let result = run(trial, command);
-        assert!(matches!(result, Err(Error::InvalidStepName(_))));
+        assert_eq!(result, Err(Error::ParameterNotFound));
     }
 }
