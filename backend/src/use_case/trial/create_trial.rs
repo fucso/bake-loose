@@ -4,7 +4,7 @@ use crate::domain::actions::trial::create_trial;
 use crate::domain::models::project::ProjectId;
 use crate::domain::models::trial::Trial;
 use crate::ports::trial_repository::TrialRepository;
-use crate::ports::unit_of_work::UnitOfWork;
+use crate::ports::UnitOfWork;
 
 /// ユースケースの入力
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -25,9 +25,15 @@ pub enum Error {
     },
 }
 
+impl From<trial_status_validator::Error> for Error {
+    fn from(_: trial_status_validator::Error) -> Self {
+        Error::TrialAlreadyCompleted
+    }
+}
+
 /// バリデーション
 pub fn validate(state: &Trial, command: &Command) -> Result<(), Error> {
-    trial_status_validator::require_in_progress(state).map_err(|_| Error::TrialAlreadyCompleted)?;
+    trial_status_validator::require_in_progress(state)?;
     step_name_validator::validate(&command.name).map_err(Error::InvalidStepName)?;
     for (parameter_index, content) in command.parameters.iter().enumerate() {
         parameter_validator::validate(content).map_err(|reason| Error::InvalidParameter {

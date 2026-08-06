@@ -5,7 +5,7 @@
 use crate::domain::actions::trial::add_step;
 use crate::domain::models::trial::{Trial, TrialId};
 use crate::ports::trial_repository::TrialRepository;
-use crate::ports::unit_of_work::UnitOfWork;
+use crate::ports::UnitOfWork;
 
 /// ユースケースの入力
 pub struct Input {

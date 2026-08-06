@@ -46,7 +46,7 @@ mod tests {
     use crate::domain::models::parameter::DurationUnit;
 
     #[test]
-    fn test_validate_ok_for_key_value_text() {
+    fn test_validate_key_value_text() {
         let content = ParameterContent::KeyValue {
             key: "発酵場所".to_string(),
             value: ParameterValue::Text {
@@ -57,67 +57,52 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_ok_for_key_value_quantity_with_unit() {
-        let content = ParameterContent::KeyValue {
-            key: "強力粉".to_string(),
-            value: ParameterValue::Quantity {
-                amount: 300.0,
-                unit: "g".to_string(),
-            },
-        };
-        assert_eq!(validate(&content), Ok(()));
+    fn test_validate_key_value_quantity() {
+        // (unit, expected)
+        let cases = [("g", Ok(())), ("   ", Err(Error::EmptyQuantityUnit))];
+
+        for (unit, expected) in cases {
+            let content = ParameterContent::KeyValue {
+                key: "強力粉".to_string(),
+                value: ParameterValue::Quantity {
+                    amount: 300.0,
+                    unit: unit.to_string(),
+                },
+            };
+            assert_eq!(validate(&content), expected);
+        }
     }
 
     #[test]
-    fn test_validate_err_for_key_value_quantity_with_empty_unit() {
-        let content = ParameterContent::KeyValue {
-            key: "強力粉".to_string(),
-            value: ParameterValue::Quantity {
-                amount: 300.0,
-                unit: "   ".to_string(),
-            },
-        };
-        assert_eq!(validate(&content), Err(Error::EmptyQuantityUnit));
+    fn test_validate_duration() {
+        // (value, expected)
+        let cases = [(90.0, Ok(())), (-1.0, Err(Error::NegativeDurationValue))];
+
+        for (value, expected) in cases {
+            let content = ParameterContent::Duration {
+                duration: DurationValue::new(value, DurationUnit::Minute),
+                note: "一次発酵".to_string(),
+            };
+            assert_eq!(validate(&content), expected);
+        }
     }
 
     #[test]
-    fn test_validate_ok_for_duration_with_non_negative_value() {
-        let content = ParameterContent::Duration {
-            duration: DurationValue::new(90.0, DurationUnit::Minute),
-            note: "一次発酵".to_string(),
-        };
-        assert_eq!(validate(&content), Ok(()));
+    fn test_validate_time_marker() {
+        // (value, expected)
+        let cases = [(0.0, Ok(())), (-5.0, Err(Error::NegativeDurationValue))];
+
+        for (value, expected) in cases {
+            let content = ParameterContent::TimeMarker {
+                at: DurationValue::new(value, DurationUnit::Minute),
+                note: "焼成開始から".to_string(),
+            };
+            assert_eq!(validate(&content), expected);
+        }
     }
 
     #[test]
-    fn test_validate_err_for_duration_with_negative_value() {
-        let content = ParameterContent::Duration {
-            duration: DurationValue::new(-1.0, DurationUnit::Minute),
-            note: "一次発酵".to_string(),
-        };
-        assert_eq!(validate(&content), Err(Error::NegativeDurationValue));
-    }
-
-    #[test]
-    fn test_validate_ok_for_time_marker_with_non_negative_value() {
-        let content = ParameterContent::TimeMarker {
-            at: DurationValue::new(0.0, DurationUnit::Minute),
-            note: "焼成開始から".to_string(),
-        };
-        assert_eq!(validate(&content), Ok(()));
-    }
-
-    #[test]
-    fn test_validate_err_for_time_marker_with_negative_value() {
-        let content = ParameterContent::TimeMarker {
-            at: DurationValue::new(-5.0, DurationUnit::Minute),
-            note: "焼成開始から".to_string(),
-        };
-        assert_eq!(validate(&content), Err(Error::NegativeDurationValue));
-    }
-
-    #[test]
-    fn test_validate_ok_for_text() {
+    fn test_validate_text() {
         let content = ParameterContent::Text {
             value: "生地がべたつく場合は打ち粉を追加".to_string(),
         };

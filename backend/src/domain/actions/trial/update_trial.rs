@@ -46,46 +46,51 @@ mod tests {
         )
     }
 
-    #[test]
-    fn test_run_updates_name_and_memo_when_in_progress() {
-        let trial = in_progress_trial();
-        let command = Command {
-            name: Some(Some("新しい名前".to_string())),
-            memo: Some(Some("新しいメモ".to_string())),
-        };
-
-        let updated = run(trial, command).unwrap();
-
-        assert_eq!(updated.name(), Some("新しい名前"));
-        assert_eq!(updated.memo(), Some("新しいメモ"));
+    struct UpdateNameMemoCase {
+        input_name: Option<Option<&'static str>>,
+        input_memo: Option<Option<&'static str>>,
+        after_name: Option<&'static str>,
+        after_memo: Option<&'static str>,
     }
 
     #[test]
-    fn test_run_partially_updates_only_specified_fields() {
-        let trial = in_progress_trial();
-        let command = Command {
-            name: Some(Some("新しい名前".to_string())),
-            memo: None,
-        };
+    fn test_run_updates_name_and_memo() {
+        let cases = [
+            // 両方指定: 両方更新される
+            UpdateNameMemoCase {
+                input_name: Some(Some("新しい名前")),
+                input_memo: Some(Some("新しいメモ")),
+                after_name: Some("新しい名前"),
+                after_memo: Some("新しいメモ"),
+            },
+            // name のみ指定: memo は元の値を維持
+            UpdateNameMemoCase {
+                input_name: Some(Some("新しい名前")),
+                input_memo: None,
+                after_name: Some("新しい名前"),
+                after_memo: Some("元のメモ"),
+            },
+            // 両方 Some(None) 指定: 両方 None にクリアされる
+            UpdateNameMemoCase {
+                input_name: Some(None),
+                input_memo: Some(None),
+                after_name: None,
+                after_memo: None,
+            },
+        ];
 
-        let updated = run(trial, command).unwrap();
+        for case in cases {
+            let trial = in_progress_trial();
+            let command = Command {
+                name: case.input_name.map(|v| v.map(|s| s.to_string())),
+                memo: case.input_memo.map(|v| v.map(|s| s.to_string())),
+            };
 
-        assert_eq!(updated.name(), Some("新しい名前"));
-        assert_eq!(updated.memo(), Some("元のメモ"));
-    }
+            let updated = run(trial, command).unwrap();
 
-    #[test]
-    fn test_run_can_clear_name_and_memo_to_none() {
-        let trial = in_progress_trial();
-        let command = Command {
-            name: Some(None),
-            memo: Some(None),
-        };
-
-        let updated = run(trial, command).unwrap();
-
-        assert_eq!(updated.name(), None);
-        assert_eq!(updated.memo(), None);
+            assert_eq!(updated.name(), case.after_name);
+            assert_eq!(updated.memo(), case.after_memo);
+        }
     }
 
     #[test]

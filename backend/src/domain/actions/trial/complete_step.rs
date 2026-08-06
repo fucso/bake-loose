@@ -17,9 +17,15 @@ pub enum Error {
     StepAlreadyCompleted,
 }
 
+impl From<trial_status_validator::Error> for Error {
+    fn from(_: trial_status_validator::Error) -> Self {
+        Error::TrialAlreadyCompleted
+    }
+}
+
 /// バリデーション
 pub fn validate(state: &Trial, command: &Command) -> Result<(), Error> {
-    trial_status_validator::require_in_progress(state).map_err(|_| Error::TrialAlreadyCompleted)?;
+    trial_status_validator::require_in_progress(state)?;
     let step = step_existence_validator::require_exists(state, &command.step_id)
         .map_err(|_| Error::StepNotFound)?;
     step_status_validator::require_in_progress(step).map_err(|_| Error::StepAlreadyCompleted)?;
