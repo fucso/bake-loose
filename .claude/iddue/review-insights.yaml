@@ -82,3 +82,59 @@ insights:
       - pr: 51
         comment_url: "https://github.com/fucso/bake-loose/pull/51#discussion_r3684346619"
         summary: "ヘッダーに各ページへの個別リンクは不要という指摘"
+
+  - id: "insight-004"
+    category: "testing"
+    severity: "WARNING"
+    title: "新規CI追加時は既存CIを参考にlintも含める"
+    guideline: |
+      新しい対象（例: frontend）に CI ワークフローを追加する際は、既存の類似ワークフロー
+      （例: backend-ci.yml）の構成を参考にしつつ、test・build に加えて lint ステップも
+      含めること。
+    anti_pattern: |
+      test と build のみを実行するCIワークフローを新規追加し、lint をCIに含めない。
+    good_pattern: |
+      既存ワークフローの構成（install → test → build）を踏襲しつつ、
+      pnpm run lint 等の lint ステップも実行対象に含めてCIを定義する。
+    scope:
+      - ".github/workflows/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-08-11"
+    added_from_pr: 55
+    evidence:
+      - pr: 55
+        comment_url: "https://github.com/fucso/bake-loose/pull/55#pullrequestreview-4875869621"
+        summary: "backend-ci.yml を参考に frontend 用の CI を定義してほしいという指摘"
+      - pr: 55
+        comment_url: "https://github.com/fucso/bake-loose/pull/55#discussion_r3754589721"
+        summary: "frontend-ci.yml に eslint（lint）ステップの追加を求める指摘"
+
+  - id: "insight-005"
+    category: "style"
+    severity: "INFO"
+    title: "テスト用のセットアップ・モックファイルはtest/ディレクトリ配下に配置する"
+    guideline: |
+      フロントエンドのテスト共通セットアップファイルやGraphQLモック等の補助ファイルは
+      src 配下ではなく、専用の test/ ディレクトリ
+      （例: frontend/test/test-setup.ts, frontend/test/mocks/urql.ts）配下に配置すること。
+    anti_pattern: |
+      テストセットアップファイルやモックファイルを src/ 配下やテスト対象と同じ
+      ディレクトリに配置する。
+    good_pattern: |
+      frontend/test/test-setup.ts や frontend/test/mocks/urql.ts のように、
+      テスト関連の補助ファイルを test/ ディレクトリにまとめて配置する。
+    scope:
+      - "frontend/test/**"
+      - "frontend/src/**/*.test.*"
+    status: active
+    frequency: 1
+    last_seen: "2026-08-11"
+    added_from_pr: 55
+    evidence:
+      - pr: 55
+        comment_url: "https://github.com/fucso/bake-loose/pull/55#discussion_r3729772626"
+        summary: "test-setup.ts を frontend/test/test-setup.ts に配置するよう指摘"
+      - pr: 55
+        comment_url: "https://github.com/fucso/bake-loose/pull/55#discussion_r3729773631"
+        summary: "urql モックファイルを frontend/test/mocks/urql.ts に配置するよう指摘"
