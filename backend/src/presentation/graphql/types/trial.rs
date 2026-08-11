@@ -168,12 +168,12 @@ pub struct UpdateTrialInput {
 }
 
 /// Step追加時の入力
+///
+/// パラメーターの追加は行わない（`updateStep` の `addParameters` で行う）
 #[derive(InputObject)]
 pub struct AddStepInput {
     pub name: String,
     pub started_at: Option<DateTime<FixedOffset>>,
-    #[graphql(default)]
-    pub parameters: Vec<Json<ParameterContent>>,
 }
 
 /// Step更新時の入力

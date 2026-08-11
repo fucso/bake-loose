@@ -98,11 +98,9 @@ impl TrialMutation {
         let mut uow = ctx.create_unit_of_work()?;
         let trial_id = TrialId(parse_uuid(&trial_id, "trial")?);
 
-        let parameters: Vec<ParameterContent> = input.parameters.into_iter().map(|p| p.0).collect();
         let command = add_step_action::Command {
             name: input.name,
             started_at: input.started_at.map(JstDateTime::from_fixed_offset),
-            parameters,
         };
         let use_case_input = add_step::Input { trial_id, command };
 

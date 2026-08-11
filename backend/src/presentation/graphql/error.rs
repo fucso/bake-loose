@@ -195,26 +195,6 @@ impl UserFacingError for add_step::Error {
                 format!("Step名は{}文字以内で入力してください", max),
                 "VALIDATION_ERROR",
             ),
-            add_step::Error::Domain(add_step_action::Error::InvalidParameter {
-                parameter_index,
-                reason: add_step_action::ParameterValidationError::NegativeDurationValue,
-            }) => GraphQLError::new(
-                format!(
-                    "{}番目のパラメーターの時間は0以上で入力してください",
-                    parameter_index + 1
-                ),
-                "VALIDATION_ERROR",
-            ),
-            add_step::Error::Domain(add_step_action::Error::InvalidParameter {
-                parameter_index,
-                reason: add_step_action::ParameterValidationError::EmptyQuantityUnit,
-            }) => GraphQLError::new(
-                format!(
-                    "{}番目のパラメーターの単位を入力してください",
-                    parameter_index + 1
-                ),
-                "VALIDATION_ERROR",
-            ),
             add_step::Error::Infrastructure(e) => {
                 log::error!("Infrastructure error: {}", e);
                 GraphQLError::new("内部エラーが発生しました", "INTERNAL_ERROR")

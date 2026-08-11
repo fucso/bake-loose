@@ -13,8 +13,31 @@ async fn add_step(pool: PgPool, trial_id: &str, name: &str) -> serde_json::Value
         r#"
         mutation {{
             addStep(trialId: "{trial_id}", input: {{
-                name: "{name}",
-                parameters: [
+                name: "{name}"
+            }}) {{
+                id
+                name
+                position
+                isCompleted
+                parameters {{ id content }}
+            }}
+        }}
+        "#
+    );
+    execute_graphql(pool, &query).await
+}
+
+/// Step を追加した上で `updateStep` の `addParameters` を用いて
+/// パラメーターを2件（text, key_value）付与する
+async fn add_step_with_parameters(pool: PgPool, trial_id: &str, name: &str) -> serde_json::Value {
+    let added = add_step(pool.clone(), trial_id, name).await;
+    let step_id = added["addStep"]["id"].as_str().unwrap().to_string();
+
+    let query = format!(
+        r#"
+        mutation {{
+            updateStep(trialId: "{trial_id}", stepId: "{step_id}", input: {{
+                addParameters: [
                     {{ type: "text", value: "打ち粉を追加" }},
                     {{ type: "key_value", key: "強力粉", value: {{ type: "quantity", amount: 300, unit: "g" }} }}
                 ]
@@ -42,6 +65,19 @@ async fn test_add_step_successfully(pool: PgPool) {
     assert_eq!(step["name"], "こね");
     assert_eq!(step["position"], 0);
     assert_eq!(step["isCompleted"], false);
+    // addStep はパラメーターを受け付けない（追加は updateStep の addParameters で行う）
+    assert_eq!(step["parameters"], json!([]));
+}
+
+#[sqlx::test(
+    migrations = "./migrations",
+    fixtures("../../fixtures/projects.sql", "../../fixtures/trials.sql")
+)]
+async fn test_add_step_then_update_step_attaches_parameters(pool: PgPool) {
+    let data = add_step_with_parameters(pool, TRIAL_ID, "こね").await;
+
+    let step = &data["updateStep"];
+    assert_eq!(step["name"], "こね");
 
     let contents: Vec<_> = step["parameters"]
         .as_array()
@@ -104,9 +140,9 @@ async fn test_add_step_returns_error_when_trial_completed(pool: PgPool) {
     fixtures("../../fixtures/projects.sql", "../../fixtures/trials.sql")
 )]
 async fn test_update_step_name_and_parameters(pool: PgPool) {
-    let added = add_step(pool.clone(), TRIAL_ID, "こね").await;
-    let step_id = added["addStep"]["id"].as_str().unwrap().to_string();
-    let text_parameter_id = added["addStep"]["parameters"][0]["id"]
+    let seeded = add_step_with_parameters(pool.clone(), TRIAL_ID, "こね").await;
+    let step_id = seeded["updateStep"]["id"].as_str().unwrap().to_string();
+    let text_parameter_id = seeded["updateStep"]["parameters"][0]["id"]
         .as_str()
         .unwrap()
         .to_string();

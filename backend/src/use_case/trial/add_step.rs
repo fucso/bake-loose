@@ -76,7 +76,6 @@ mod tests {
         add_step::Command {
             name: name.to_string(),
             started_at: None,
-            parameters: Vec::new(),
         }
     }
 
