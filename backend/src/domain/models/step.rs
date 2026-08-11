@@ -131,6 +131,11 @@ impl Step {
         self.parameters.retain(|p| p.id() != parameter_id);
     }
 
+    /// Parameter を可変参照で取得する（既存 Parameter の内容更新に使用する）
+    pub fn parameters_mut(&mut self) -> &mut Vec<Parameter> {
+        &mut self.parameters
+    }
+
     /// Step を完了状態にする
     ///
     /// completed_at が未指定の場合は現在時刻を採用する
@@ -269,5 +274,36 @@ mod tests {
         // 該当IDを remove すると削除される
         step.remove_parameter(&parameter_id);
         assert_eq!(step.parameters().len(), 0);
+    }
+
+    #[test]
+    fn test_parameters_mut_allows_mutating_parameter_by_id() {
+        use super::super::parameter::{Parameter, ParameterContent};
+
+        let mut step = Step::new(TrialId::new(), "こね".to_string(), 0, None);
+        let parameter = Parameter::new(
+            step.id().clone(),
+            ParameterContent::Text {
+                value: "打ち粉を追加".to_string(),
+            },
+        );
+        let parameter_id = parameter.id().clone();
+        step.add_parameter(parameter);
+
+        let target = step
+            .parameters_mut()
+            .iter_mut()
+            .find(|p| p.id() == &parameter_id)
+            .unwrap();
+        target.set_content(ParameterContent::Text {
+            value: "更新後のメモ".to_string(),
+        });
+
+        assert_eq!(
+            step.parameters()[0].content(),
+            &ParameterContent::Text {
+                value: "更新後のメモ".to_string(),
+            }
+        );
     }
 }

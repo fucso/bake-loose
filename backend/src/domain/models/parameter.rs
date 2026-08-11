@@ -135,6 +135,11 @@ impl Parameter {
     pub fn content(&self) -> &ParameterContent {
         &self.content
     }
+
+    /// content を設定する
+    pub fn set_content(&mut self, content: ParameterContent) {
+        self.content = content;
+    }
 }
 
 #[cfg(test)]
@@ -258,5 +263,26 @@ mod tests {
 
         let rebuilt = Parameter::from_raw(parameter.id().clone(), step_id, content);
         assert_eq!(rebuilt.id(), parameter.id());
+    }
+
+    #[test]
+    fn test_set_content_replaces_content() {
+        let mut parameter = Parameter::new(
+            StepId::new(),
+            ParameterContent::Text {
+                value: "変更前".to_string(),
+            },
+        );
+
+        parameter.set_content(ParameterContent::Text {
+            value: "変更後".to_string(),
+        });
+
+        assert_eq!(
+            parameter.content(),
+            &ParameterContent::Text {
+                value: "変更後".to_string(),
+            }
+        );
     }
 }
