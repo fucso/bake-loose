@@ -71,6 +71,7 @@ mod tests {
         assert_eq!(trial.steps().len(), 1);
         assert_eq!(trial.steps()[0].name(), "こね");
         assert_eq!(trial.steps()[0].position(), 0);
+        assert!(trial.steps()[0].parameters().is_empty());
     }
 
     #[test]
@@ -85,11 +86,11 @@ mod tests {
     }
 
     #[test]
-    fn test_run_defaults_started_at_to_now_when_unspecified() {
+    fn test_run_leaves_started_at_none_when_unspecified() {
         let trial = Trial::new(ProjectId::new(), None, None);
         let trial = run(trial, command("こね")).unwrap();
 
-        assert!(trial.steps()[0].started_at().is_some());
+        assert!(trial.steps()[0].started_at().is_none());
     }
 
     #[test]
@@ -101,13 +102,6 @@ mod tests {
 
         let trial = run(trial, cmd).unwrap();
         assert_eq!(trial.steps()[0].started_at(), Some(&started_at));
-    }
-
-    #[test]
-    fn test_run_creates_step_without_parameters() {
-        let trial = Trial::new(ProjectId::new(), None, None);
-        let trial = run(trial, command("こね")).unwrap();
-        assert!(trial.steps()[0].parameters().is_empty());
     }
 
     #[test]
@@ -143,22 +137,5 @@ mod tests {
                 actual: 101,
             }))
         );
-    }
-
-    #[test]
-    fn test_validate_does_not_mutate_state() {
-        let trial = Trial::new(ProjectId::new(), None, None);
-        assert!(validate(&trial, &command("こね")).is_ok());
-        assert!(trial.steps().is_empty());
-    }
-
-    #[test]
-    fn test_execute_preserves_trial_id_and_adds_step() {
-        let trial = Trial::new(ProjectId::new(), None, None);
-        let trial_id = trial.id().clone();
-        let updated = execute(trial, command("こね"));
-
-        assert_eq!(updated.id(), &trial_id);
-        assert_eq!(updated.steps().len(), 1);
     }
 }

@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::step::Step;
+use super::step::{Step, StepId};
 use crate::domain::models::project::ProjectId;
 
 /// TrialID
@@ -97,6 +97,11 @@ impl Trial {
         &self.steps
     }
 
+    /// Step を ID で取得する
+    pub fn step(&self, id: &StepId) -> Option<&Step> {
+        self.steps.iter().find(|step| step.id() == id)
+    }
+
     /// Step を可変参照として取得・変更するためのアクセサ
     pub fn steps_mut(&mut self) -> &mut Vec<Step> {
         &mut self.steps
@@ -162,6 +167,17 @@ mod tests {
 
         assert_eq!(trial.steps().len(), 1);
         assert_eq!(trial.steps()[0].id(), &step_id);
+    }
+
+    #[test]
+    fn test_step_returns_matching_step_by_id() {
+        let mut trial = Trial::new(ProjectId::new(), None, None);
+        let step = Step::new(trial.id().clone(), "こね".to_string(), 0, None);
+        let step_id = step.id().clone();
+        trial.add_step(step);
+
+        assert_eq!(trial.step(&step_id).unwrap().id(), &step_id);
+        assert!(trial.step(&StepId::new()).is_none());
     }
 
     #[test]

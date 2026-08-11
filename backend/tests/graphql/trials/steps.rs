@@ -210,6 +210,63 @@ async fn test_update_step_returns_not_found_for_missing_step(pool: PgPool) {
     migrations = "./migrations",
     fixtures("../../fixtures/projects.sql", "../../fixtures/trials.sql")
 )]
+async fn test_update_step_sets_started_at(pool: PgPool) {
+    let added = add_step(pool.clone(), TRIAL_ID, "こね").await;
+    let step_id = added["addStep"]["id"].as_str().unwrap().to_string();
+
+    let query = format!(
+        r#"
+        mutation {{
+            updateStep(trialId: "{TRIAL_ID}", stepId: "{step_id}", input: {{
+                startedAt: "2026-01-01T09:00:00+09:00"
+            }}) {{
+                startedAt
+            }}
+        }}
+        "#
+    );
+    let data = execute_graphql(pool, &query).await;
+
+    assert_eq!(data["updateStep"]["startedAt"], "2026-01-01T09:00:00+09:00");
+}
+
+#[sqlx::test(
+    migrations = "./migrations",
+    fixtures("../../fixtures/projects.sql", "../../fixtures/trials.sql")
+)]
+async fn test_update_step_clears_started_at(pool: PgPool) {
+    let added = add_step(pool.clone(), TRIAL_ID, "こね").await;
+    let step_id = added["addStep"]["id"].as_str().unwrap().to_string();
+
+    let set_query = format!(
+        r#"
+        mutation {{
+            updateStep(trialId: "{TRIAL_ID}", stepId: "{step_id}", input: {{
+                startedAt: "2026-01-01T09:00:00+09:00"
+            }}) {{ startedAt }}
+        }}
+        "#
+    );
+    execute_graphql(pool.clone(), &set_query).await;
+
+    let clear_query = format!(
+        r#"
+        mutation {{
+            updateStep(trialId: "{TRIAL_ID}", stepId: "{step_id}", input: {{
+                startedAt: null
+            }}) {{ startedAt }}
+        }}
+        "#
+    );
+    let data = execute_graphql(pool, &clear_query).await;
+
+    assert_eq!(data["updateStep"]["startedAt"], serde_json::Value::Null);
+}
+
+#[sqlx::test(
+    migrations = "./migrations",
+    fixtures("../../fixtures/projects.sql", "../../fixtures/trials.sql")
+)]
 async fn test_complete_step_successfully(pool: PgPool) {
     let added = add_step(pool.clone(), TRIAL_ID, "こね").await;
     let step_id = added["addStep"]["id"].as_str().unwrap().to_string();

@@ -7,7 +7,8 @@ use crate::domain::models::parameter::{ParameterContent, ParameterId};
 use crate::domain::models::step::StepId;
 use crate::domain::models::trial::Trial;
 use crate::domain::validators::trial::{
-    parameter_validator, step_existence_validator, step_status_validator, trial_status_validator,
+    parameter_validator, parameter_variant_validator, step_existence_validator,
+    step_status_validator, trial_status_validator,
 };
 
 pub use parameter_validator::Error as ParameterValidationError;
@@ -46,21 +47,10 @@ impl From<step_status_validator::Error> for Error {
     }
 }
 
-/// 同じ ParameterContent バリアントかどうかを判定する（内部の値は問わない）
-fn same_variant(a: &ParameterContent, b: &ParameterContent) -> bool {
-    matches!(
-        (a, b),
-        (
-            ParameterContent::KeyValue { .. },
-            ParameterContent::KeyValue { .. }
-        ) | (
-            ParameterContent::Duration { .. },
-            ParameterContent::Duration { .. }
-        ) | (
-            ParameterContent::TimeMarker { .. },
-            ParameterContent::TimeMarker { .. }
-        ) | (ParameterContent::Text { .. }, ParameterContent::Text { .. })
-    )
+impl From<parameter_variant_validator::Error> for Error {
+    fn from(_: parameter_variant_validator::Error) -> Self {
+        Error::ParameterContentTypeMismatch
+    }
 }
 
 /// バリデーション
@@ -68,20 +58,14 @@ pub fn validate(state: &Trial, command: &Command) -> Result<(), Error> {
     trial_status_validator::require_in_progress(state)?;
     step_existence_validator::require_exists(state, &command.step_id)?;
     let step = state
-        .steps()
-        .iter()
-        .find(|step| step.id() == &command.step_id)
+        .step(&command.step_id)
         .expect("step existence already validated");
     step_status_validator::require_in_progress(step)?;
 
     let parameter = step
-        .parameters()
-        .iter()
-        .find(|p| p.id() == &command.parameter_id)
+        .parameter(&command.parameter_id)
         .ok_or(Error::ParameterNotFound)?;
-    if !same_variant(parameter.content(), &command.content) {
-        return Err(Error::ParameterContentTypeMismatch);
-    }
+    parameter_variant_validator::require_same_variant(parameter.content(), &command.content)?;
     parameter_validator::validate(&command.content).map_err(Error::InvalidParameter)?;
     Ok(())
 }

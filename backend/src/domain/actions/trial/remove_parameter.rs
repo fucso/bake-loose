@@ -43,17 +43,11 @@ pub fn validate(state: &Trial, command: &Command) -> Result<(), Error> {
     trial_status_validator::require_in_progress(state)?;
     step_existence_validator::require_exists(state, &command.step_id)?;
     let step = state
-        .steps()
-        .iter()
-        .find(|step| step.id() == &command.step_id)
+        .step(&command.step_id)
         .expect("step existence already validated");
     step_status_validator::require_in_progress(step)?;
 
-    if !step
-        .parameters()
-        .iter()
-        .any(|p| p.id() == &command.parameter_id)
-    {
+    if step.parameter(&command.parameter_id).is_none() {
         return Err(Error::ParameterNotFound);
     }
     Ok(())

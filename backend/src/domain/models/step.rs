@@ -39,7 +39,8 @@ pub struct Step {
 impl Step {
     /// 新しいStepを作成する（ID は自動生成、parameters は空）
     ///
-    /// started_at が未指定の場合は現在時刻を採用する
+    /// started_at が未指定の場合は `None`（未着手）のままインスタンス化する
+    /// （開始前のStepをあらかじめ登録しておく使い方を想定する）
     pub fn new(
         trial_id: TrialId,
         name: String,
@@ -51,7 +52,7 @@ impl Step {
             trial_id,
             name,
             position,
-            started_at: Some(started_at.unwrap_or_else(JstDateTime::now)),
+            started_at,
             completed_at: None,
             parameters: Vec::new(),
         }
@@ -121,6 +122,11 @@ impl Step {
         &self.parameters
     }
 
+    /// Parameter を ID で取得する
+    pub fn parameter(&self, id: &ParameterId) -> Option<&Parameter> {
+        self.parameters.iter().find(|p| p.id() == id)
+    }
+
     /// Parameter を追加する
     pub fn add_parameter(&mut self, parameter: Parameter) {
         self.parameters.push(parameter);
@@ -156,9 +162,9 @@ mod tests {
     }
 
     #[test]
-    fn test_step_new_defaults_started_at_to_now_when_unspecified() {
+    fn test_step_new_leaves_started_at_none_when_unspecified() {
         let step = Step::new(TrialId::new(), "こね".to_string(), 0, None);
-        assert!(step.started_at().is_some());
+        assert!(step.started_at().is_none());
         assert!(step.completed_at().is_none());
         assert!(!step.is_completed());
     }
@@ -251,6 +257,24 @@ mod tests {
 
         assert_eq!(step.parameters().len(), 1);
         assert_eq!(step.parameters()[0].id(), &parameter_id);
+    }
+
+    #[test]
+    fn test_parameter_returns_matching_parameter_by_id() {
+        use super::super::parameter::{Parameter, ParameterContent, ParameterId};
+
+        let mut step = Step::new(TrialId::new(), "こね".to_string(), 0, None);
+        let parameter = Parameter::new(
+            step.id().clone(),
+            ParameterContent::Text {
+                value: "打ち粉を追加".to_string(),
+            },
+        );
+        let parameter_id = parameter.id().clone();
+        step.add_parameter(parameter);
+
+        assert_eq!(step.parameter(&parameter_id).unwrap().id(), &parameter_id);
+        assert!(step.parameter(&ParameterId::new()).is_none());
     }
 
     #[test]
