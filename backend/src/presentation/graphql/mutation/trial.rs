@@ -1,11 +1,12 @@
 //! TrialMutation リゾルバー
 
-use async_graphql::{Context, ErrorExtensions, MaybeUndefined, Object, Result, ID};
+use async_graphql::{Context, ErrorExtensions, Json, MaybeUndefined, Object, Result, ID};
 use chrono::{DateTime, FixedOffset};
 use uuid::Uuid;
 
 use crate::domain::actions::trial::{
-    add_step as add_step_action, update_trial as update_trial_action,
+    add_step as add_step_action, update_parameter as update_parameter_action,
+    update_trial as update_trial_action,
 };
 use crate::domain::models::parameter::{ParameterContent, ParameterId};
 use crate::domain::models::project::ProjectId;
@@ -15,10 +16,11 @@ use crate::domain::timezone::JstDateTime;
 use crate::presentation::graphql::context::ContextExt;
 use crate::presentation::graphql::error::UserFacingError;
 use crate::presentation::graphql::types::trial::{
-    AddStepInput, CreateTrialInput, Step, Trial, UpdateStepInput, UpdateTrialInput,
+    AddStepInput, CreateTrialInput, Parameter, Step, Trial, UpdateStepInput, UpdateTrialInput,
 };
 use crate::use_case::trial::{
-    add_step, complete_step, complete_trial, create_trial, update_step, update_trial,
+    add_step, complete_step, complete_trial, create_trial, update_parameter, update_step,
+    update_trial,
 };
 
 fn parse_uuid(id: &ID, label: &str) -> Result<Uuid> {
@@ -159,6 +161,46 @@ impl TrialMutation {
             .expect("step must exist after update_step");
 
         Ok(step.into())
+    }
+
+    /// 設定済みParameterの内容を更新する（末端の値のみ。種類の変更はできない）
+    async fn update_parameter(
+        &self,
+        ctx: &Context<'_>,
+        trial_id: ID,
+        step_id: ID,
+        parameter_id: ID,
+        content: Json<ParameterContent>,
+    ) -> Result<Parameter> {
+        let mut uow = ctx.create_unit_of_work()?;
+        let trial_id = TrialId(parse_uuid(&trial_id, "trial")?);
+        let step_id = StepId(parse_uuid(&step_id, "step")?);
+        let parameter_id = ParameterId(parse_uuid(&parameter_id, "parameter")?);
+
+        let command = update_parameter_action::Command {
+            step_id: step_id.clone(),
+            parameter_id: parameter_id.clone(),
+            content: content.0,
+        };
+        let use_case_input = update_parameter::Input { trial_id, command };
+
+        let trial = update_parameter::execute(&mut uow, use_case_input)
+            .await
+            .map_err(|e| e.to_user_facing().extend())?;
+
+        let step = trial
+            .steps()
+            .iter()
+            .find(|s| s.id() == &step_id)
+            .expect("step must exist after update_parameter");
+        let parameter = step
+            .parameters()
+            .iter()
+            .find(|p| p.id() == &parameter_id)
+            .cloned()
+            .expect("parameter must exist after update_parameter");
+
+        Ok(parameter.into())
     }
 
     /// Stepを完了状態にする

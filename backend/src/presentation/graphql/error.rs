@@ -9,12 +9,13 @@ use crate::domain::actions::trial::{
     add_parameter as add_parameter_action, add_step as add_step_action,
     complete_step as complete_step_action, complete_trial as complete_trial_action,
     create_trial as create_trial_action, remove_parameter as remove_parameter_action,
-    update_step as update_step_action, update_trial as update_trial_action,
+    update_parameter as update_parameter_action, update_step as update_step_action,
+    update_trial as update_trial_action,
 };
 use crate::use_case::project::{create_project, get_project, list_projects};
 use crate::use_case::trial::{
     add_step, complete_step, complete_trial, create_trial, get_trial, list_trials_by_project,
-    update_step, update_trial,
+    update_parameter, update_step, update_trial,
 };
 
 /// GraphQL エラーのラッパー
@@ -310,6 +311,53 @@ impl UserFacingError for update_step::Error {
 
 impl From<update_step::Error> for async_graphql::Error {
     fn from(e: update_step::Error) -> Self {
+        e.to_user_facing().extend()
+    }
+}
+
+impl UserFacingError for update_parameter::Error {
+    fn to_user_facing(&self) -> GraphQLError {
+        match self {
+            update_parameter::Error::NotFound => {
+                GraphQLError::new("指定されたTrialが見つかりません", "NOT_FOUND")
+            }
+            update_parameter::Error::Domain(
+                update_parameter_action::Error::TrialAlreadyCompleted,
+            ) => GraphQLError::new(
+                "完了済みのTrialのParameterは更新できません",
+                "VALIDATION_ERROR",
+            ),
+            update_parameter::Error::Domain(update_parameter_action::Error::StepNotFound) => {
+                GraphQLError::new("指定されたStepが見つかりません", "NOT_FOUND")
+            }
+            update_parameter::Error::Domain(
+                update_parameter_action::Error::StepAlreadyCompleted,
+            ) => GraphQLError::new(
+                "完了済みのStepのParameterは更新できません",
+                "VALIDATION_ERROR",
+            ),
+            update_parameter::Error::Domain(update_parameter_action::Error::ParameterNotFound) => {
+                GraphQLError::new("指定されたParameterが見つかりません", "NOT_FOUND")
+            }
+            update_parameter::Error::Domain(
+                update_parameter_action::Error::ParameterContentTypeMismatch,
+            ) => GraphQLError::new("Parameterの種類は変更できません", "VALIDATION_ERROR"),
+            update_parameter::Error::Domain(update_parameter_action::Error::InvalidParameter(
+                update_parameter_action::ParameterValidationError::NegativeDurationValue,
+            )) => GraphQLError::new("時間は0以上で入力してください", "VALIDATION_ERROR"),
+            update_parameter::Error::Domain(update_parameter_action::Error::InvalidParameter(
+                update_parameter_action::ParameterValidationError::EmptyQuantityUnit,
+            )) => GraphQLError::new("単位を入力してください", "VALIDATION_ERROR"),
+            update_parameter::Error::Infrastructure(e) => {
+                log::error!("Infrastructure error: {}", e);
+                GraphQLError::new("内部エラーが発生しました", "INTERNAL_ERROR")
+            }
+        }
+    }
+}
+
+impl From<update_parameter::Error> for async_graphql::Error {
+    fn from(e: update_parameter::Error) -> Self {
         e.to_user_facing().extend()
     }
 }
