@@ -8,8 +8,8 @@ use crate::domain::actions::project::create_project as create_project_action;
 use crate::domain::actions::trial::{
     add_parameter as add_parameter_action, add_step as add_step_action,
     complete_step as complete_step_action, complete_trial as complete_trial_action,
-    remove_parameter as remove_parameter_action, update_step as update_step_action,
-    update_trial as update_trial_action,
+    create_trial as create_trial_action, remove_parameter as remove_parameter_action,
+    update_step as update_step_action, update_trial as update_trial_action,
 };
 use crate::use_case::project::{create_project, get_project, list_projects};
 use crate::use_case::trial::{
@@ -113,7 +113,15 @@ impl From<list_projects::Error> for async_graphql::Error {
 impl UserFacingError for create_trial::Error {
     fn to_user_facing(&self) -> GraphQLError {
         match self {
-            create_trial::Error::Domain(e) => match *e {},
+            create_trial::Error::Domain(create_trial_action::Error::InvalidTrialName(
+                create_trial_action::TrialNameError::EmptyName,
+            )) => GraphQLError::new("Trial名を入力してください", "VALIDATION_ERROR"),
+            create_trial::Error::Domain(create_trial_action::Error::InvalidTrialName(
+                create_trial_action::TrialNameError::NameTooLong { max, .. },
+            )) => GraphQLError::new(
+                format!("Trial名は{}文字以内で入力してください", max),
+                "VALIDATION_ERROR",
+            ),
             create_trial::Error::Infrastructure(e) => {
                 log::error!("Infrastructure error: {}", e);
                 GraphQLError::new("内部エラーが発生しました", "INTERNAL_ERROR")
@@ -137,6 +145,15 @@ impl UserFacingError for update_trial::Error {
             update_trial::Error::Domain(update_trial_action::Error::TrialAlreadyCompleted) => {
                 GraphQLError::new("完了済みのTrialは更新できません", "VALIDATION_ERROR")
             }
+            update_trial::Error::Domain(update_trial_action::Error::InvalidTrialName(
+                update_trial_action::TrialNameError::EmptyName,
+            )) => GraphQLError::new("Trial名を入力してください", "VALIDATION_ERROR"),
+            update_trial::Error::Domain(update_trial_action::Error::InvalidTrialName(
+                update_trial_action::TrialNameError::NameTooLong { max, .. },
+            )) => GraphQLError::new(
+                format!("Trial名は{}文字以内で入力してください", max),
+                "VALIDATION_ERROR",
+            ),
             update_trial::Error::Infrastructure(e) => {
                 log::error!("Infrastructure error: {}", e);
                 GraphQLError::new("内部エラーが発生しました", "INTERNAL_ERROR")

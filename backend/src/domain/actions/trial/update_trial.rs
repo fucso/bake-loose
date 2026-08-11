@@ -1,9 +1,9 @@
 //! Trial の name/memo を更新するアクション
 
 use crate::domain::models::trial::Trial;
-use crate::domain::validators::trial::trial_status_validator;
+use crate::domain::validators::trial::{trial_name_validator, trial_status_validator};
 
-pub use trial_status_validator::Error;
+pub use trial_name_validator::Error as TrialNameError;
 
 /// 指定したフィールドのみを部分更新する（`None` は未指定＝変更なし）
 pub struct Command {
@@ -11,9 +11,32 @@ pub struct Command {
     pub memo: Option<Option<String>>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Error {
+    TrialAlreadyCompleted,
+    InvalidTrialName(TrialNameError),
+}
+
+impl From<trial_status_validator::Error> for Error {
+    fn from(_: trial_status_validator::Error) -> Self {
+        Error::TrialAlreadyCompleted
+    }
+}
+
+impl From<trial_name_validator::Error> for Error {
+    fn from(e: trial_name_validator::Error) -> Self {
+        Error::InvalidTrialName(e)
+    }
+}
+
 /// バリデーション
-pub fn validate(state: &Trial) -> Result<(), Error> {
-    trial_status_validator::require_in_progress(state)
+pub fn validate(state: &Trial, command: &Command) -> Result<(), Error> {
+    trial_status_validator::require_in_progress(state)?;
+    // name をクリア（`Some(None)`）する場合は検証不要。新しい値を設定する場合のみ検証する。
+    if let Some(Some(name)) = &command.name {
+        trial_name_validator::validate(Some(name))?;
+    }
+    Ok(())
 }
 
 /// 状態遷移（validate成功前提）
@@ -29,7 +52,7 @@ pub fn execute(mut state: Trial, command: Command) -> Trial {
 
 /// validate + execute
 pub fn run(state: Trial, command: Command) -> Result<Trial, Error> {
-    validate(&state)?;
+    validate(&state, &command)?;
     Ok(execute(state, command))
 }
 
@@ -105,5 +128,49 @@ mod tests {
         let result = run(trial, command);
 
         assert_eq!(result, Err(Error::TrialAlreadyCompleted));
+    }
+
+    #[test]
+    fn test_run_err_when_new_name_is_empty() {
+        let trial = in_progress_trial();
+        let command = Command {
+            name: Some(Some("".to_string())),
+            memo: None,
+        };
+
+        assert_eq!(
+            run(trial, command),
+            Err(Error::InvalidTrialName(TrialNameError::EmptyName))
+        );
+    }
+
+    #[test]
+    fn test_run_err_when_new_name_too_long() {
+        let trial = in_progress_trial();
+        let command = Command {
+            name: Some(Some("a".repeat(101))),
+            memo: None,
+        };
+
+        assert_eq!(
+            run(trial, command),
+            Err(Error::InvalidTrialName(TrialNameError::NameTooLong {
+                max: 100,
+                actual: 101,
+            }))
+        );
+    }
+
+    #[test]
+    fn test_run_allows_clearing_name_without_validation() {
+        let trial = in_progress_trial();
+        let command = Command {
+            name: Some(None),
+            memo: None,
+        };
+
+        let updated = run(trial, command).unwrap();
+
+        assert_eq!(updated.name(), None);
     }
 }
