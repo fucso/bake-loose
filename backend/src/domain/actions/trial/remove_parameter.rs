@@ -41,7 +41,12 @@ impl From<step_status_validator::Error> for Error {
 /// バリデーション
 pub fn validate(state: &Trial, command: &Command) -> Result<(), Error> {
     trial_status_validator::require_in_progress(state)?;
-    let step = step_existence_validator::require_exists(state, &command.step_id)?;
+    step_existence_validator::require_exists(state, &command.step_id)?;
+    let step = state
+        .steps()
+        .iter()
+        .find(|step| step.id() == &command.step_id)
+        .expect("step existence already validated");
     step_status_validator::require_in_progress(step)?;
 
     if !step
