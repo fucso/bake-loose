@@ -2,15 +2,22 @@
 //!
 //! trial_id で Trial を取得し、add_step ドメインアクションを適用・保存する。
 
+use chrono::{DateTime, FixedOffset};
+use uuid::Uuid;
+
 use crate::domain::actions::trial::add_step;
 use crate::domain::models::trial::{Trial, TrialId};
+use crate::domain::timezone::JstDateTime;
 use crate::ports::trial_repository::TrialRepository;
 use crate::ports::UnitOfWork;
 
 /// ユースケースの入力
+///
+/// presentation 層は domain 型を組み立てず、フラットな値のみを渡す。
 pub struct Input {
-    pub trial_id: TrialId,
-    pub command: add_step::Command,
+    pub trial_id: Uuid,
+    pub name: String,
+    pub started_at: Option<DateTime<FixedOffset>>,
 }
 
 /// ユースケースのエラー
@@ -29,7 +36,8 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
 
     // 2. Trial取得
-    let trial = match uow.trial_repository().find_by_id(&input.trial_id).await {
+    let trial_id = TrialId(input.trial_id);
+    let trial = match uow.trial_repository().find_by_id(&trial_id).await {
         Ok(Some(trial)) => trial,
         Ok(None) => {
             let _ = uow.rollback().await;
@@ -42,7 +50,11 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
     };
 
     // 3. ドメインアクション実行
-    let trial = match add_step::run(trial, input.command) {
+    let command = add_step::Command {
+        name: input.name,
+        started_at: input.started_at.map(JstDateTime::from_fixed_offset),
+    };
+    let trial = match add_step::run(trial, command) {
         Ok(trial) => trial,
         Err(e) => {
             let _ = uow.rollback().await;
@@ -72,8 +84,9 @@ mod tests {
     use crate::domain::models::trial::Trial;
     use crate::use_case::test::MockUnitOfWork;
 
-    fn command(name: &str) -> add_step::Command {
-        add_step::Command {
+    fn input(trial_id: Uuid, name: &str) -> Input {
+        Input {
+            trial_id,
             name: name.to_string(),
             started_at: None,
         }
@@ -86,12 +99,7 @@ mod tests {
         let trial_id = trial.id().clone();
         uow.trial_repository().save(&trial).await.unwrap();
 
-        let input = Input {
-            trial_id: trial_id.clone(),
-            command: command("こね"),
-        };
-
-        let result = execute(&mut uow, input).await;
+        let result = execute(&mut uow, input(trial_id.0, "こね")).await;
 
         assert!(result.is_ok());
         let updated = result.unwrap();
@@ -110,14 +118,9 @@ mod tests {
     #[tokio::test]
     async fn test_execute_returns_not_found_when_trial_does_not_exist() {
         let mut uow = MockUnitOfWork::default();
-        let non_existing_id = TrialId::new();
+        let non_existing_id = Uuid::new_v4();
 
-        let input = Input {
-            trial_id: non_existing_id,
-            command: command("こね"),
-        };
-
-        let result = execute(&mut uow, input).await;
+        let result = execute(&mut uow, input(non_existing_id, "こね")).await;
 
         assert_eq!(result.unwrap_err(), Error::NotFound);
     }
@@ -126,16 +129,11 @@ mod tests {
     async fn test_execute_returns_domain_error_when_trial_already_completed() {
         let mut uow = MockUnitOfWork::default();
         let mut trial = Trial::new(ProjectId::new(), None, None);
-        trial.complete();
+        trial.complete(None);
         let trial_id = trial.id().clone();
         uow.trial_repository().save(&trial).await.unwrap();
 
-        let input = Input {
-            trial_id,
-            command: command("こね"),
-        };
-
-        let result = execute(&mut uow, input).await;
+        let result = execute(&mut uow, input(trial_id.0, "こね")).await;
 
         assert_eq!(
             result.unwrap_err(),
@@ -150,12 +148,7 @@ mod tests {
         let trial_id = trial.id().clone();
         uow.trial_repository().save(&trial).await.unwrap();
 
-        let input = Input {
-            trial_id,
-            command: command(""),
-        };
-
-        let result = execute(&mut uow, input).await;
+        let result = execute(&mut uow, input(trial_id.0, "")).await;
 
         assert_eq!(
             result.unwrap_err(),

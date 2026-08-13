@@ -119,7 +119,7 @@ mod tests {
     #[test]
     fn test_run_rejects_update_when_trial_completed() {
         let mut trial = in_progress_trial();
-        trial.complete();
+        trial.complete(None);
         let command = Command {
             name: Some(Some("新しい名前".to_string())),
             memo: None,

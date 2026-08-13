@@ -7,6 +7,7 @@ use uuid::Uuid;
 use crate::domain::models::project::ProjectId;
 use crate::domain::models::step::Step;
 use crate::domain::models::trial::{Trial, TrialId, TrialStatus};
+use crate::domain::timezone::JstDateTime;
 
 /// trials テーブルの行を表すDBモデル
 #[derive(Debug, FromRow)]
@@ -16,6 +17,7 @@ pub struct TrialRow {
     pub name: Option<String>,
     pub memo: Option<String>,
     pub status: String,
+    pub completed_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -34,6 +36,7 @@ impl TrialRow {
             self.name,
             self.memo,
             status,
+            self.completed_at.map(JstDateTime::from_utc),
             steps,
         )
     }

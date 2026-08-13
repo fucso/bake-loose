@@ -2,15 +2,23 @@
 //!
 //! trial_id で Trial を取得し complete_trial ドメインアクションを適用・保存する。
 
+use chrono::{DateTime, FixedOffset};
+use uuid::Uuid;
+
 use crate::domain::actions::trial::complete_trial;
 use crate::domain::models::trial::{Trial, TrialId};
+use crate::domain::timezone::JstDateTime;
 use crate::ports::trial_repository::TrialRepository;
 use crate::ports::UnitOfWork;
 
 /// ユースケースの入力
+///
+/// presentation 層は domain 型を組み立てず、フラットな値のみを渡す。
+/// completed_at が未指定の場合は現在時刻が採用される。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Input {
-    pub trial_id: TrialId,
+    pub trial_id: Uuid,
+    pub completed_at: Option<DateTime<FixedOffset>>,
 }
 
 /// ユースケースのエラー
@@ -29,9 +37,10 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
 
     // 2. Trial を取得
+    let trial_id = TrialId(input.trial_id);
     let trial = match uow
         .trial_repository()
-        .find_by_id(&input.trial_id)
+        .find_by_id(&trial_id)
         .await
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?
     {
@@ -43,7 +52,10 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
     };
 
     // 3. ドメインアクション実行
-    let completed = match complete_trial::run(trial, complete_trial::Command {}) {
+    let command = complete_trial::Command {
+        completed_at: input.completed_at.map(JstDateTime::from_fixed_offset),
+    };
+    let completed = match complete_trial::run(trial, command) {
         Ok(trial) => trial,
         Err(e) => {
             let _ = uow.rollback().await;
@@ -84,7 +96,8 @@ mod tests {
         uow.trial_repository().save(&trial).await.unwrap();
 
         let input = Input {
-            trial_id: trial_id.clone(),
+            trial_id: trial_id.0,
+            completed_at: None,
         };
 
         let result = execute(&mut uow, input).await;
@@ -92,6 +105,7 @@ mod tests {
         assert!(result.is_ok());
         let completed = result.unwrap();
         assert_eq!(completed.status(), &TrialStatus::Completed);
+        assert!(completed.completed_at().is_some());
 
         let saved = uow
             .trial_repository()
@@ -103,10 +117,34 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_execute_uses_specified_completed_at() {
+        let mut uow = MockUnitOfWork::default();
+        let trial = in_progress_trial();
+        let trial_id = trial.id().clone();
+        uow.trial_repository().save(&trial).await.unwrap();
+
+        let completed_at = JstDateTime::now().into_fixed_offset();
+        let input = Input {
+            trial_id: trial_id.0,
+            completed_at: Some(completed_at),
+        };
+
+        let result = execute(&mut uow, input).await;
+
+        assert!(result.is_ok());
+        let completed = result.unwrap();
+        assert_eq!(
+            completed.completed_at(),
+            Some(&JstDateTime::from_fixed_offset(completed_at))
+        );
+    }
+
+    #[tokio::test]
     async fn test_execute_returns_not_found_when_trial_does_not_exist() {
         let mut uow = MockUnitOfWork::default();
         let input = Input {
-            trial_id: TrialId::new(),
+            trial_id: Uuid::new_v4(),
+            completed_at: None,
         };
 
         let result = execute(&mut uow, input).await;
@@ -118,11 +156,14 @@ mod tests {
     async fn test_execute_returns_domain_error_when_trial_already_completed() {
         let mut uow = MockUnitOfWork::default();
         let mut trial = in_progress_trial();
-        trial.complete();
+        trial.complete(None);
         let trial_id = trial.id().clone();
         uow.trial_repository().save(&trial).await.unwrap();
 
-        let input = Input { trial_id };
+        let input = Input {
+            trial_id: trial_id.0,
+            completed_at: None,
+        };
 
         let result = execute(&mut uow, input).await;
 

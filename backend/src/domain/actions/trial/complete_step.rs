@@ -115,7 +115,7 @@ mod tests {
     #[test]
     fn test_run_err_when_trial_already_completed() {
         let (mut trial, step_id) = trial_with_step();
-        trial.complete();
+        trial.complete(None);
         let command = Command {
             step_id,
             completed_at: None,

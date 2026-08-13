@@ -29,7 +29,7 @@ mod tests {
     #[test]
     fn test_require_in_progress_err_when_completed() {
         let mut trial = Trial::new(ProjectId::new(), None, None);
-        trial.complete();
+        trial.complete(None);
         assert_eq!(
             require_in_progress(&trial),
             Err(Error::TrialAlreadyCompleted)

@@ -1,5 +1,8 @@
 //! complete_step ユースケース
 
+use chrono::{DateTime, FixedOffset};
+use uuid::Uuid;
+
 use crate::domain::actions::trial::complete_step;
 use crate::domain::models::step::StepId;
 use crate::domain::models::trial::{Trial, TrialId};
@@ -8,11 +11,13 @@ use crate::ports::trial_repository::TrialRepository;
 use crate::ports::UnitOfWork;
 
 /// ユースケースの入力
+///
+/// presentation 層は domain 型を組み立てず、フラットな値のみを渡す。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Input {
-    pub trial_id: TrialId,
-    pub step_id: StepId,
-    pub completed_at: Option<JstDateTime>,
+    pub trial_id: Uuid,
+    pub step_id: Uuid,
+    pub completed_at: Option<DateTime<FixedOffset>>,
 }
 
 /// ユースケースのエラー
@@ -31,9 +36,10 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
 
     // 2. Trial取得
+    let trial_id = TrialId(input.trial_id);
     let trial = uow
         .trial_repository()
-        .find_by_id(&input.trial_id)
+        .find_by_id(&trial_id)
         .await
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
 
@@ -47,8 +53,8 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
 
     // 3. ドメインアクション実行
     let command = complete_step::Command {
-        step_id: input.step_id,
-        completed_at: input.completed_at,
+        step_id: StepId(input.step_id),
+        completed_at: input.completed_at.map(JstDateTime::from_fixed_offset),
     };
     let trial = match complete_step::run(trial, command) {
         Ok(trial) => trial,
@@ -94,8 +100,8 @@ mod tests {
         let (trial, step_id) = seed_trial_with_step(&mut uow).await;
 
         let input = Input {
-            trial_id: trial.id().clone(),
-            step_id: step_id.clone(),
+            trial_id: trial.id().0,
+            step_id: step_id.0,
             completed_at: None,
         };
 
@@ -129,8 +135,8 @@ mod tests {
     async fn test_execute_returns_not_found_when_trial_does_not_exist() {
         let mut uow = MockUnitOfWork::default();
         let input = Input {
-            trial_id: TrialId::new(),
-            step_id: StepId::new(),
+            trial_id: Uuid::new_v4(),
+            step_id: Uuid::new_v4(),
             completed_at: None,
         };
 
@@ -145,8 +151,8 @@ mod tests {
         let (trial, _) = seed_trial_with_step(&mut uow).await;
 
         let input = Input {
-            trial_id: trial.id().clone(),
-            step_id: StepId::new(),
+            trial_id: trial.id().0,
+            step_id: Uuid::new_v4(),
             completed_at: None,
         };
 
@@ -164,15 +170,15 @@ mod tests {
         let (trial, step_id) = seed_trial_with_step(&mut uow).await;
 
         let input = Input {
-            trial_id: trial.id().clone(),
-            step_id: step_id.clone(),
+            trial_id: trial.id().0,
+            step_id: step_id.0,
             completed_at: None,
         };
         execute(&mut uow, input).await.unwrap();
 
         let input = Input {
-            trial_id: trial.id().clone(),
-            step_id,
+            trial_id: trial.id().0,
+            step_id: step_id.0,
             completed_at: None,
         };
         let result = execute(&mut uow, input).await;
@@ -187,12 +193,12 @@ mod tests {
     async fn test_execute_returns_domain_error_when_trial_already_completed() {
         let mut uow = MockUnitOfWork::default();
         let (mut trial, step_id) = seed_trial_with_step(&mut uow).await;
-        trial.complete();
+        trial.complete(None);
         uow.trial_repository().save(&trial).await.unwrap();
 
         let input = Input {
-            trial_id: trial.id().clone(),
-            step_id,
+            trial_id: trial.id().0,
+            step_id: step_id.0,
             completed_at: None,
         };
 

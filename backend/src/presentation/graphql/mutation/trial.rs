@@ -4,15 +4,9 @@ use async_graphql::{Context, ErrorExtensions, Json, MaybeUndefined, Object, Resu
 use chrono::{DateTime, FixedOffset};
 use uuid::Uuid;
 
-use crate::domain::actions::trial::{
-    add_step as add_step_action, update_parameter as update_parameter_action,
-    update_trial as update_trial_action,
-};
-use crate::domain::models::parameter::{ParameterContent, ParameterId};
-use crate::domain::models::project::ProjectId;
-use crate::domain::models::step::StepId;
-use crate::domain::models::trial::TrialId;
-use crate::domain::timezone::JstDateTime;
+// ParameterContent は Trial の GraphQL Json スカラーの入出力形状そのものであり、
+// フラットな引数へ分解する対象ではない値オブジェクトのため、そのまま利用する。
+use crate::domain::models::parameter::ParameterContent;
 use crate::presentation::graphql::context::ContextExt;
 use crate::presentation::graphql::error::UserFacingError;
 use crate::presentation::graphql::types::trial::{
@@ -45,7 +39,7 @@ impl TrialMutation {
     /// Trialを作成する
     async fn create_trial(&self, ctx: &Context<'_>, input: CreateTrialInput) -> Result<Trial> {
         let mut uow = ctx.create_unit_of_work()?;
-        let project_id = ProjectId(parse_uuid(&input.project_id, "project")?);
+        let project_id = parse_uuid(&input.project_id, "project")?;
 
         let use_case_input = create_trial::Input {
             project_id,
@@ -68,13 +62,13 @@ impl TrialMutation {
         input: UpdateTrialInput,
     ) -> Result<Trial> {
         let mut uow = ctx.create_unit_of_work()?;
-        let trial_id = TrialId(parse_uuid(&id, "trial")?);
+        let trial_id = parse_uuid(&id, "trial")?;
 
-        let command = update_trial_action::Command {
+        let use_case_input = update_trial::Input {
+            trial_id,
             name: to_double_option(input.name),
             memo: to_double_option(input.memo),
         };
-        let use_case_input = update_trial::Input { trial_id, command };
 
         let trial = update_trial::execute(&mut uow, use_case_input)
             .await
@@ -84,11 +78,21 @@ impl TrialMutation {
     }
 
     /// Trialを完了状態にする
-    async fn complete_trial(&self, ctx: &Context<'_>, id: ID) -> Result<Trial> {
+    async fn complete_trial(
+        &self,
+        ctx: &Context<'_>,
+        id: ID,
+        completed_at: Option<DateTime<FixedOffset>>,
+    ) -> Result<Trial> {
         let mut uow = ctx.create_unit_of_work()?;
-        let trial_id = TrialId(parse_uuid(&id, "trial")?);
+        let trial_id = parse_uuid(&id, "trial")?;
 
-        let trial = complete_trial::execute(&mut uow, complete_trial::Input { trial_id })
+        let use_case_input = complete_trial::Input {
+            trial_id,
+            completed_at,
+        };
+
+        let trial = complete_trial::execute(&mut uow, use_case_input)
             .await
             .map_err(|e| e.to_user_facing().extend())?;
 
@@ -98,13 +102,13 @@ impl TrialMutation {
     /// Trialに新しいStepを追加する
     async fn add_step(&self, ctx: &Context<'_>, trial_id: ID, input: AddStepInput) -> Result<Step> {
         let mut uow = ctx.create_unit_of_work()?;
-        let trial_id = TrialId(parse_uuid(&trial_id, "trial")?);
+        let trial_id = parse_uuid(&trial_id, "trial")?;
 
-        let command = add_step_action::Command {
+        let use_case_input = add_step::Input {
+            trial_id,
             name: input.name,
-            started_at: input.started_at.map(JstDateTime::from_fixed_offset),
+            started_at: input.started_at,
         };
-        let use_case_input = add_step::Input { trial_id, command };
 
         let trial = add_step::execute(&mut uow, use_case_input)
             .await
@@ -128,23 +132,22 @@ impl TrialMutation {
         input: UpdateStepInput,
     ) -> Result<Step> {
         let mut uow = ctx.create_unit_of_work()?;
-        let trial_id = TrialId(parse_uuid(&trial_id, "trial")?);
-        let step_id = StepId(parse_uuid(&step_id, "step")?);
+        let trial_id = parse_uuid(&trial_id, "trial")?;
+        let step_id = parse_uuid(&step_id, "step")?;
 
         let add_parameters: Vec<ParameterContent> =
             input.add_parameters.into_iter().map(|p| p.0).collect();
         let remove_parameter_ids = input
             .remove_parameter_ids
             .iter()
-            .map(|id| parse_uuid(id, "parameter").map(ParameterId))
+            .map(|id| parse_uuid(id, "parameter"))
             .collect::<Result<Vec<_>>>()?;
 
         let use_case_input = update_step::Input {
             trial_id,
-            step_id: step_id.clone(),
+            step_id,
             name: input.name,
-            started_at: to_double_option(input.started_at)
-                .map(|opt| opt.map(JstDateTime::from_fixed_offset)),
+            started_at: to_double_option(input.started_at),
             add_parameters,
             remove_parameter_ids,
         };
@@ -156,7 +159,7 @@ impl TrialMutation {
         let step = trial
             .steps()
             .iter()
-            .find(|s| s.id() == &step_id)
+            .find(|s| s.id().0 == step_id)
             .cloned()
             .expect("step must exist after update_step");
 
@@ -173,16 +176,16 @@ impl TrialMutation {
         content: Json<ParameterContent>,
     ) -> Result<Parameter> {
         let mut uow = ctx.create_unit_of_work()?;
-        let trial_id = TrialId(parse_uuid(&trial_id, "trial")?);
-        let step_id = StepId(parse_uuid(&step_id, "step")?);
-        let parameter_id = ParameterId(parse_uuid(&parameter_id, "parameter")?);
+        let trial_id = parse_uuid(&trial_id, "trial")?;
+        let step_id = parse_uuid(&step_id, "step")?;
+        let parameter_id = parse_uuid(&parameter_id, "parameter")?;
 
-        let command = update_parameter_action::Command {
-            step_id: step_id.clone(),
-            parameter_id: parameter_id.clone(),
+        let use_case_input = update_parameter::Input {
+            trial_id,
+            step_id,
+            parameter_id,
             content: content.0,
         };
-        let use_case_input = update_parameter::Input { trial_id, command };
 
         let trial = update_parameter::execute(&mut uow, use_case_input)
             .await
@@ -191,12 +194,12 @@ impl TrialMutation {
         let step = trial
             .steps()
             .iter()
-            .find(|s| s.id() == &step_id)
+            .find(|s| s.id().0 == step_id)
             .expect("step must exist after update_parameter");
         let parameter = step
             .parameters()
             .iter()
-            .find(|p| p.id() == &parameter_id)
+            .find(|p| p.id().0 == parameter_id)
             .cloned()
             .expect("parameter must exist after update_parameter");
 
@@ -212,13 +215,13 @@ impl TrialMutation {
         completed_at: Option<DateTime<FixedOffset>>,
     ) -> Result<Step> {
         let mut uow = ctx.create_unit_of_work()?;
-        let trial_id = TrialId(parse_uuid(&trial_id, "trial")?);
-        let step_id = StepId(parse_uuid(&step_id, "step")?);
+        let trial_id = parse_uuid(&trial_id, "trial")?;
+        let step_id = parse_uuid(&step_id, "step")?;
 
         let use_case_input = complete_step::Input {
             trial_id,
-            step_id: step_id.clone(),
-            completed_at: completed_at.map(JstDateTime::from_fixed_offset),
+            step_id,
+            completed_at,
         };
 
         let trial = complete_step::execute(&mut uow, use_case_input)
@@ -228,7 +231,7 @@ impl TrialMutation {
         let step = trial
             .steps()
             .iter()
-            .find(|s| s.id() == &step_id)
+            .find(|s| s.id().0 == step_id)
             .cloned()
             .expect("step must exist after complete_step");
 

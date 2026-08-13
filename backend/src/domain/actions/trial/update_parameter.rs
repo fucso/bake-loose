@@ -180,7 +180,7 @@ mod tests {
             trial_with_step_and_parameter(ParameterContent::Text {
                 value: "打ち粉を追加".to_string(),
             });
-        trial.complete();
+        trial.complete(None);
         let command = Command {
             step_id,
             parameter_id,

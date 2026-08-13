@@ -2,15 +2,21 @@
 //!
 //! trial_id で Trial を取得し update_trial ドメインアクションを適用・保存する。
 
+use uuid::Uuid;
+
 use crate::domain::actions::trial::update_trial;
 use crate::domain::models::trial::{Trial, TrialId};
 use crate::ports::trial_repository::TrialRepository;
 use crate::ports::UnitOfWork;
 
 /// ユースケースの入力
+///
+/// presentation 層は domain 型を組み立てず、フラットな値のみを渡す。
+/// name/memo は `None`: 変更なし / `Some(None)`: クリア / `Some(Some(v))`: 設定。
 pub struct Input {
-    pub trial_id: TrialId,
-    pub command: update_trial::Command,
+    pub trial_id: Uuid,
+    pub name: Option<Option<String>>,
+    pub memo: Option<Option<String>>,
 }
 
 /// ユースケースのエラー
@@ -29,9 +35,10 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
 
     // 2. Trial を取得
+    let trial_id = TrialId(input.trial_id);
     let trial = match uow
         .trial_repository()
-        .find_by_id(&input.trial_id)
+        .find_by_id(&trial_id)
         .await
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?
     {
@@ -43,7 +50,11 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
     };
 
     // 3. ドメインアクション実行
-    let updated = match update_trial::run(trial, input.command) {
+    let command = update_trial::Command {
+        name: input.name,
+        memo: input.memo,
+    };
+    let updated = match update_trial::run(trial, command) {
         Ok(trial) => trial,
         Err(e) => {
             let _ = uow.rollback().await;
@@ -87,11 +98,9 @@ mod tests {
         uow.trial_repository().save(&trial).await.unwrap();
 
         let input = Input {
-            trial_id: trial_id.clone(),
-            command: update_trial::Command {
-                name: Some(Some("新しい名前".to_string())),
-                memo: Some(Some("新しいメモ".to_string())),
-            },
+            trial_id: trial_id.0,
+            name: Some(Some("新しい名前".to_string())),
+            memo: Some(Some("新しいメモ".to_string())),
         };
 
         let result = execute(&mut uow, input).await;
@@ -115,11 +124,9 @@ mod tests {
     async fn test_execute_returns_not_found_when_trial_does_not_exist() {
         let mut uow = MockUnitOfWork::default();
         let input = Input {
-            trial_id: TrialId::new(),
-            command: update_trial::Command {
-                name: Some(Some("新しい名前".to_string())),
-                memo: None,
-            },
+            trial_id: Uuid::new_v4(),
+            name: Some(Some("新しい名前".to_string())),
+            memo: None,
         };
 
         let result = execute(&mut uow, input).await;
@@ -131,16 +138,14 @@ mod tests {
     async fn test_execute_returns_domain_error_when_trial_completed() {
         let mut uow = MockUnitOfWork::default();
         let mut trial = in_progress_trial();
-        trial.complete();
+        trial.complete(None);
         let trial_id = trial.id().clone();
         uow.trial_repository().save(&trial).await.unwrap();
 
         let input = Input {
-            trial_id,
-            command: update_trial::Command {
-                name: Some(Some("新しい名前".to_string())),
-                memo: None,
-            },
+            trial_id: trial_id.0,
+            name: Some(Some("新しい名前".to_string())),
+            memo: None,
         };
 
         let result = execute(&mut uow, input).await;

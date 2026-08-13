@@ -4,6 +4,9 @@
 //! パラメーターの追加（add_parameter アクション）・削除（remove_parameter アクション）を
 //! それぞれ独立したドメインアクションとして順に適用し、保存する。
 
+use chrono::{DateTime, FixedOffset};
+use uuid::Uuid;
+
 use crate::domain::actions::trial::{add_parameter, remove_parameter, update_step};
 use crate::domain::models::parameter::{ParameterContent, ParameterId};
 use crate::domain::models::step::StepId;
@@ -24,15 +27,19 @@ pub enum Error {
     Infrastructure(String),
 }
 
+/// ユースケースの入力
+///
+/// presentation 層は domain 型を組み立てず、フラットな値のみを渡す。
+/// ParameterContent は元々オブジェクト形式の値であるため、無理にフラット化しない。
 pub struct Input {
-    pub trial_id: TrialId,
-    pub step_id: StepId,
+    pub trial_id: Uuid,
+    pub step_id: Uuid,
     /// Some の場合のみ変更
     pub name: Option<String>,
     /// None: 変更なし / Some(None): クリア / Some(Some(t)): t に設定
-    pub started_at: Option<Option<JstDateTime>>,
+    pub started_at: Option<Option<DateTime<FixedOffset>>>,
     pub add_parameters: Vec<ParameterContent>,
-    pub remove_parameter_ids: Vec<ParameterId>,
+    pub remove_parameter_ids: Vec<Uuid>,
 }
 
 pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, Error> {
@@ -40,7 +47,10 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
         .await
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
 
-    let mut trial = match uow.trial_repository().find_by_id(&input.trial_id).await {
+    let trial_id = TrialId(input.trial_id);
+    let step_id = StepId(input.step_id);
+
+    let mut trial = match uow.trial_repository().find_by_id(&trial_id).await {
         Ok(Some(trial)) => trial,
         Ok(None) => {
             let _ = uow.rollback().await;
@@ -56,9 +66,11 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
     trial = match update_step::run(
         trial,
         update_step::Command {
-            step_id: input.step_id.clone(),
+            step_id: step_id.clone(),
             name: input.name,
-            started_at: input.started_at,
+            started_at: input
+                .started_at
+                .map(|opt| opt.map(JstDateTime::from_fixed_offset)),
         },
     ) {
         Ok(trial) => trial,
@@ -73,7 +85,7 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
         trial = match add_parameter::run(
             trial,
             add_parameter::Command {
-                step_id: input.step_id.clone(),
+                step_id: step_id.clone(),
                 content,
             },
         ) {
@@ -93,8 +105,8 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
         trial = match remove_parameter::run(
             trial,
             remove_parameter::Command {
-                step_id: input.step_id.clone(),
-                parameter_id,
+                step_id: step_id.clone(),
+                parameter_id: ParameterId(parameter_id),
             },
         ) {
             Ok(trial) => trial,
@@ -132,7 +144,7 @@ mod tests {
         (trial, step_id)
     }
 
-    fn base_input(trial_id: TrialId, step_id: StepId) -> Input {
+    fn base_input(trial_id: Uuid, step_id: Uuid) -> Input {
         Input {
             trial_id,
             step_id,
@@ -153,7 +165,7 @@ mod tests {
 
         let input = Input {
             name: Some("新名称".to_string()),
-            ..base_input(trial_id.clone(), step_id.clone())
+            ..base_input(trial_id.0, step_id.0)
         };
 
         let result = execute(&mut uow, input).await;
@@ -185,7 +197,7 @@ mod tests {
             add_parameters: vec![crate::domain::models::parameter::ParameterContent::Text {
                 value: "打ち粉を追加".to_string(),
             }],
-            ..base_input(trial_id, step_id.clone())
+            ..base_input(trial_id.0, step_id.0)
         };
 
         let result = execute(&mut uow, input).await;
@@ -197,8 +209,8 @@ mod tests {
         let parameter_id = step.parameters()[0].id().clone();
 
         let input = Input {
-            remove_parameter_ids: vec![parameter_id],
-            ..base_input(updated.id().clone(), step_id.clone())
+            remove_parameter_ids: vec![parameter_id.0],
+            ..base_input(updated.id().0, step_id.0)
         };
         let result = execute(&mut uow, input).await;
 
@@ -212,7 +224,7 @@ mod tests {
     async fn test_returns_not_found_when_trial_does_not_exist() {
         let mut uow = MockUnitOfWork::default();
 
-        let input = base_input(TrialId::new(), StepId::new());
+        let input = base_input(Uuid::new_v4(), Uuid::new_v4());
 
         let result = execute(&mut uow, input).await;
 
@@ -229,7 +241,7 @@ mod tests {
 
         let input = Input {
             name: Some("新名称".to_string()),
-            ..base_input(trial_id.clone(), StepId::new())
+            ..base_input(trial_id.0, Uuid::new_v4())
         };
 
         let result = execute(&mut uow, input).await;
@@ -249,7 +261,7 @@ mod tests {
     #[tokio::test]
     async fn test_propagates_domain_error_when_trial_completed() {
         let (mut trial, step_id) = trial_with_step();
-        trial.complete();
+        trial.complete(None);
         let trial_id = trial.id().clone();
 
         let mut uow = MockUnitOfWork::default();
@@ -257,7 +269,7 @@ mod tests {
 
         let input = Input {
             name: Some("新名称".to_string()),
-            ..base_input(trial_id, step_id)
+            ..base_input(trial_id.0, step_id.0)
         };
 
         let result = execute(&mut uow, input).await;
@@ -289,7 +301,7 @@ mod tests {
                     },
                 },
             ],
-            ..base_input(trial_id, step_id)
+            ..base_input(trial_id.0, step_id.0)
         };
 
         let result = execute(&mut uow, input).await;
@@ -314,8 +326,8 @@ mod tests {
         uow.trial_repository().save(&trial).await.unwrap();
 
         let input = Input {
-            remove_parameter_ids: vec![ParameterId::new()],
-            ..base_input(trial_id, step_id)
+            remove_parameter_ids: vec![Uuid::new_v4()],
+            ..base_input(trial_id.0, step_id.0)
         };
 
         let result = execute(&mut uow, input).await;

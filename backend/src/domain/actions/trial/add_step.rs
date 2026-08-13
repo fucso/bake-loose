@@ -107,7 +107,7 @@ mod tests {
     #[test]
     fn test_run_err_when_trial_already_completed() {
         let mut trial = Trial::new(ProjectId::new(), None, None);
-        trial.complete();
+        trial.complete(None);
 
         assert_eq!(
             run(trial, command("こね")),

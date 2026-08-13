@@ -1,5 +1,7 @@
 //! create_trial ユースケース
 
+use uuid::Uuid;
+
 use crate::domain::actions::trial::create_trial;
 use crate::domain::models::project::ProjectId;
 use crate::domain::models::trial::Trial;
@@ -7,9 +9,11 @@ use crate::ports::trial_repository::TrialRepository;
 use crate::ports::UnitOfWork;
 
 /// ユースケースの入力
+///
+/// presentation 層は domain 型を組み立てず、フラットな値のみを渡す。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Input {
-    pub project_id: ProjectId,
+    pub project_id: Uuid,
     pub name: Option<String>,
     pub memo: Option<String>,
 }
@@ -30,7 +34,7 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
 
     // 2. ドメインアクション実行
     let command = create_trial::Command {
-        project_id: input.project_id,
+        project_id: ProjectId(input.project_id),
         name: input.name,
         memo: input.memo,
     };
@@ -64,9 +68,9 @@ mod tests {
     #[tokio::test]
     async fn test_execute_creates_trial_successfully() {
         let mut uow = MockUnitOfWork::default();
-        let project_id = ProjectId::new();
+        let project_id = Uuid::new_v4();
         let input = Input {
-            project_id: project_id.clone(),
+            project_id,
             name: Some("焼成温度検証".to_string()),
             memo: Some("初回".to_string()),
         };
@@ -75,7 +79,7 @@ mod tests {
 
         assert!(result.is_ok());
         let trial = result.unwrap();
-        assert_eq!(trial.project_id(), &project_id);
+        assert_eq!(trial.project_id(), &ProjectId(project_id));
         assert_eq!(trial.name(), Some("焼成温度検証"));
         assert_eq!(trial.memo(), Some("初回"));
 
@@ -88,7 +92,7 @@ mod tests {
     async fn test_execute_allows_no_name_and_memo() {
         let mut uow = MockUnitOfWork::default();
         let input = Input {
-            project_id: ProjectId::new(),
+            project_id: Uuid::new_v4(),
             name: None,
             memo: None,
         };

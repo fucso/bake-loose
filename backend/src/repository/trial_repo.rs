@@ -151,12 +151,13 @@ impl TrialRepository for PgTrialRepository {
             .execute(
                 sqlx::query(
                     r#"
-                    INSERT INTO trials (id, project_id, name, memo, status, created_at, updated_at)
-                    VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+                    INSERT INTO trials (id, project_id, name, memo, status, completed_at, created_at, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
                     ON CONFLICT (id) DO UPDATE SET
                         name = EXCLUDED.name,
                         memo = EXCLUDED.memo,
                         status = EXCLUDED.status,
+                        completed_at = EXCLUDED.completed_at,
                         updated_at = NOW()
                     "#,
                 )
@@ -164,7 +165,8 @@ impl TrialRepository for PgTrialRepository {
                 .bind(trial.project_id().0)
                 .bind(trial.name())
                 .bind(trial.memo())
-                .bind(status),
+                .bind(status)
+                .bind(trial.completed_at().copied().map(|d| d.into_fixed_offset())),
             )
             .await
             .map_err(|e| RepositoryError::Internal {
@@ -341,12 +343,22 @@ mod tests {
         repo.save(&trial).await.unwrap();
 
         trial.set_name(Some("更新後".to_string()));
-        trial.complete();
+        trial.complete(None);
         repo.save(&trial).await.unwrap();
 
         let found = repo.find_by_id(trial.id()).await.unwrap().unwrap();
         assert_eq!(found.name(), Some("更新後"));
         assert_eq!(found.status(), &TrialStatus::Completed);
+        // DB は マイクロ秒精度のため、ナノ秒まで含む厳密一致ではなくマイクロ秒単位で比較する
+        assert_eq!(
+            found
+                .completed_at()
+                .map(|d| d.into_fixed_offset().timestamp_micros()),
+            trial
+                .completed_at()
+                .map(|d| d.into_fixed_offset().timestamp_micros())
+        );
+        assert!(found.completed_at().is_some());
     }
 
     #[sqlx::test(migrations = "./migrations")]

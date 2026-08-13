@@ -2,6 +2,8 @@
 //!
 //! IDでTrialを取得する。
 
+use uuid::Uuid;
+
 use crate::domain::models::trial::{Trial, TrialId};
 use crate::ports::trial_repository::TrialRepository;
 use crate::ports::UnitOfWork;
@@ -13,10 +15,11 @@ pub enum Error {
 
 /// IDでTrialを取得する
 ///
+/// presentation 層は domain 型を組み立てず、フラットな値のみを渡す。
 /// 読み取り専用のためトランザクションは不要。
-pub async fn execute<U: UnitOfWork>(uow: &mut U, id: &TrialId) -> Result<Option<Trial>, Error> {
+pub async fn execute<U: UnitOfWork>(uow: &mut U, id: Uuid) -> Result<Option<Trial>, Error> {
     uow.trial_repository()
-        .find_by_id(id)
+        .find_by_id(&TrialId(id))
         .await
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))
 }
@@ -38,7 +41,7 @@ mod tests {
         uow.trial_repository().save(&other).await.unwrap();
         uow.trial_repository().save(&target).await.unwrap();
 
-        let result = execute(&mut uow, &target_id).await;
+        let result = execute(&mut uow, target_id.0).await;
 
         assert!(result.is_ok());
         let found = result.unwrap().unwrap();
@@ -49,7 +52,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_trial_not_found() {
         let mut uow = MockUnitOfWork::default();
-        let result = execute(&mut uow, &TrialId::new()).await;
+        let result = execute(&mut uow, Uuid::new_v4()).await;
 
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());

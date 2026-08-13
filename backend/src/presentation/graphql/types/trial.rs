@@ -138,6 +138,14 @@ impl Trial {
         (*self.0.status()).into()
     }
 
+    /// 完了日時（JST）
+    async fn completed_at(&self) -> Option<DateTime<FixedOffset>> {
+        self.0
+            .completed_at()
+            .copied()
+            .map(|d| d.into_fixed_offset())
+    }
+
     /// この Trial に紐づく Step 一覧
     async fn steps(&self) -> Vec<Step> {
         self.0.steps().iter().cloned().map(Step::from).collect()

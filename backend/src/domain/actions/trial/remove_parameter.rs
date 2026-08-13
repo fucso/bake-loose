@@ -110,7 +110,7 @@ mod tests {
     #[test]
     fn test_returns_error_when_trial_completed() {
         let (mut trial, step_id, parameter_id) = trial_with_step_and_parameter();
-        trial.complete();
+        trial.complete(None);
         let command = Command {
             step_id,
             parameter_id,

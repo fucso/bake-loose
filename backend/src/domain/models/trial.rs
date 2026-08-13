@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 use super::step::{Step, StepId};
 use crate::domain::models::project::ProjectId;
+use crate::domain::timezone::JstDateTime;
 
 /// TrialID
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -38,6 +39,7 @@ pub struct Trial {
     name: Option<String>,
     memo: Option<String>,
     status: TrialStatus,
+    completed_at: Option<JstDateTime>,
     steps: Vec<Step>,
 }
 
@@ -50,17 +52,20 @@ impl Trial {
             name,
             memo,
             status: TrialStatus::InProgress,
+            completed_at: None,
             steps: Vec::new(),
         }
     }
 
     /// 生データからTrialを構築する
+    #[allow(clippy::too_many_arguments)]
     pub fn from_raw(
         id: TrialId,
         project_id: ProjectId,
         name: Option<String>,
         memo: Option<String>,
         status: TrialStatus,
+        completed_at: Option<JstDateTime>,
         steps: Vec<Step>,
     ) -> Self {
         Self {
@@ -69,6 +74,7 @@ impl Trial {
             name,
             memo,
             status,
+            completed_at,
             steps,
         }
     }
@@ -91,6 +97,11 @@ impl Trial {
 
     pub fn status(&self) -> &TrialStatus {
         &self.status
+    }
+
+    /// 完了日時（JST）
+    pub fn completed_at(&self) -> Option<&JstDateTime> {
+        self.completed_at.as_ref()
     }
 
     pub fn steps(&self) -> &[Step] {
@@ -123,8 +134,11 @@ impl Trial {
     }
 
     /// Trial を完了状態にする
-    pub fn complete(&mut self) {
+    ///
+    /// completed_at が未指定の場合は現在時刻を採用する
+    pub fn complete(&mut self, completed_at: Option<JstDateTime>) {
         self.status = TrialStatus::Completed;
+        self.completed_at = Some(completed_at.unwrap_or_else(JstDateTime::now));
     }
 }
 
@@ -153,8 +167,27 @@ mod tests {
         let mut trial = Trial::new(ProjectId::new(), None, None);
         assert_eq!(trial.status(), &TrialStatus::InProgress);
 
-        trial.complete();
+        trial.complete(None);
         assert_eq!(trial.status(), &TrialStatus::Completed);
+    }
+
+    #[test]
+    fn test_complete_uses_specified_completed_at() {
+        let mut trial = Trial::new(ProjectId::new(), None, None);
+        let completed_at = JstDateTime::now();
+
+        trial.complete(Some(completed_at));
+
+        assert_eq!(trial.completed_at(), Some(&completed_at));
+    }
+
+    #[test]
+    fn test_complete_defaults_completed_at_to_now_when_unspecified() {
+        let mut trial = Trial::new(ProjectId::new(), None, None);
+
+        trial.complete(None);
+
+        assert!(trial.completed_at().is_some());
     }
 
     #[test]
