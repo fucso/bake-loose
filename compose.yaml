@@ -48,6 +48,7 @@ services:
       - ./.agents/worktrees:/worktrees
     ports:
       - "3000:3000"
+      - "6006:6006"
     depends_on:
       - backend
 

@@ -3,3 +3,4 @@ dist/
 dev-dist/
 .pnpm-store/
 *.tsbuildinfo
+storybook-static/
