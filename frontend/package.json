@@ -8,6 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build",
     "test": "vitest run"
   },
   "dependencies": {
@@ -28,6 +30,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
+    "@storybook/react-vite": "^10.5.7",
     "@testing-library/jest-dom": "^7.0.0",
     "@testing-library/react": "^16.3.2",
     "@types/react": "^19.0.2",
@@ -39,6 +42,7 @@
     "globals": "^15.14.0",
     "jsdom": "^30.0.1",
     "shadcn": "^4.16.0",
+    "storybook": "^10.5.7",
     "typescript": "~5.7.2",
     "typescript-eslint": "^8.18.2",
     "vite": "^6.0.5",
