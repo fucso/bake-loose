@@ -187,7 +187,6 @@ pub struct AddStepInput {
 /// Step更新時の入力
 ///
 /// `started_at` は未指定（undefined）で変更なし、null 指定でクリアする。
-/// パラメーターの追加・削除は行わない（`addParameter` / `removeParameter` mutation で行う）
 #[derive(InputObject)]
 pub struct UpdateStepInput {
     pub name: Option<String>,

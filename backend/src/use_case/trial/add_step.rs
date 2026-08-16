@@ -28,7 +28,7 @@ pub enum Error {
 
 /// ユースケースの実行
 pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, Error> {
-    // 1. Trial取得（書き込みを伴わないためトランザクション開始前に行う）
+    // 1. Trial取得
     let trial_id = TrialId(input.trial_id);
     let trial = match uow.trial_repository().find_by_id(&trial_id).await {
         Ok(Some(trial)) => trial,

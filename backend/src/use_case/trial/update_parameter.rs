@@ -31,12 +31,7 @@ pub enum Error {
 
 /// ユースケースの実行
 pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, Error> {
-    // 1. トランザクション開始
-    uow.begin()
-        .await
-        .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
-
-    // 2. Trial を取得
+    // 1. Trial を取得
     let trial_id = TrialId(input.trial_id);
     let trial = match uow
         .trial_repository()
@@ -45,13 +40,10 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?
     {
         Some(trial) => trial,
-        None => {
-            let _ = uow.rollback().await;
-            return Err(Error::NotFound);
-        }
+        None => return Err(Error::NotFound),
     };
 
-    // 3. ドメインアクション実行
+    // 2. ドメインアクション実行
     let command = update_parameter::Command {
         step_id: StepId(input.step_id),
         parameter_id: ParameterId(input.parameter_id),
@@ -59,11 +51,13 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
     };
     let updated = match update_parameter::run(trial, command) {
         Ok(trial) => trial,
-        Err(e) => {
-            let _ = uow.rollback().await;
-            return Err(Error::Domain(e));
-        }
+        Err(e) => return Err(Error::Domain(e)),
     };
+
+    // 3. トランザクション開始
+    uow.begin()
+        .await
+        .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
 
     // 4. 永続化
     if let Err(e) = uow.trial_repository().save(&updated).await {
