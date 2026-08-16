@@ -86,11 +86,11 @@ mod tests {
     }
 
     #[test]
-    fn test_run_leaves_started_at_none_when_unspecified() {
+    fn test_run_defaults_started_at_to_now_when_unspecified() {
         let trial = Trial::new(ProjectId::new(), None, None);
         let trial = run(trial, command("こね")).unwrap();
 
-        assert!(trial.steps()[0].started_at().is_none());
+        assert!(trial.steps()[0].started_at().is_some());
     }
 
     #[test]
