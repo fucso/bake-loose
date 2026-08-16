@@ -1,6 +1,6 @@
 import { Link, Outlet } from 'react-router-dom'
 
-function RootLayout() {
+const RootLayout = () => {
   return (
     <div className="font-sans">
       <header className="border-b px-8 py-4">

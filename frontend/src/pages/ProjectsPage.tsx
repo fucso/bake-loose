@@ -26,7 +26,7 @@ const PROJECTS_QUERY = `
   }
 `
 
-function ProjectsPage() {
+const ProjectsPage = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [{ data, fetching, error }, reexecuteQuery] = useQuery<ProjectsQueryData>({
     query: PROJECTS_QUERY,

@@ -20,7 +20,7 @@ export class MockGraphQLError {
  */
 export type MockQueryResponses = Record<string, unknown | MockGraphQLError>
 
-function getOperationName(query: DocumentNode): string | undefined {
+const getOperationName = (query: DocumentNode): string | undefined => {
   const definition = query.definitions.find(
     (def): def is OperationDefinitionNode => def.kind === Kind.OPERATION_DEFINITION,
   )
@@ -32,7 +32,7 @@ function getOperationName(query: DocumentNode): string | undefined {
  * 即座にレスポンスを返す urql の Exchange を作成する。
  * 未登録のクエリ名の場合は `data: undefined` を返す（未モックであることが分かるようにするため）。
  */
-export function createMockExchange(responses: MockQueryResponses): Exchange {
+export const createMockExchange = (responses: MockQueryResponses): Exchange => {
   return () => (ops$) =>
     pipe(
       ops$,
@@ -67,7 +67,7 @@ export function createMockExchange(responses: MockQueryResponses): Exchange {
  *   </Provider>,
  * )
  */
-export function createMockClient(responses: MockQueryResponses): Client {
+export const createMockClient = (responses: MockQueryResponses): Client => {
   return new Client({
     url: 'http://mock.test/graphql',
     exchanges: [createMockExchange(responses)],
