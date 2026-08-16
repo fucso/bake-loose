@@ -1,12 +1,24 @@
-import { Client, type Exchange } from 'urql'
+import { CombinedError, Client, type Exchange } from 'urql'
 import { Kind, type DocumentNode, type OperationDefinitionNode } from 'graphql'
 import { map, pipe } from 'wonka'
 
 /**
+ * `MockGraphQLError` をレスポンスとして登録すると、対応するクエリ/ミューテーションは
+ * データの代わりに GraphQL エラー（`CombinedError`）を返す。エラー状態のテストに使用する。
+ *
+ * @example
+ * const client = createMockClient({ Projects: new MockGraphQLError('failed') })
+ */
+export class MockGraphQLError {
+  constructor(public message: string) {}
+}
+
+/**
  * GraphQLクエリ/ミューテーション名をキーに、返却したいレスポンスデータをマッピングしたもの。
  * 例: { GraphqlSmokeTest: { __typename: 'Query' } }
+ * エラーレスポンスを返したい場合は値に `MockGraphQLError` を指定する。
  */
-export type MockQueryResponses = Record<string, unknown>
+export type MockQueryResponses = Record<string, unknown | MockGraphQLError>
 
 function getOperationName(query: DocumentNode): string | undefined {
   const definition = query.definitions.find(
@@ -26,12 +38,15 @@ export function createMockExchange(responses: MockQueryResponses): Exchange {
       ops$,
       map((operation) => {
         const operationName = getOperationName(operation.query)
-        const data = operationName ? responses[operationName] : undefined
+        const response = operationName ? responses[operationName] : undefined
+        const isMockError = response instanceof MockGraphQLError
 
         return {
           operation,
-          data,
-          error: undefined,
+          data: isMockError ? undefined : response,
+          error: isMockError
+            ? new CombinedError({ graphQLErrors: [response.message] })
+            : undefined,
           extensions: undefined,
           hasNext: false,
           stale: false,
