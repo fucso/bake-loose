@@ -108,3 +108,28 @@ insights:
       - pr: 55
         comment_url: "https://github.com/fucso/bake-loose/pull/55#discussion_r3729773631"
         summary: "urql モックファイルを frontend/test/mocks/urql.ts に配置するよう指摘"
+
+  - id: "insight-005"
+    category: "testing"
+    severity: "WARNING"
+    title: "新規UIコンポーネントにはStorybookファイルを追加する"
+    guideline: |
+      frontend/src/components 配下に新規の UI コンポーネントを追加する際は、
+      対応する Storybook のストーリーファイル（*.stories.tsx）を必ず同時に追加し、
+      コンポーネントの表示・バリエーションを Storybook 上で確認できるようにする。
+    anti_pattern: |
+      新規コンポーネント（例: LoadingSpinner.tsx, EmptyState.tsx, ErrorState.tsx）を
+      追加したにもかかわらず、対応する .stories.tsx ファイルを作成しない。
+    good_pattern: |
+      コンポーネントファイルと同じディレクトリに ComponentName.stories.tsx を作成し、
+      主要なバリエーション（props の組み合わせ）を Story として定義する。
+    scope:
+      - "frontend/src/components/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-08-14"
+    added_from_pr: 56
+    evidence:
+      - pr: 56
+        comment_url: "https://github.com/fucso/bake-loose/pull/56#pullrequestreview-4927691356"
+        summary: "すべての新規コンポーネントに storybook を追加してほしいという指摘"
