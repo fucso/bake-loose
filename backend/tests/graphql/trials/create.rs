@@ -55,6 +55,38 @@ async fn test_creates_trial_without_name_and_memo(pool: PgPool) {
     assert_eq!(trial["memo"], serde_json::Value::Null);
 }
 
+#[sqlx::test(migrations = "./migrations", fixtures("../../fixtures/projects.sql"))]
+async fn test_returns_validation_error_for_empty_name(pool: PgPool) {
+    let query = format!(
+        r#"mutation {{ createTrial(input: {{ projectId: "{PROJECT_ID}", name: "" }}) {{ id }} }}"#
+    );
+    let response = execute_graphql_with_errors(pool, &query).await;
+
+    assert_eq!(response.errors.len(), 1);
+    let error = &response.errors[0];
+    assert_eq!(error.message, "Trial名を入力してください");
+    assert_eq!(
+        error.extensions.as_ref().unwrap().get("code"),
+        Some(&async_graphql::Value::from("VALIDATION_ERROR"))
+    );
+}
+
+#[sqlx::test(migrations = "./migrations", fixtures("../../fixtures/projects.sql"))]
+async fn test_returns_validation_error_for_too_long_name(pool: PgPool) {
+    let too_long_name = "あ".repeat(101);
+    let query = format!(
+        r#"mutation {{ createTrial(input: {{ projectId: "{PROJECT_ID}", name: "{too_long_name}" }}) {{ id }} }}"#
+    );
+    let response = execute_graphql_with_errors(pool, &query).await;
+
+    assert_eq!(response.errors.len(), 1);
+    let error = &response.errors[0];
+    assert_eq!(
+        error.extensions.as_ref().unwrap().get("code"),
+        Some(&async_graphql::Value::from("VALIDATION_ERROR"))
+    );
+}
+
 #[sqlx::test(migrations = "./migrations")]
 async fn test_returns_not_found_error_for_non_existent_project(pool: PgPool) {
     let query = r#"
