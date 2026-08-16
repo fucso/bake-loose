@@ -42,9 +42,9 @@ describe('CreateProjectModal', () => {
     })
   })
 
-  it('作成に失敗するとエラーメッセージを表示しonCreatedは呼ばれない', async () => {
+  it('作成に失敗した場合バックエンドのエラーメッセージをそのまま表示しonCreatedは呼ばれない', async () => {
     const client = createMockClient({
-      CreateProject: new MockGraphQLError('failed'),
+      CreateProject: new MockGraphQLError('同じ名前のプロジェクトが既に存在します'),
     })
     const { onCreated } = renderModal(client)
 
@@ -53,7 +53,9 @@ describe('CreateProjectModal', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '作成' }))
 
-    expect(await screen.findByText('プロジェクトの作成に失敗しました')).toBeInTheDocument()
+    expect(
+      await screen.findByText('同じ名前のプロジェクトが既に存在します'),
+    ).toBeInTheDocument()
     expect(onCreated).not.toHaveBeenCalled()
   })
 
