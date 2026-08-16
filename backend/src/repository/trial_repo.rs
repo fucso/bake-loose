@@ -121,8 +121,11 @@ impl TrialRepository for PgTrialRepository {
         &self,
         project_id: &ProjectId,
     ) -> Result<Vec<Trial>, RepositoryError> {
-        let query = sqlx::query_as::<_, TrialRow>("SELECT * FROM trials WHERE project_id = $1")
-            .bind(project_id.0);
+        // created_at が同時刻になり得るため id もキーに加えて順序を決定的にする
+        let query = sqlx::query_as::<_, TrialRow>(
+            "SELECT * FROM trials WHERE project_id = $1 ORDER BY created_at, id",
+        )
+        .bind(project_id.0);
 
         let trial_rows =
             self.executor

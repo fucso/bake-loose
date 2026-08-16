@@ -47,20 +47,29 @@ async fn test_returns_only_trials_for_specified_project(pool: PgPool) {
 async fn test_returns_all_trials_for_project_with_multiple_trials(pool: PgPool) {
     let data = execute_graphql(
         pool,
-        r#"{ trialsByProject(projectId: "11111111-1111-1111-1111-111111111111") { name } }"#,
+        r#"{ trialsByProject(projectId: "11111111-1111-1111-1111-111111111111") { id name } }"#,
     )
     .await;
 
-    let mut names: Vec<&str> = data["trialsByProject"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|t| t["name"].as_str().unwrap())
-        .collect();
-    names.sort();
-
+    // trial_repo.rs の find_all_by_project は created_at, id 順に決定的にソートするため、
+    // フィクスチャの投入順（id昇順）と一致する完全なJSONで検証する
     assert_eq!(
-        names,
-        vec!["Completed Trial", "Test Trial 1", "Test Trial 2"]
+        data,
+        json!({
+            "trialsByProject": [
+                {
+                    "id": "33333333-3333-3333-3333-333333333333",
+                    "name": "Test Trial 1"
+                },
+                {
+                    "id": "44444444-4444-4444-4444-444444444444",
+                    "name": "Test Trial 2"
+                },
+                {
+                    "id": "66666666-6666-6666-6666-666666666666",
+                    "name": "Completed Trial"
+                }
+            ]
+        })
     );
 }
