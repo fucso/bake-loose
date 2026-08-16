@@ -114,7 +114,7 @@ impl TrialRepository for PgTrialRepository {
         let mut steps_by_trial = self.fetch_steps_by_trial_ids(&[trial_row.id]).await?;
         let steps = steps_by_trial.remove(&trial_row.id).unwrap_or_default();
 
-        Ok(Some(trial_row.into_domain(steps)))
+        Ok(Some(trial_row.into_domain(steps)?))
     }
 
     async fn find_all_by_project(
@@ -138,13 +138,13 @@ impl TrialRepository for PgTrialRepository {
         let trial_ids: Vec<Uuid> = trial_rows.iter().map(|row| row.id).collect();
         let mut steps_by_trial = self.fetch_steps_by_trial_ids(&trial_ids).await?;
 
-        Ok(trial_rows
+        trial_rows
             .into_iter()
             .map(|row| {
                 let steps = steps_by_trial.remove(&row.id).unwrap_or_default();
                 row.into_domain(steps)
             })
-            .collect())
+            .collect()
     }
 
     async fn save(&self, trial: &Trial) -> Result<(), RepositoryError> {
