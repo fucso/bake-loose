@@ -175,6 +175,60 @@ mod tests {
     }
 
     #[test]
+    fn test_update_parameter_replaces_duration_content() {
+        let (trial, step_id, parameter_id) =
+            trial_with_step_and_parameter(ParameterContent::Duration {
+                duration: DurationValue::new(60.0, DurationUnit::Minute),
+                note: "一次発酵".to_string(),
+            });
+        let command = Command {
+            step_id: step_id.clone(),
+            parameter_id,
+            content: ParameterContent::Duration {
+                duration: DurationValue::new(90.0, DurationUnit::Minute),
+                note: "一次発酵（延長）".to_string(),
+            },
+        };
+
+        let updated = run(trial, command).unwrap();
+        let step = updated.steps().iter().find(|s| s.id() == &step_id).unwrap();
+        assert_eq!(
+            step.parameters()[0].content(),
+            &ParameterContent::Duration {
+                duration: DurationValue::new(90.0, DurationUnit::Minute),
+                note: "一次発酵（延長）".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn test_update_parameter_replaces_time_marker_content() {
+        let (trial, step_id, parameter_id) =
+            trial_with_step_and_parameter(ParameterContent::TimeMarker {
+                at: DurationValue::new(30.0, DurationUnit::Minute),
+                note: "焼成開始から".to_string(),
+            });
+        let command = Command {
+            step_id: step_id.clone(),
+            parameter_id,
+            content: ParameterContent::TimeMarker {
+                at: DurationValue::new(45.0, DurationUnit::Minute),
+                note: "焼成開始から（更新）".to_string(),
+            },
+        };
+
+        let updated = run(trial, command).unwrap();
+        let step = updated.steps().iter().find(|s| s.id() == &step_id).unwrap();
+        assert_eq!(
+            step.parameters()[0].content(),
+            &ParameterContent::TimeMarker {
+                at: DurationValue::new(45.0, DurationUnit::Minute),
+                note: "焼成開始から（更新）".to_string(),
+            }
+        );
+    }
+
+    #[test]
     fn test_returns_error_when_trial_completed() {
         let (mut trial, step_id, parameter_id) =
             trial_with_step_and_parameter(ParameterContent::Text {
