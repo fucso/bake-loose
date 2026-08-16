@@ -56,7 +56,7 @@ async fn test_creates_trial_without_name_and_memo(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-async fn test_returns_internal_error_for_non_existent_project(pool: PgPool) {
+async fn test_returns_not_found_error_for_non_existent_project(pool: PgPool) {
     let query = r#"
         mutation {
             createTrial(input: { projectId: "00000000-0000-0000-0000-000000000000", name: "test" }) {
@@ -68,8 +68,9 @@ async fn test_returns_internal_error_for_non_existent_project(pool: PgPool) {
 
     assert_eq!(response.errors.len(), 1);
     let error = &response.errors[0];
+    assert_eq!(error.message, "指定されたProjectが見つかりません");
     assert_eq!(
         error.extensions.as_ref().unwrap().get("code"),
-        Some(&async_graphql::Value::from("INTERNAL_ERROR"))
+        Some(&async_graphql::Value::from("NOT_FOUND"))
     );
 }

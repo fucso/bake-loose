@@ -18,6 +18,9 @@ use crate::use_case::trial::{
 impl UserFacingError for create_trial::Error {
     fn to_user_facing(&self) -> GraphQLError {
         match self {
+            create_trial::Error::ProjectNotFound => {
+                GraphQLError::new("指定されたProjectが見つかりません", "NOT_FOUND")
+            }
             create_trial::Error::Domain(create_trial_action::Error::InvalidTrialName(
                 create_trial_action::TrialNameError::EmptyName,
             )) => GraphQLError::new("Trial名を入力してください", "VALIDATION_ERROR"),
