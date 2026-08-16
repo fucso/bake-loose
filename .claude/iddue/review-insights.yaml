@@ -108,3 +108,58 @@ insights:
       - pr: 55
         comment_url: "https://github.com/fucso/bake-loose/pull/55#discussion_r3729773631"
         summary: "urql モックファイルを frontend/test/mocks/urql.ts に配置するよう指摘"
+
+  - id: "insight-005"
+    category: "testing"
+    severity: "INFO"
+    title: "新規UIコンポーネント・ページ実装にはStorybookのstoryを併せて作成する"
+    guideline: |
+      共通UIプリミティブ（dialog等）や機能コンポーネント（モーダル等）を新規実装する際は、
+      実装と合わせて Storybook の story ファイル（*.stories.tsx）を作成し、
+      Storybook上で見た目・状態を確認できるようにする。
+    anti_pattern: |
+      新規コンポーネントの実装のみを行い、Storybookでの動作確認手段（stories.tsx）を
+      用意しない。
+    good_pattern: |
+      コンポーネントの実装ファイルと同じディレクトリに *.stories.tsx を追加し、
+      Storybook上で確認できる状態にする。
+    scope:
+      - "frontend/src/components/**"
+      - "frontend/src/pages/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-08-16"
+    added_from_pr: 69
+    evidence:
+      - pr: 69
+        comment_url: "https://github.com/fucso/bake-loose/pull/69#discussion_r3791201622"
+        summary: "components/ui/dialog.tsx に storybook を作成してほしいという指摘"
+      - pr: 69
+        comment_url: "https://github.com/fucso/bake-loose/pull/69#discussion_r3791217562"
+        summary: "components/projects/CreateProjectModal.tsx に storybook を作成してほしいという指摘"
+
+  - id: "insight-006"
+    category: "testing"
+    severity: "WARNING"
+    title: "ページのStorybookには通常状態に加え接続エラー・空データ等の特殊状態も用意する"
+    guideline: |
+      GraphQLクエリ結果を表示するページコンポーネントのStorybookでは、
+      正常系のデータ表示だけでなく、接続エラーやクエリ結果が0件などの特殊なパターンも
+      検証できるstoryをあわせて用意する。
+    anti_pattern: |
+      正常系（データ取得成功）のstoryのみを用意し、エラー状態や空状態（LoadingSpinner /
+      EmptyState / ErrorState 等の分岐）の見た目を確認する手段が用意されていない。
+    good_pattern: |
+      MockGraphQLError 等でGraphQLエラーレスポンスをモックしたstoryや、
+      クエリ結果が0件の場合のstoryを個別に用意し、
+      LoadingSpinner / EmptyState / ErrorState それぞれの見た目を確認できるようにする。
+    scope:
+      - "frontend/src/pages/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-08-16"
+    added_from_pr: 69
+    evidence:
+      - pr: 69
+        comment_url: "https://github.com/fucso/bake-loose/pull/69#discussion_r3791192100"
+        summary: "ProjectsPage.tsx について、接続エラー・クエリー結果0件などの特殊パターンを検証できるstorybookを用意してほしいという指摘"
