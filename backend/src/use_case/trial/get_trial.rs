@@ -14,9 +14,6 @@ pub enum Error {
 }
 
 /// IDでTrialを取得する
-///
-/// presentation 層は domain 型を組み立てず、フラットな値のみを渡す。
-/// 読み取り専用のためトランザクションは不要。
 pub async fn execute<U: UnitOfWork>(uow: &mut U, id: Uuid) -> Result<Option<Trial>, Error> {
     uow.trial_repository()
         .find_by_id(&TrialId(id))

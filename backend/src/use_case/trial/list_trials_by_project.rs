@@ -15,9 +15,6 @@ pub enum Error {
 }
 
 /// プロジェクトに紐づくTrial一覧を取得する
-///
-/// presentation 層は domain 型を組み立てず、フラットな値のみを渡す。
-/// 読み取り専用のためトランザクションは不要。
 pub async fn execute<U: UnitOfWork>(uow: &mut U, project_id: Uuid) -> Result<Vec<Trial>, Error> {
     uow.trial_repository()
         .find_all_by_project(&ProjectId(project_id))
