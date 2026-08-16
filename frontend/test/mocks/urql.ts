@@ -45,10 +45,10 @@ export function createMockExchange(responses: MockQueryResponses): Exchange {
  * テストでは `urql` の `Provider` にこの Client を渡してコンポーネントをレンダリングする。
  *
  * @example
- * const client = createMockClient({ GraphqlSmokeTest: { __typename: 'Query' } })
+ * const client = createMockClient({ SomeQuery: { __typename: 'Query' } })
  * render(
  *   <Provider value={client}>
- *     <HomePage />
+ *     <YourComponent />
  *   </Provider>,
  * )
  */
