@@ -13,7 +13,6 @@ use crate::ports::UnitOfWork;
 
 /// ユースケースの入力
 ///
-/// presentation 層は domain 型を組み立てず、フラットな値のみを渡す。
 /// completed_at が未指定の場合は現在時刻が採用される。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Input {

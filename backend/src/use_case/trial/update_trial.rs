@@ -11,7 +11,6 @@ use crate::ports::UnitOfWork;
 
 /// ユースケースの入力
 ///
-/// presentation 層は domain 型を組み立てず、フラットな値のみを渡す。
 /// name/memo は `None`: 変更なし / `Some(None)`: クリア / `Some(Some(v))`: 設定。
 pub struct Input {
     pub trial_id: Uuid,

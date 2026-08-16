@@ -10,8 +10,6 @@ use crate::ports::trial_repository::TrialRepository;
 use crate::ports::UnitOfWork;
 
 /// ユースケースの入力
-///
-/// presentation 層は domain 型を組み立てず、フラットな値のみを渡す。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Input {
     pub project_id: Uuid,

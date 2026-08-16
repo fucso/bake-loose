@@ -22,8 +22,6 @@ pub enum Error {
 }
 
 /// ユースケースの入力
-///
-/// presentation 層は domain 型を組み立てず、フラットな値のみを渡す。
 pub struct Input {
     pub trial_id: Uuid,
     pub step_id: Uuid,

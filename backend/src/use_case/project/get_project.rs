@@ -12,8 +12,6 @@ pub enum Error {
 }
 
 /// IDでプロジェクトを取得する
-///
-/// 読み取り専用のためトランザクションは不要。
 pub async fn execute<U: UnitOfWork>(uow: &mut U, id: &ProjectId) -> Result<Option<Project>, Error> {
     uow.project_repository()
         .find_by_id(id)
