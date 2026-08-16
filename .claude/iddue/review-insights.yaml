@@ -112,24 +112,59 @@ insights:
   - id: "insight-005"
     category: "testing"
     severity: "WARNING"
-    title: "新規UIコンポーネントにはStorybookファイルを追加する"
+    title: "新規UIコンポーネント・ページ実装にはStorybookのstoryを併せて作成する"
     guideline: |
-      frontend/src/components 配下に新規の UI コンポーネントを追加する際は、
-      対応する Storybook のストーリーファイル（*.stories.tsx）を必ず同時に追加し、
-      コンポーネントの表示・バリエーションを Storybook 上で確認できるようにする。
+      frontend/src/components 配下の新規UIコンポーネント（共通プリミティブ・機能コンポーネント）や
+      frontend/src/pages 配下の新規ページ実装を追加する際は、実装と合わせて Storybook の
+      ストーリーファイル（*.stories.tsx）を必ず同時に作成し、コンポーネント・ページの表示や
+      バリエーションを Storybook 上で確認できるようにする。
     anti_pattern: |
-      新規コンポーネント（例: LoadingSpinner.tsx, EmptyState.tsx, ErrorState.tsx）を
-      追加したにもかかわらず、対応する .stories.tsx ファイルを作成しない。
+      新規コンポーネント（例: LoadingSpinner.tsx, EmptyState.tsx, ErrorState.tsx, dialog.tsx,
+      CreateProjectModal.tsx）を追加したにもかかわらず、対応する .stories.tsx ファイルを
+      作成しない。
     good_pattern: |
-      コンポーネントファイルと同じディレクトリに ComponentName.stories.tsx を作成し、
-      主要なバリエーション（props の組み合わせ）を Story として定義する。
+      コンポーネント・ページの実装ファイルと同じディレクトリに ComponentName.stories.tsx を
+      作成し、主要なバリエーション（props の組み合わせ）を Story として定義する。
     scope:
       - "frontend/src/components/**"
+      - "frontend/src/pages/**"
     status: active
-    frequency: 1
-    last_seen: "2026-08-14"
+    frequency: 2
+    last_seen: "2026-08-16"
     added_from_pr: 56
     evidence:
       - pr: 56
         comment_url: "https://github.com/fucso/bake-loose/pull/56#pullrequestreview-4927691356"
         summary: "すべての新規コンポーネントに storybook を追加してほしいという指摘"
+      - pr: 69
+        comment_url: "https://github.com/fucso/bake-loose/pull/69#discussion_r3791201622"
+        summary: "components/ui/dialog.tsx に storybook を作成してほしいという指摘"
+      - pr: 69
+        comment_url: "https://github.com/fucso/bake-loose/pull/69#discussion_r3791217562"
+        summary: "components/projects/CreateProjectModal.tsx に storybook を作成してほしいという指摘"
+
+  - id: "insight-006"
+    category: "testing"
+    severity: "WARNING"
+    title: "ページのStorybookには通常状態に加え接続エラー・空データ等の特殊状態も用意する"
+    guideline: |
+      GraphQLクエリ結果を表示するページコンポーネントのStorybookでは、
+      正常系のデータ表示だけでなく、接続エラーやクエリ結果が0件などの特殊なパターンも
+      検証できるstoryをあわせて用意する。
+    anti_pattern: |
+      正常系（データ取得成功）のstoryのみを用意し、エラー状態や空状態（LoadingSpinner /
+      EmptyState / ErrorState 等の分岐）の見た目を確認する手段が用意されていない。
+    good_pattern: |
+      MockGraphQLError 等でGraphQLエラーレスポンスをモックしたstoryや、
+      クエリ結果が0件の場合のstoryを個別に用意し、
+      LoadingSpinner / EmptyState / ErrorState それぞれの見た目を確認できるようにする。
+    scope:
+      - "frontend/src/pages/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-08-16"
+    added_from_pr: 69
+    evidence:
+      - pr: 69
+        comment_url: "https://github.com/fucso/bake-loose/pull/69#discussion_r3791192100"
+        summary: "ProjectsPage.tsx について、接続エラー・クエリー結果0件などの特殊パターンを検証できるstorybookを用意してほしいという指摘"
