@@ -11,9 +11,34 @@ use crate::domain::actions::trial::{
 };
 use crate::presentation::graphql::error::common::{GraphQLError, UserFacingError};
 use crate::use_case::trial::{
-    add_step, complete_step, complete_trial, create_trial, get_trial, list_trials_by_project,
-    update_parameter, update_step, update_trial,
+    add_parameter, add_step, complete_step, complete_trial, create_trial, get_trial,
+    list_trials_by_project, remove_parameter, update_parameter, update_step, update_trial,
 };
+
+/// Infrastructure エラーをログに残しつつ共通の内部エラーへ変換する
+///
+/// 複数のユースケースエラーで同一の変換ロジックを繰り返さないための共通部品。
+fn internal_error(e: &str) -> GraphQLError {
+    log::error!("Infrastructure error: {}", e);
+    GraphQLError::new("内部エラーが発生しました", "INTERNAL_ERROR")
+}
+
+/// 「指定されたTrialが見つかりません」エラー
+///
+/// 複数のユースケースエラーで同一のメッセージ・コードを繰り返さないための共通部品。
+fn trial_not_found() -> GraphQLError {
+    GraphQLError::new("指定されたTrialが見つかりません", "NOT_FOUND")
+}
+
+/// 「指定されたStepが見つかりません」エラー
+fn step_not_found() -> GraphQLError {
+    GraphQLError::new("指定されたStepが見つかりません", "NOT_FOUND")
+}
+
+/// 「指定されたParameterが見つかりません」エラー
+fn parameter_not_found() -> GraphQLError {
+    GraphQLError::new("指定されたParameterが見つかりません", "NOT_FOUND")
+}
 
 impl UserFacingError for create_trial::Error {
     fn to_user_facing(&self) -> GraphQLError {
@@ -30,10 +55,7 @@ impl UserFacingError for create_trial::Error {
                 format!("Trial名は{}文字以内で入力してください", max),
                 "VALIDATION_ERROR",
             ),
-            create_trial::Error::Infrastructure(e) => {
-                log::error!("Infrastructure error: {}", e);
-                GraphQLError::new("内部エラーが発生しました", "INTERNAL_ERROR")
-            }
+            create_trial::Error::Infrastructure(e) => internal_error(e),
         }
     }
 }
@@ -47,9 +69,7 @@ impl From<create_trial::Error> for async_graphql::Error {
 impl UserFacingError for update_trial::Error {
     fn to_user_facing(&self) -> GraphQLError {
         match self {
-            update_trial::Error::NotFound => {
-                GraphQLError::new("指定されたTrialが見つかりません", "NOT_FOUND")
-            }
+            update_trial::Error::NotFound => trial_not_found(),
             update_trial::Error::Domain(update_trial_action::Error::TrialAlreadyCompleted) => {
                 GraphQLError::new("完了済みのTrialは更新できません", "VALIDATION_ERROR")
             }
@@ -62,10 +82,7 @@ impl UserFacingError for update_trial::Error {
                 format!("Trial名は{}文字以内で入力してください", max),
                 "VALIDATION_ERROR",
             ),
-            update_trial::Error::Infrastructure(e) => {
-                log::error!("Infrastructure error: {}", e);
-                GraphQLError::new("内部エラーが発生しました", "INTERNAL_ERROR")
-            }
+            update_trial::Error::Infrastructure(e) => internal_error(e),
         }
     }
 }
@@ -79,16 +96,11 @@ impl From<update_trial::Error> for async_graphql::Error {
 impl UserFacingError for complete_trial::Error {
     fn to_user_facing(&self) -> GraphQLError {
         match self {
-            complete_trial::Error::NotFound => {
-                GraphQLError::new("指定されたTrialが見つかりません", "NOT_FOUND")
-            }
+            complete_trial::Error::NotFound => trial_not_found(),
             complete_trial::Error::Domain(complete_trial_action::Error::TrialAlreadyCompleted) => {
                 GraphQLError::new("Trialは既に完了しています", "VALIDATION_ERROR")
             }
-            complete_trial::Error::Infrastructure(e) => {
-                log::error!("Infrastructure error: {}", e);
-                GraphQLError::new("内部エラーが発生しました", "INTERNAL_ERROR")
-            }
+            complete_trial::Error::Infrastructure(e) => internal_error(e),
         }
     }
 }
@@ -102,9 +114,7 @@ impl From<complete_trial::Error> for async_graphql::Error {
 impl UserFacingError for add_step::Error {
     fn to_user_facing(&self) -> GraphQLError {
         match self {
-            add_step::Error::NotFound => {
-                GraphQLError::new("指定されたTrialが見つかりません", "NOT_FOUND")
-            }
+            add_step::Error::NotFound => trial_not_found(),
             add_step::Error::Domain(add_step_action::Error::TrialAlreadyCompleted) => {
                 GraphQLError::new(
                     "完了済みのTrialにはStepを追加できません",
@@ -120,10 +130,7 @@ impl UserFacingError for add_step::Error {
                 format!("Step名は{}文字以内で入力してください", max),
                 "VALIDATION_ERROR",
             ),
-            add_step::Error::Infrastructure(e) => {
-                log::error!("Infrastructure error: {}", e);
-                GraphQLError::new("内部エラーが発生しました", "INTERNAL_ERROR")
-            }
+            add_step::Error::Infrastructure(e) => internal_error(e),
         }
     }
 }
@@ -137,15 +144,11 @@ impl From<add_step::Error> for async_graphql::Error {
 impl UserFacingError for update_step::Error {
     fn to_user_facing(&self) -> GraphQLError {
         match self {
-            update_step::Error::NotFound => {
-                GraphQLError::new("指定されたTrialが見つかりません", "NOT_FOUND")
-            }
+            update_step::Error::NotFound => trial_not_found(),
             update_step::Error::Domain(update_step_action::Error::TrialAlreadyCompleted) => {
                 GraphQLError::new("完了済みのTrialのStepは更新できません", "VALIDATION_ERROR")
             }
-            update_step::Error::Domain(update_step_action::Error::StepNotFound) => {
-                GraphQLError::new("指定されたStepが見つかりません", "NOT_FOUND")
-            }
+            update_step::Error::Domain(update_step_action::Error::StepNotFound) => step_not_found(),
             update_step::Error::Domain(update_step_action::Error::StepAlreadyCompleted) => {
                 GraphQLError::new("完了済みのStepは更新できません", "VALIDATION_ERROR")
             }
@@ -158,73 +161,7 @@ impl UserFacingError for update_step::Error {
                 format!("Step名は{}文字以内で入力してください", max),
                 "VALIDATION_ERROR",
             ),
-            update_step::Error::AddParameterDomain {
-                source: add_parameter_action::Error::TrialAlreadyCompleted,
-                ..
-            } => GraphQLError::new("完了済みのTrialのStepは更新できません", "VALIDATION_ERROR"),
-            update_step::Error::AddParameterDomain {
-                source: add_parameter_action::Error::StepNotFound,
-                ..
-            } => GraphQLError::new("指定されたStepが見つかりません", "NOT_FOUND"),
-            update_step::Error::AddParameterDomain {
-                source: add_parameter_action::Error::StepAlreadyCompleted,
-                ..
-            } => GraphQLError::new("完了済みのStepは更新できません", "VALIDATION_ERROR"),
-            update_step::Error::AddParameterDomain {
-                parameter_index,
-                source:
-                    add_parameter_action::Error::InvalidParameter(
-                        add_parameter_action::ParameterValidationError::NegativeDurationValue,
-                    ),
-            } => GraphQLError::new(
-                format!(
-                    "{}番目のパラメーターの時間は0以上で入力してください",
-                    parameter_index + 1
-                ),
-                "VALIDATION_ERROR",
-            ),
-            update_step::Error::AddParameterDomain {
-                parameter_index,
-                source:
-                    add_parameter_action::Error::InvalidParameter(
-                        add_parameter_action::ParameterValidationError::EmptyQuantityUnit,
-                    ),
-            } => GraphQLError::new(
-                format!(
-                    "{}番目のパラメーターの単位を入力してください",
-                    parameter_index + 1
-                ),
-                "VALIDATION_ERROR",
-            ),
-            update_step::Error::AddParameterDomain {
-                parameter_index,
-                source:
-                    add_parameter_action::Error::InvalidParameter(
-                        add_parameter_action::ParameterValidationError::NonPositiveQuantityAmount,
-                    ),
-            } => GraphQLError::new(
-                format!(
-                    "{}番目のパラメーターの数値は0より大きい値を入力してください",
-                    parameter_index + 1
-                ),
-                "VALIDATION_ERROR",
-            ),
-            update_step::Error::RemoveParameterDomain(
-                remove_parameter_action::Error::TrialAlreadyCompleted,
-            ) => GraphQLError::new("完了済みのTrialのStepは更新できません", "VALIDATION_ERROR"),
-            update_step::Error::RemoveParameterDomain(
-                remove_parameter_action::Error::StepNotFound,
-            ) => GraphQLError::new("指定されたStepが見つかりません", "NOT_FOUND"),
-            update_step::Error::RemoveParameterDomain(
-                remove_parameter_action::Error::StepAlreadyCompleted,
-            ) => GraphQLError::new("完了済みのStepは更新できません", "VALIDATION_ERROR"),
-            update_step::Error::RemoveParameterDomain(
-                remove_parameter_action::Error::ParameterNotFound,
-            ) => GraphQLError::new("指定されたParameterが見つかりません", "NOT_FOUND"),
-            update_step::Error::Infrastructure(e) => {
-                log::error!("Infrastructure error: {}", e);
-                GraphQLError::new("内部エラーが発生しました", "INTERNAL_ERROR")
-            }
+            update_step::Error::Infrastructure(e) => internal_error(e),
         }
     }
 }
@@ -235,12 +172,82 @@ impl From<update_step::Error> for async_graphql::Error {
     }
 }
 
+impl UserFacingError for add_parameter::Error {
+    fn to_user_facing(&self) -> GraphQLError {
+        match self {
+            add_parameter::Error::NotFound => trial_not_found(),
+            add_parameter::Error::Domain(add_parameter_action::Error::TrialAlreadyCompleted) => {
+                GraphQLError::new(
+                    "完了済みのTrialのStepにはParameterを追加できません",
+                    "VALIDATION_ERROR",
+                )
+            }
+            add_parameter::Error::Domain(add_parameter_action::Error::StepNotFound) => {
+                step_not_found()
+            }
+            add_parameter::Error::Domain(add_parameter_action::Error::StepAlreadyCompleted) => {
+                GraphQLError::new(
+                    "完了済みのStepにはParameterを追加できません",
+                    "VALIDATION_ERROR",
+                )
+            }
+            add_parameter::Error::Domain(add_parameter_action::Error::InvalidParameter(
+                add_parameter_action::ParameterValidationError::NegativeDurationValue,
+            )) => GraphQLError::new("時間は0以上で入力してください", "VALIDATION_ERROR"),
+            add_parameter::Error::Domain(add_parameter_action::Error::InvalidParameter(
+                add_parameter_action::ParameterValidationError::EmptyQuantityUnit,
+            )) => GraphQLError::new("単位を入力してください", "VALIDATION_ERROR"),
+            add_parameter::Error::Domain(add_parameter_action::Error::InvalidParameter(
+                add_parameter_action::ParameterValidationError::NonPositiveQuantityAmount,
+            )) => GraphQLError::new("数値は0より大きい値を入力してください", "VALIDATION_ERROR"),
+            add_parameter::Error::Infrastructure(e) => internal_error(e),
+        }
+    }
+}
+
+impl From<add_parameter::Error> for async_graphql::Error {
+    fn from(e: add_parameter::Error) -> Self {
+        e.to_user_facing().extend()
+    }
+}
+
+impl UserFacingError for remove_parameter::Error {
+    fn to_user_facing(&self) -> GraphQLError {
+        match self {
+            remove_parameter::Error::NotFound => trial_not_found(),
+            remove_parameter::Error::Domain(
+                remove_parameter_action::Error::TrialAlreadyCompleted,
+            ) => GraphQLError::new(
+                "完了済みのTrialのStepからParameterを削除できません",
+                "VALIDATION_ERROR",
+            ),
+            remove_parameter::Error::Domain(remove_parameter_action::Error::StepNotFound) => {
+                step_not_found()
+            }
+            remove_parameter::Error::Domain(
+                remove_parameter_action::Error::StepAlreadyCompleted,
+            ) => GraphQLError::new(
+                "完了済みのStepからParameterを削除できません",
+                "VALIDATION_ERROR",
+            ),
+            remove_parameter::Error::Domain(remove_parameter_action::Error::ParameterNotFound) => {
+                parameter_not_found()
+            }
+            remove_parameter::Error::Infrastructure(e) => internal_error(e),
+        }
+    }
+}
+
+impl From<remove_parameter::Error> for async_graphql::Error {
+    fn from(e: remove_parameter::Error) -> Self {
+        e.to_user_facing().extend()
+    }
+}
+
 impl UserFacingError for update_parameter::Error {
     fn to_user_facing(&self) -> GraphQLError {
         match self {
-            update_parameter::Error::NotFound => {
-                GraphQLError::new("指定されたTrialが見つかりません", "NOT_FOUND")
-            }
+            update_parameter::Error::NotFound => trial_not_found(),
             update_parameter::Error::Domain(
                 update_parameter_action::Error::TrialAlreadyCompleted,
             ) => GraphQLError::new(
@@ -248,7 +255,7 @@ impl UserFacingError for update_parameter::Error {
                 "VALIDATION_ERROR",
             ),
             update_parameter::Error::Domain(update_parameter_action::Error::StepNotFound) => {
-                GraphQLError::new("指定されたStepが見つかりません", "NOT_FOUND")
+                step_not_found()
             }
             update_parameter::Error::Domain(
                 update_parameter_action::Error::StepAlreadyCompleted,
@@ -257,7 +264,7 @@ impl UserFacingError for update_parameter::Error {
                 "VALIDATION_ERROR",
             ),
             update_parameter::Error::Domain(update_parameter_action::Error::ParameterNotFound) => {
-                GraphQLError::new("指定されたParameterが見つかりません", "NOT_FOUND")
+                parameter_not_found()
             }
             update_parameter::Error::Domain(
                 update_parameter_action::Error::ParameterContentTypeMismatch,
@@ -271,10 +278,7 @@ impl UserFacingError for update_parameter::Error {
             update_parameter::Error::Domain(update_parameter_action::Error::InvalidParameter(
                 update_parameter_action::ParameterValidationError::NonPositiveQuantityAmount,
             )) => GraphQLError::new("数値は0より大きい値を入力してください", "VALIDATION_ERROR"),
-            update_parameter::Error::Infrastructure(e) => {
-                log::error!("Infrastructure error: {}", e);
-                GraphQLError::new("内部エラーが発生しました", "INTERNAL_ERROR")
-            }
+            update_parameter::Error::Infrastructure(e) => internal_error(e),
         }
     }
 }
@@ -288,22 +292,17 @@ impl From<update_parameter::Error> for async_graphql::Error {
 impl UserFacingError for complete_step::Error {
     fn to_user_facing(&self) -> GraphQLError {
         match self {
-            complete_step::Error::NotFound => {
-                GraphQLError::new("指定されたTrialが見つかりません", "NOT_FOUND")
-            }
+            complete_step::Error::NotFound => trial_not_found(),
             complete_step::Error::Domain(complete_step_action::Error::TrialAlreadyCompleted) => {
                 GraphQLError::new("完了済みのTrialのStepは完了できません", "VALIDATION_ERROR")
             }
             complete_step::Error::Domain(complete_step_action::Error::StepNotFound) => {
-                GraphQLError::new("指定されたStepが見つかりません", "NOT_FOUND")
+                step_not_found()
             }
             complete_step::Error::Domain(complete_step_action::Error::StepAlreadyCompleted) => {
                 GraphQLError::new("Stepは既に完了しています", "VALIDATION_ERROR")
             }
-            complete_step::Error::Infrastructure(e) => {
-                log::error!("Infrastructure error: {}", e);
-                GraphQLError::new("内部エラーが発生しました", "INTERNAL_ERROR")
-            }
+            complete_step::Error::Infrastructure(e) => internal_error(e),
         }
     }
 }
@@ -317,10 +316,7 @@ impl From<complete_step::Error> for async_graphql::Error {
 impl UserFacingError for get_trial::Error {
     fn to_user_facing(&self) -> GraphQLError {
         match self {
-            get_trial::Error::Infrastructure(e) => {
-                log::error!("Infrastructure error: {}", e);
-                GraphQLError::new("内部エラーが発生しました", "INTERNAL_ERROR")
-            }
+            get_trial::Error::Infrastructure(e) => internal_error(e),
         }
     }
 }
@@ -334,10 +330,7 @@ impl From<get_trial::Error> for async_graphql::Error {
 impl UserFacingError for list_trials_by_project::Error {
     fn to_user_facing(&self) -> GraphQLError {
         match self {
-            list_trials_by_project::Error::Infrastructure(e) => {
-                log::error!("Infrastructure error: {}", e);
-                GraphQLError::new("内部エラーが発生しました", "INTERNAL_ERROR")
-            }
+            list_trials_by_project::Error::Infrastructure(e) => internal_error(e),
         }
     }
 }

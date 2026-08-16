@@ -1,36 +1,32 @@
-//! update_step ユースケース
+//! add_parameter ユースケース
 //!
-//! trial_id で Trial を取得し、Step の name/started_at 更新（update_step アクション）を
-//! 適用・保存する。パラメーターの追加・削除はそれぞれ add_parameter / remove_parameter
-//! ユースケースが担当する。
+//! trial_id で Trial を取得し、Step にパラメーターを追加する
+//! add_parameter ドメインアクションを適用・保存する。
 
-use chrono::{DateTime, FixedOffset};
 use uuid::Uuid;
 
-use crate::domain::actions::trial::update_step;
+use crate::domain::actions::trial::add_parameter;
+use crate::domain::models::parameter::ParameterContent;
 use crate::domain::models::step::StepId;
 use crate::domain::models::trial::{Trial, TrialId};
-use crate::domain::timezone::JstDateTime;
 use crate::ports::trial_repository::TrialRepository;
 use crate::ports::UnitOfWork;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
     NotFound,
-    Domain(update_step::Error),
+    Domain(add_parameter::Error),
     Infrastructure(String),
 }
 
 /// ユースケースの入力
 ///
 /// presentation 層は domain 型を組み立てず、フラットな値のみを渡す。
+/// ParameterContent は元々オブジェクト形式の値であるため、無理にフラット化しない。
 pub struct Input {
     pub trial_id: Uuid,
     pub step_id: Uuid,
-    /// Some の場合のみ変更
-    pub name: Option<String>,
-    /// None: 変更なし / Some(None): クリア / Some(Some(t)): t に設定
-    pub started_at: Option<Option<DateTime<FixedOffset>>>,
+    pub content: ParameterContent,
 }
 
 pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, Error> {
@@ -51,14 +47,11 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
         }
     };
 
-    let trial = match update_step::run(
+    let trial = match add_parameter::run(
         trial,
-        update_step::Command {
+        add_parameter::Command {
             step_id: StepId(input.step_id),
-            name: input.name,
-            started_at: input
-                .started_at
-                .map(|opt| opt.map(JstDateTime::from_fixed_offset)),
+            content: input.content,
         },
     ) {
         Ok(trial) => trial,
@@ -95,17 +88,8 @@ mod tests {
         (trial, step_id)
     }
 
-    fn base_input(trial_id: Uuid, step_id: Uuid) -> Input {
-        Input {
-            trial_id,
-            step_id,
-            name: None,
-            started_at: None,
-        }
-    }
-
     #[tokio::test]
-    async fn test_update_step_name_success() {
+    async fn test_execute_adds_parameter_to_existing_step() {
         let (trial, step_id) = trial_with_step();
         let trial_id = trial.id().clone();
 
@@ -113,8 +97,11 @@ mod tests {
         uow.trial_repository().save(&trial).await.unwrap();
 
         let input = Input {
-            name: Some("新名称".to_string()),
-            ..base_input(trial_id.0, step_id.0)
+            trial_id: trial_id.0,
+            step_id: step_id.0,
+            content: ParameterContent::Text {
+                value: "打ち粉を追加".to_string(),
+            },
         };
 
         let result = execute(&mut uow, input).await;
@@ -122,7 +109,13 @@ mod tests {
         assert!(result.is_ok());
         let updated = result.unwrap();
         let step = updated.steps().iter().find(|s| s.id() == &step_id).unwrap();
-        assert_eq!(step.name(), "新名称");
+        assert_eq!(step.parameters().len(), 1);
+        assert_eq!(
+            step.parameters()[0].content(),
+            &ParameterContent::Text {
+                value: "打ち粉を追加".to_string(),
+            }
+        );
 
         let saved = uow
             .trial_repository()
@@ -131,44 +124,20 @@ mod tests {
             .unwrap()
             .unwrap();
         let saved_step = saved.steps().iter().find(|s| s.id() == &step_id).unwrap();
-        assert_eq!(saved_step.name(), "新名称");
+        assert_eq!(saved_step.parameters().len(), 1);
     }
 
     #[tokio::test]
-    async fn test_update_step_sets_and_clears_started_at() {
-        let (trial, step_id) = trial_with_step();
-        let trial_id = trial.id().clone();
-
-        let mut uow = MockUnitOfWork::default();
-        uow.trial_repository().save(&trial).await.unwrap();
-
-        let started_at = DateTime::parse_from_rfc3339("2026-01-01T09:00:00+09:00").unwrap();
-        let input = Input {
-            started_at: Some(Some(started_at)),
-            ..base_input(trial_id.0, step_id.0)
-        };
-        let result = execute(&mut uow, input).await;
-        assert!(result.is_ok());
-        let updated = result.unwrap();
-        let step = updated.steps().iter().find(|s| s.id() == &step_id).unwrap();
-        assert!(step.started_at().is_some());
-
-        let input = Input {
-            started_at: Some(None),
-            ..base_input(updated.id().0, step_id.0)
-        };
-        let result = execute(&mut uow, input).await;
-        assert!(result.is_ok());
-        let updated = result.unwrap();
-        let step = updated.steps().iter().find(|s| s.id() == &step_id).unwrap();
-        assert!(step.started_at().is_none());
-    }
-
-    #[tokio::test]
-    async fn test_returns_not_found_when_trial_does_not_exist() {
+    async fn test_execute_returns_not_found_when_trial_does_not_exist() {
         let mut uow = MockUnitOfWork::default();
 
-        let input = base_input(Uuid::new_v4(), Uuid::new_v4());
+        let input = Input {
+            trial_id: Uuid::new_v4(),
+            step_id: Uuid::new_v4(),
+            content: ParameterContent::Text {
+                value: "打ち粉を追加".to_string(),
+            },
+        };
 
         let result = execute(&mut uow, input).await;
 
@@ -176,7 +145,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_propagates_domain_error_when_step_not_found() {
+    async fn test_execute_returns_domain_error_when_step_not_found() {
         let (trial, _step_id) = trial_with_step();
         let trial_id = trial.id().clone();
 
@@ -184,43 +153,48 @@ mod tests {
         uow.trial_repository().save(&trial).await.unwrap();
 
         let input = Input {
-            name: Some("新名称".to_string()),
-            ..base_input(trial_id.0, Uuid::new_v4())
-        };
-
-        let result = execute(&mut uow, input).await;
-
-        assert_eq!(result, Err(Error::Domain(update_step::Error::StepNotFound)));
-
-        // ドメインエラー時は永続化されていないこと
-        let saved = uow
-            .trial_repository()
-            .find_by_id(&trial_id)
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(saved, trial);
-    }
-
-    #[tokio::test]
-    async fn test_propagates_domain_error_when_trial_completed() {
-        let (mut trial, step_id) = trial_with_step();
-        trial.complete(None);
-        let trial_id = trial.id().clone();
-
-        let mut uow = MockUnitOfWork::default();
-        uow.trial_repository().save(&trial).await.unwrap();
-
-        let input = Input {
-            name: Some("新名称".to_string()),
-            ..base_input(trial_id.0, step_id.0)
+            trial_id: trial_id.0,
+            step_id: Uuid::new_v4(),
+            content: ParameterContent::Text {
+                value: "打ち粉を追加".to_string(),
+            },
         };
 
         let result = execute(&mut uow, input).await;
 
         assert_eq!(
             result,
-            Err(Error::Domain(update_step::Error::TrialAlreadyCompleted))
+            Err(Error::Domain(add_parameter::Error::StepNotFound))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_execute_returns_domain_error_for_invalid_parameter() {
+        let (trial, step_id) = trial_with_step();
+        let trial_id = trial.id().clone();
+
+        let mut uow = MockUnitOfWork::default();
+        uow.trial_repository().save(&trial).await.unwrap();
+
+        let input = Input {
+            trial_id: trial_id.0,
+            step_id: step_id.0,
+            content: ParameterContent::KeyValue {
+                key: "強力粉".to_string(),
+                value: crate::domain::models::parameter::ParameterValue::Quantity {
+                    amount: 300.0,
+                    unit: "".to_string(),
+                },
+            },
+        };
+
+        let result = execute(&mut uow, input).await;
+
+        assert_eq!(
+            result,
+            Err(Error::Domain(add_parameter::Error::InvalidParameter(
+                add_parameter::ParameterValidationError::EmptyQuantityUnit
+            )))
         );
     }
 }

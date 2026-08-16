@@ -177,7 +177,7 @@ pub struct UpdateTrialInput {
 
 /// Step追加時の入力
 ///
-/// パラメーターの追加は行わない（`updateStep` の `addParameters` で行う）
+/// パラメーターの追加は行わない（`addParameter` mutation で行う）
 #[derive(InputObject)]
 pub struct AddStepInput {
     pub name: String,
@@ -187,12 +187,9 @@ pub struct AddStepInput {
 /// Step更新時の入力
 ///
 /// `started_at` は未指定（undefined）で変更なし、null 指定でクリアする。
+/// パラメーターの追加・削除は行わない（`addParameter` / `removeParameter` mutation で行う）
 #[derive(InputObject)]
 pub struct UpdateStepInput {
     pub name: Option<String>,
     pub started_at: MaybeUndefined<DateTime<FixedOffset>>,
-    #[graphql(default)]
-    pub add_parameters: Vec<Json<ParameterContent>>,
-    #[graphql(default)]
-    pub remove_parameter_ids: Vec<ID>,
 }

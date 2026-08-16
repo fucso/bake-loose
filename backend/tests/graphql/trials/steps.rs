@@ -1,4 +1,4 @@
-//! `addStep` / `updateStep` / `completeStep` mutation tests
+//! `addStep` / `updateStep` / `addParameter` / `removeParameter` / `completeStep` mutation tests
 
 use serde_json::json;
 use sqlx::PgPool;
@@ -27,21 +27,50 @@ async fn add_step(pool: PgPool, trial_id: &str, name: &str) -> serde_json::Value
     execute_graphql(pool, &query).await
 }
 
-/// Step を追加した上で `updateStep` の `addParameters` を用いて
-/// パラメーターを2件（text, key_value）付与する
+async fn add_parameter(
+    pool: PgPool,
+    trial_id: &str,
+    step_id: &str,
+    content_literal: &str,
+) -> serde_json::Value {
+    let query = format!(
+        r#"
+        mutation {{
+            addParameter(trialId: "{trial_id}", stepId: "{step_id}", content: {content_literal}) {{
+                id
+                content
+            }}
+        }}
+        "#
+    );
+    execute_graphql(pool, &query).await
+}
+
+/// Step を追加した上で `addParameter` を用いてパラメーターを2件（text, key_value）付与し、
+/// 最終的な Step の状態を `updateStep` の結果として返す
 async fn add_step_with_parameters(pool: PgPool, trial_id: &str, name: &str) -> serde_json::Value {
     let added = add_step(pool.clone(), trial_id, name).await;
     let step_id = added["addStep"]["id"].as_str().unwrap().to_string();
 
+    add_parameter(
+        pool.clone(),
+        trial_id,
+        &step_id,
+        r#"{ type: "text", value: "打ち粉を追加" }"#,
+    )
+    .await;
+    add_parameter(
+        pool.clone(),
+        trial_id,
+        &step_id,
+        r#"{ type: "key_value", key: "強力粉", value: { type: "quantity", amount: 300, unit: "g" } }"#,
+    )
+    .await;
+
     let query = format!(
         r#"
         mutation {{
-            updateStep(trialId: "{trial_id}", stepId: "{step_id}", input: {{
-                addParameters: [
-                    {{ type: "text", value: "打ち粉を追加" }},
-                    {{ type: "key_value", key: "強力粉", value: {{ type: "quantity", amount: 300, unit: "g" }} }}
-                ]
-            }}) {{
+            updateStep(trialId: "{trial_id}", stepId: "{step_id}", input: {{}}) {{
                 id
                 name
                 position
@@ -147,23 +176,43 @@ async fn test_update_step_name_and_parameters(pool: PgPool) {
         .unwrap()
         .to_string();
 
-    let query = format!(
+    let rename_query = format!(
         r#"
         mutation {{
-            updateStep(trialId: "{TRIAL_ID}", stepId: "{step_id}", input: {{
-                name: "発酵",
-                addParameters: [{{ type: "text", value: "追加メモ" }}],
-                removeParameterIds: ["{text_parameter_id}"]
-            }}) {{
+            updateStep(trialId: "{TRIAL_ID}", stepId: "{step_id}", input: {{ name: "発酵" }}) {{
+                name
+            }}
+        }}
+        "#
+    );
+    let renamed = execute_graphql(pool.clone(), &rename_query).await;
+    assert_eq!(renamed["updateStep"]["name"], "発酵");
+
+    add_parameter(
+        pool.clone(),
+        TRIAL_ID,
+        &step_id,
+        r#"{ type: "text", value: "追加メモ" }"#,
+    )
+    .await;
+
+    let remove_query = format!(
+        r#"
+        mutation {{
+            removeParameter(
+                trialId: "{TRIAL_ID}"
+                stepId: "{step_id}"
+                parameterId: "{text_parameter_id}"
+            ) {{
                 name
                 parameters {{ content }}
             }}
         }}
         "#
     );
-    let data = execute_graphql(pool, &query).await;
+    let data = execute_graphql(pool, &remove_query).await;
 
-    let step = &data["updateStep"];
+    let step = &data["removeParameter"];
     assert_eq!(step["name"], "発酵");
 
     let contents: Vec<_> = step["parameters"]
@@ -177,6 +226,63 @@ async fn test_update_step_name_and_parameters(pool: PgPool) {
     assert!(!contents
         .iter()
         .any(|c| c == &json!({ "type": "text", "value": "打ち粉を追加" })));
+}
+
+#[sqlx::test(
+    migrations = "./migrations",
+    fixtures("../../fixtures/projects.sql", "../../fixtures/trials.sql")
+)]
+async fn test_add_parameter_returns_error_when_step_not_found(pool: PgPool) {
+    let query = format!(
+        r#"
+        mutation {{
+            addParameter(
+                trialId: "{TRIAL_ID}"
+                stepId: "00000000-0000-0000-0000-000000000000"
+                content: {{ type: "text", value: "追加メモ" }}
+            ) {{ id }}
+        }}
+        "#
+    );
+    let response = execute_graphql_with_errors(pool, &query).await;
+
+    assert_eq!(response.errors.len(), 1);
+    let error = &response.errors[0];
+    assert_eq!(error.message, "指定されたStepが見つかりません");
+    assert_eq!(
+        error.extensions.as_ref().unwrap().get("code"),
+        Some(&async_graphql::Value::from("NOT_FOUND"))
+    );
+}
+
+#[sqlx::test(
+    migrations = "./migrations",
+    fixtures("../../fixtures/projects.sql", "../../fixtures/trials.sql")
+)]
+async fn test_remove_parameter_returns_error_when_parameter_not_found(pool: PgPool) {
+    let added = add_step(pool.clone(), TRIAL_ID, "こね").await;
+    let step_id = added["addStep"]["id"].as_str().unwrap().to_string();
+
+    let query = format!(
+        r#"
+        mutation {{
+            removeParameter(
+                trialId: "{TRIAL_ID}"
+                stepId: "{step_id}"
+                parameterId: "00000000-0000-0000-0000-000000000000"
+            ) {{ id }}
+        }}
+        "#
+    );
+    let response = execute_graphql_with_errors(pool, &query).await;
+
+    assert_eq!(response.errors.len(), 1);
+    let error = &response.errors[0];
+    assert_eq!(error.message, "指定されたParameterが見つかりません");
+    assert_eq!(
+        error.extensions.as_ref().unwrap().get("code"),
+        Some(&async_graphql::Value::from("NOT_FOUND"))
+    );
 }
 
 #[sqlx::test(
