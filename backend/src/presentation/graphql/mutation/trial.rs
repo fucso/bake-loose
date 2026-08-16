@@ -9,6 +9,7 @@ use uuid::Uuid;
 use crate::domain::models::parameter::{Parameter as DomainParameter, ParameterContent};
 use crate::domain::models::step::Step as DomainStep;
 use crate::domain::models::trial::Trial as DomainTrial;
+use crate::presentation::graphql::common::parse_uuid;
 use crate::presentation::graphql::context::ContextExt;
 use crate::presentation::graphql::error::{GraphQLError, UserFacingError};
 use crate::presentation::graphql::types::trial::{
@@ -18,11 +19,6 @@ use crate::use_case::trial::{
     add_parameter, add_step, complete_step, complete_trial, create_trial, remove_parameter,
     update_parameter, update_step, update_trial,
 };
-
-fn parse_uuid(id: &ID, label: &str) -> Result<Uuid> {
-    Uuid::parse_str(&id.0)
-        .map_err(|_| async_graphql::Error::new(format!("Invalid {label} ID format")))
-}
 
 fn to_double_option<T>(value: MaybeUndefined<T>) -> Option<Option<T>> {
     match value {
@@ -87,7 +83,7 @@ impl TrialMutation {
     /// Trialを作成する
     async fn create_trial(&self, ctx: &Context<'_>, input: CreateTrialInput) -> Result<Trial> {
         let mut uow = ctx.create_unit_of_work()?;
-        let project_id = parse_uuid(&input.project_id, "project")?;
+        let project_id = parse_uuid(&input.project_id)?;
 
         let use_case_input = create_trial::Input {
             project_id,
@@ -110,7 +106,7 @@ impl TrialMutation {
         input: UpdateTrialInput,
     ) -> Result<Trial> {
         let mut uow = ctx.create_unit_of_work()?;
-        let trial_id = parse_uuid(&id, "trial")?;
+        let trial_id = parse_uuid(&id)?;
 
         let use_case_input = update_trial::Input {
             trial_id,
@@ -133,7 +129,7 @@ impl TrialMutation {
         completed_at: Option<DateTime<FixedOffset>>,
     ) -> Result<Trial> {
         let mut uow = ctx.create_unit_of_work()?;
-        let trial_id = parse_uuid(&id, "trial")?;
+        let trial_id = parse_uuid(&id)?;
 
         let use_case_input = complete_trial::Input {
             trial_id,
@@ -150,7 +146,7 @@ impl TrialMutation {
     /// Trialに新しいStepを追加する
     async fn add_step(&self, ctx: &Context<'_>, trial_id: ID, input: AddStepInput) -> Result<Step> {
         let mut uow = ctx.create_unit_of_work()?;
-        let trial_id = parse_uuid(&trial_id, "trial")?;
+        let trial_id = parse_uuid(&trial_id)?;
 
         let use_case_input = add_step::Input {
             trial_id,
@@ -174,8 +170,8 @@ impl TrialMutation {
         input: UpdateStepInput,
     ) -> Result<Step> {
         let mut uow = ctx.create_unit_of_work()?;
-        let trial_id = parse_uuid(&trial_id, "trial")?;
-        let step_id = parse_uuid(&step_id, "step")?;
+        let trial_id = parse_uuid(&trial_id)?;
+        let step_id = parse_uuid(&step_id)?;
 
         let use_case_input = update_step::Input {
             trial_id,
@@ -200,8 +196,8 @@ impl TrialMutation {
         content: Json<ParameterContent>,
     ) -> Result<Parameter> {
         let mut uow = ctx.create_unit_of_work()?;
-        let trial_id = parse_uuid(&trial_id, "trial")?;
-        let step_id = parse_uuid(&step_id, "step")?;
+        let trial_id = parse_uuid(&trial_id)?;
+        let step_id = parse_uuid(&step_id)?;
 
         let use_case_input = add_parameter::Input {
             trial_id,
@@ -231,9 +227,9 @@ impl TrialMutation {
         parameter_id: ID,
     ) -> Result<Step> {
         let mut uow = ctx.create_unit_of_work()?;
-        let trial_id = parse_uuid(&trial_id, "trial")?;
-        let step_id = parse_uuid(&step_id, "step")?;
-        let parameter_id = parse_uuid(&parameter_id, "parameter")?;
+        let trial_id = parse_uuid(&trial_id)?;
+        let step_id = parse_uuid(&step_id)?;
+        let parameter_id = parse_uuid(&parameter_id)?;
 
         let use_case_input = remove_parameter::Input {
             trial_id,
@@ -258,9 +254,9 @@ impl TrialMutation {
         content: Json<ParameterContent>,
     ) -> Result<Parameter> {
         let mut uow = ctx.create_unit_of_work()?;
-        let trial_id = parse_uuid(&trial_id, "trial")?;
-        let step_id = parse_uuid(&step_id, "step")?;
-        let parameter_id = parse_uuid(&parameter_id, "parameter")?;
+        let trial_id = parse_uuid(&trial_id)?;
+        let step_id = parse_uuid(&step_id)?;
+        let parameter_id = parse_uuid(&parameter_id)?;
 
         let use_case_input = update_parameter::Input {
             trial_id,
@@ -285,8 +281,8 @@ impl TrialMutation {
         completed_at: Option<DateTime<FixedOffset>>,
     ) -> Result<Step> {
         let mut uow = ctx.create_unit_of_work()?;
-        let trial_id = parse_uuid(&trial_id, "trial")?;
-        let step_id = parse_uuid(&step_id, "step")?;
+        let trial_id = parse_uuid(&trial_id)?;
+        let step_id = parse_uuid(&step_id)?;
 
         let use_case_input = complete_step::Input {
             trial_id,

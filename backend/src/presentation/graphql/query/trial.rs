@@ -3,8 +3,8 @@
 //! Trialに関するクエリを処理する。
 
 use async_graphql::{Context, ErrorExtensions, Object, Result, ID};
-use uuid::Uuid;
 
+use crate::presentation::graphql::common::parse_uuid;
 use crate::presentation::graphql::context::ContextExt;
 use crate::presentation::graphql::error::UserFacingError;
 use crate::presentation::graphql::types::trial::Trial;
@@ -22,8 +22,7 @@ impl TrialQuery {
     async fn trial(&self, ctx: &Context<'_>, id: ID) -> Result<Option<Trial>> {
         let mut uow = ctx.create_unit_of_work()?;
 
-        let trial_id = Uuid::parse_str(&id.0)
-            .map_err(|_| async_graphql::Error::new("Invalid trial ID format"))?;
+        let trial_id = parse_uuid(&id)?;
 
         let result = get_trial::execute(&mut uow, trial_id)
             .await
@@ -36,8 +35,7 @@ impl TrialQuery {
     async fn trials_by_project(&self, ctx: &Context<'_>, project_id: ID) -> Result<Vec<Trial>> {
         let mut uow = ctx.create_unit_of_work()?;
 
-        let project_id = Uuid::parse_str(&project_id.0)
-            .map_err(|_| async_graphql::Error::new("Invalid project ID format"))?;
+        let project_id = parse_uuid(&project_id)?;
 
         let result = list_trials_by_project::execute(&mut uow, project_id)
             .await
