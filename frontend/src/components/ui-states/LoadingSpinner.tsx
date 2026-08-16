@@ -8,7 +8,7 @@ type LoadingSpinnerProps = {
   className?: string
 }
 
-function LoadingSpinner({ message, className }: LoadingSpinnerProps) {
+const LoadingSpinner = ({ message, className }: LoadingSpinnerProps) => {
   return (
     <div
       data-slot="loading-spinner"

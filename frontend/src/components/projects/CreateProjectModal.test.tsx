@@ -4,7 +4,7 @@ import { Provider } from 'urql'
 import { createMockClient, MockGraphQLError } from '../../../test/mocks/urql'
 import { CreateProjectModal } from './CreateProjectModal'
 
-function renderModal(client: ReturnType<typeof createMockClient>) {
+const renderModal = (client: ReturnType<typeof createMockClient>) => {
   const onOpenChange = vi.fn()
   const onCreated = vi.fn()
   const utils = render(

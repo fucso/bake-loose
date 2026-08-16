@@ -14,7 +14,7 @@ type EmptyStateProps = {
   className?: string
 }
 
-function EmptyState({ message, icon: Icon = Inbox, action, className }: EmptyStateProps) {
+const EmptyState = ({ message, icon: Icon = Inbox, action, className }: EmptyStateProps) => {
   return (
     <div
       data-slot="empty-state"

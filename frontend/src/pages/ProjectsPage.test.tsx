@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { createMockClient, MockGraphQLError } from '../../test/mocks/urql'
 import ProjectsPage from './ProjectsPage'
 
-function renderProjectsPage(client: ReturnType<typeof createMockClient>) {
+const renderProjectsPage = (client: ReturnType<typeof createMockClient>) => {
   return render(
     <Provider value={client}>
       <MemoryRouter>

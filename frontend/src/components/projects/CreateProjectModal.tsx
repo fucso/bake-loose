@@ -36,7 +36,7 @@ type CreateProjectModalProps = {
   onCreated: () => void
 }
 
-function CreateProjectModal({ open, onOpenChange, onCreated }: CreateProjectModalProps) {
+const CreateProjectModal = ({ open, onOpenChange, onCreated }: CreateProjectModalProps) => {
   const [name, setName] = useState("")
   const [validationError, setValidationError] = useState<string | null>(null)
   const [{ fetching, error }, createProject] = useMutation<
