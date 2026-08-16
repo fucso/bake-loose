@@ -9,7 +9,7 @@ use crate::domain::models::trial::Trial;
 use crate::ports::trial_repository::TrialRepository;
 use crate::ports::UnitOfWork;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
     Infrastructure(String),
 }

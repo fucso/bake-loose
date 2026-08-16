@@ -8,7 +8,7 @@ use crate::domain::models::trial::{Trial, TrialId};
 use crate::ports::trial_repository::TrialRepository;
 use crate::ports::UnitOfWork;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
     Infrastructure(String),
 }
