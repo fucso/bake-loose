@@ -193,6 +193,19 @@ impl UserFacingError for update_step::Error {
                 ),
                 "VALIDATION_ERROR",
             ),
+            update_step::Error::AddParameterDomain {
+                parameter_index,
+                source:
+                    add_parameter_action::Error::InvalidParameter(
+                        add_parameter_action::ParameterValidationError::NonPositiveQuantityAmount,
+                    ),
+            } => GraphQLError::new(
+                format!(
+                    "{}番目のパラメーターの数値は0より大きい値を入力してください",
+                    parameter_index + 1
+                ),
+                "VALIDATION_ERROR",
+            ),
             update_step::Error::RemoveParameterDomain(
                 remove_parameter_action::Error::TrialAlreadyCompleted,
             ) => GraphQLError::new("完了済みのTrialのStepは更新できません", "VALIDATION_ERROR"),
@@ -252,6 +265,9 @@ impl UserFacingError for update_parameter::Error {
             update_parameter::Error::Domain(update_parameter_action::Error::InvalidParameter(
                 update_parameter_action::ParameterValidationError::EmptyQuantityUnit,
             )) => GraphQLError::new("単位を入力してください", "VALIDATION_ERROR"),
+            update_parameter::Error::Domain(update_parameter_action::Error::InvalidParameter(
+                update_parameter_action::ParameterValidationError::NonPositiveQuantityAmount,
+            )) => GraphQLError::new("数値は0より大きい値を入力してください", "VALIDATION_ERROR"),
             update_parameter::Error::Infrastructure(e) => {
                 log::error!("Infrastructure error: {}", e);
                 GraphQLError::new("内部エラーが発生しました", "INTERNAL_ERROR")

@@ -6,12 +6,13 @@ use crate::domain::models::parameter::{DurationValue, ParameterContent, Paramete
 pub enum Error {
     NegativeDurationValue,
     EmptyQuantityUnit,
+    NonPositiveQuantityAmount,
 }
 
 /// ParameterContent が不正な値を持たないことを検証する
 ///
 /// - Duration/TimeMarker の DurationValue は非負であること
-/// - KeyValue の Quantity は unit が空文字でないこと
+/// - KeyValue の Quantity は unit が空文字でないこと、amount が正の値であること
 pub fn validate(content: &ParameterContent) -> Result<(), Error> {
     match content {
         ParameterContent::KeyValue { value, .. } => validate_value(value),
@@ -23,9 +24,13 @@ pub fn validate(content: &ParameterContent) -> Result<(), Error> {
 
 fn validate_value(value: &ParameterValue) -> Result<(), Error> {
     match value {
-        ParameterValue::Quantity { unit, .. } => {
+        ParameterValue::Quantity { amount, unit } => {
             if unit.trim().is_empty() {
                 return Err(Error::EmptyQuantityUnit);
+            }
+            // `amount <= 0.0` だけでは NaN を検出できないため明示的にチェックする
+            if amount.is_nan() || *amount <= 0.0 {
+                return Err(Error::NonPositiveQuantityAmount);
             }
             Ok(())
         }
@@ -34,7 +39,8 @@ fn validate_value(value: &ParameterValue) -> Result<(), Error> {
 }
 
 fn validate_duration(duration: &DurationValue) -> Result<(), Error> {
-    if duration.value < 0.0 {
+    // `value < 0.0` だけでは NaN を検出できないため明示的にチェックする
+    if duration.value.is_nan() || duration.value < 0.0 {
         return Err(Error::NegativeDurationValue);
     }
     Ok(())
@@ -57,7 +63,7 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_key_value_quantity() {
+    fn test_validate_key_value_quantity_unit() {
         // (unit, expected)
         let cases = [("g", Ok(())), ("   ", Err(Error::EmptyQuantityUnit))];
 
@@ -74,9 +80,35 @@ mod tests {
     }
 
     #[test]
+    fn test_validate_key_value_quantity_amount() {
+        // (amount, expected)
+        let cases = [
+            (300.0, Ok(())),
+            (0.0, Err(Error::NonPositiveQuantityAmount)),
+            (-1.0, Err(Error::NonPositiveQuantityAmount)),
+            (f64::NAN, Err(Error::NonPositiveQuantityAmount)),
+        ];
+
+        for (amount, expected) in cases {
+            let content = ParameterContent::KeyValue {
+                key: "強力粉".to_string(),
+                value: ParameterValue::Quantity {
+                    amount,
+                    unit: "g".to_string(),
+                },
+            };
+            assert_eq!(validate(&content), expected);
+        }
+    }
+
+    #[test]
     fn test_validate_duration() {
         // (value, expected)
-        let cases = [(90.0, Ok(())), (-1.0, Err(Error::NegativeDurationValue))];
+        let cases = [
+            (90.0, Ok(())),
+            (-1.0, Err(Error::NegativeDurationValue)),
+            (f64::NAN, Err(Error::NegativeDurationValue)),
+        ];
 
         for (value, expected) in cases {
             let content = ParameterContent::Duration {
@@ -90,7 +122,11 @@ mod tests {
     #[test]
     fn test_validate_time_marker() {
         // (value, expected)
-        let cases = [(0.0, Ok(())), (-5.0, Err(Error::NegativeDurationValue))];
+        let cases = [
+            (0.0, Ok(())),
+            (-5.0, Err(Error::NegativeDurationValue)),
+            (f64::NAN, Err(Error::NegativeDurationValue)),
+        ];
 
         for (value, expected) in cases {
             let content = ParameterContent::TimeMarker {
