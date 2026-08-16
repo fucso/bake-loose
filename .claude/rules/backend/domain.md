@@ -143,13 +143,22 @@ pub enum Error {
 pub fn validate(state: &Trial, command: &Command) -> Result<(), Error> {
     trial_status_validator::require_in_progress(state)
         .map_err(|_| Error::TrialAlreadyCompleted)?;
-    let step = step_existence_validator::require_exists(state, &command.step_id)
+    step_existence_validator::require_exists(state, &command.step_id)
         .map_err(|_| Error::StepNotFound)?;
+    let step = state
+        .steps()
+        .iter()
+        .find(|step| step.id() == &command.step_id)
+        .expect("step existence already validated");
     step_status_validator::require_in_progress(step)
         .map_err(|_| Error::StepAlreadyCompleted)?;
     Ok(())
 }
 ```
+
+**Validator が実態（モデル参照）を返さない**: Validator は判定結果とエラーのみを返し（`Result<(), Error>`）、
+モデルの実態が必要な場合はアクションの `validate()` 内で `state` から取得する。
+Validator が実態まで返すと、Validator の責務が「条件チェック」を超えて「データ取得」まで広がってしまう。
 
 アクション Error のネストした型（`InvalidParameter` の reason 等）も同様に `pub use` で参照する:
 
