@@ -63,7 +63,10 @@ impl PgTrialRepository {
                 .executor
                 .fetch_all(
                     sqlx::query_as::<_, ParameterRow>(
-                        "SELECT * FROM parameters WHERE step_id = ANY($1)",
+                        // Parameter には順序を表すカラムがないため、登録順（created_at）で
+                        // 決定的に整列する。同一トランザクションで投入され created_at が
+                        // 同値になる場合に備えて id を tie-break に用いる。
+                        "SELECT * FROM parameters WHERE step_id = ANY($1) ORDER BY step_id, created_at, id",
                     )
                     .bind(&step_ids),
                 )
