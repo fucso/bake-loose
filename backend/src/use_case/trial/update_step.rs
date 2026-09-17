@@ -32,15 +32,26 @@ pub struct Input {
 }
 
 pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, Error> {
-    // 1. Trial取得
+    // 1. トランザクション開始
+    uow.begin()
+        .await
+        .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
+
+    // 2. Trial取得
     let trial_id = TrialId(input.trial_id);
     let trial = match uow.trial_repository().find_by_id(&trial_id).await {
         Ok(Some(trial)) => trial,
-        Ok(None) => return Err(Error::NotFound),
-        Err(e) => return Err(Error::Infrastructure(format!("{:?}", e))),
+        Ok(None) => {
+            let _ = uow.rollback().await;
+            return Err(Error::NotFound);
+        }
+        Err(e) => {
+            let _ = uow.rollback().await;
+            return Err(Error::Infrastructure(format!("{:?}", e)));
+        }
     };
 
-    // 2. ドメインアクション実行
+    // 3. ドメインアクション実行
     let trial = match update_step::run(
         trial,
         update_step::Command {
@@ -52,13 +63,11 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
         },
     ) {
         Ok(trial) => trial,
-        Err(e) => return Err(Error::Domain(e)),
+        Err(e) => {
+            let _ = uow.rollback().await;
+            return Err(Error::Domain(e));
+        }
     };
-
-    // 3. トランザクション開始
-    uow.begin()
-        .await
-        .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
 
     // 4. 永続化
     if let Err(e) = uow.trial_repository().save(&trial).await {
