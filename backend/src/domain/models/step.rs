@@ -39,9 +39,9 @@ pub struct Step {
 impl Step {
     /// 新しいStepを作成する（ID は自動生成、parameters は空）
     ///
-    /// started_at が未指定の場合は現在時刻を採用する
-    /// （未指定時に無着手のまま放置しない。開始前のStepをあらかじめ登録したい場合は
-    /// `update_step` アクションで明示的に `started_at` をクリアする）
+    /// started_at は渡された値をそのまま保持する（未指定の場合は `None` のまま）。
+    /// 開始前のStepをあらかじめ登録しておく使い方を想定しており、
+    /// 実際に開始した時点で `start()` / `update_step` アクションにより開始日時を設定する。
     pub fn new(
         trial_id: TrialId,
         name: String,
@@ -53,7 +53,7 @@ impl Step {
             trial_id,
             name,
             position,
-            started_at: Some(started_at.unwrap_or_else(JstDateTime::now)),
+            started_at,
             completed_at: None,
             parameters: Vec::new(),
         }
@@ -116,9 +116,8 @@ impl Step {
 
     /// Step の開始日時を設定・クリアする
     ///
-    /// `new()` と異なり `None` を渡した場合は現在時刻へのフォールバックを行わず、
-    /// そのまま無着手状態にクリアする。`update_step` が「開始日時を明示的に未設定へ戻す」
-    /// 操作をサポートするための挙動であり、値の指定を省略した場合の話ではない。
+    /// `None` を渡した場合は無着手状態にクリアする。
+    /// `update_step` の「開始日時を明示的に未設定へ戻す」操作をサポートするための挙動。
     pub fn start(&mut self, started_at: Option<JstDateTime>) {
         self.started_at = started_at;
     }
@@ -167,9 +166,9 @@ mod tests {
     }
 
     #[test]
-    fn test_step_new_defaults_started_at_to_now_when_unspecified() {
+    fn test_step_new_keeps_started_at_none_when_unspecified() {
         let step = Step::new(TrialId::new(), "こね".to_string(), 0, None);
-        assert!(step.started_at().is_some());
+        assert!(step.started_at().is_none());
         assert!(step.completed_at().is_none());
         assert!(!step.is_completed());
     }

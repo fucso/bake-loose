@@ -119,7 +119,18 @@ mod tests {
 
     #[test]
     fn test_update_step_started_at_clear() {
-        let (trial, step_id) = trial_with_step();
+        // 開始済みの Step を用意してからクリアされることを検証する
+        let mut trial = Trial::new(ProjectId::new(), None, None);
+        let step = Step::new(
+            trial.id().clone(),
+            "こね".to_string(),
+            0,
+            Some(crate::domain::timezone::JstDateTime::now()),
+        );
+        let step_id = step.id().clone();
+        trial.add_step(step);
+        assert!(trial.steps()[0].started_at().is_some());
+
         let command = Command {
             started_at: Some(None),
             ..base_command(step_id.clone())
