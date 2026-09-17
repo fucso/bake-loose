@@ -75,7 +75,7 @@ async fn add_step_with_parameters(pool: PgPool, trial_id: &str, name: &str) -> s
                 name
                 position
                 isCompleted
-                parameters {{ id content }}
+                parameters {{ id parameterType content }}
             }}
         }}
         "#
@@ -108,20 +108,27 @@ async fn test_add_step_then_update_step_attaches_parameters(pool: PgPool) {
     let step = &data["updateStep"];
     assert_eq!(step["name"], "こね");
 
-    let contents: Vec<_> = step["parameters"]
+    // id は自動採番のため検証対象から外し、種別と内容を検証する
+    let parameters: Vec<_> = step["parameters"]
         .as_array()
         .unwrap()
         .iter()
-        .map(|p| p["content"].clone())
+        .map(|p| json!({ "parameterType": p["parameterType"], "content": p["content"] }))
         .collect();
     assert_eq!(
-        contents,
+        parameters,
         vec![
-            json!({ "type": "text", "value": "打ち粉を追加" }),
             json!({
-                "type": "key_value",
-                "key": "強力粉",
-                "value": { "type": "quantity", "amount": 300.0, "unit": "g" }
+                "parameterType": "TEXT",
+                "content": { "type": "text", "value": "打ち粉を追加" }
+            }),
+            json!({
+                "parameterType": "KEY_VALUE",
+                "content": {
+                    "type": "key_value",
+                    "key": "強力粉",
+                    "value": { "type": "quantity", "amount": 300.0, "unit": "g" }
+                }
             }),
         ]
     );

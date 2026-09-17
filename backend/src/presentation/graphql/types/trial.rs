@@ -25,6 +25,30 @@ impl From<DomainTrialStatus> for TrialStatus {
     }
 }
 
+/// GraphQL 用の ParameterType 型
+///
+/// `content` の JSON を解析しなくてもパラメーターの種別を判別できるようにするための型。
+/// `ParameterContent` のバリアントと1対1で対応する。
+#[derive(Enum, Copy, Clone, Debug, Eq, PartialEq)]
+pub enum ParameterType {
+    KeyValue,
+    Duration,
+    TimeMarker,
+    Text,
+}
+
+impl From<&ParameterContent> for ParameterType {
+    fn from(content: &ParameterContent) -> Self {
+        // バリアント追加時にコンパイルエラーで検知するためワイルドカードを使わない
+        match content {
+            ParameterContent::KeyValue { .. } => ParameterType::KeyValue,
+            ParameterContent::Duration { .. } => ParameterType::Duration,
+            ParameterContent::TimeMarker { .. } => ParameterType::TimeMarker,
+            ParameterContent::Text { .. } => ParameterType::Text,
+        }
+    }
+}
+
 /// GraphQL 用の Parameter 型
 ///
 /// ドメインモデルを直接公開せず、ラッパー型として定義する。
@@ -35,6 +59,11 @@ impl Parameter {
     /// パラメーターID
     async fn id(&self) -> ID {
         ID(self.0.id().0.to_string())
+    }
+
+    /// パラメーターの種別
+    async fn parameter_type(&self) -> ParameterType {
+        ParameterType::from(self.0.content())
     }
 
     /// パラメーターの内容（JSONスカラーとして入出力）
@@ -191,4 +220,51 @@ pub struct AddStepInput {
 pub struct UpdateStepInput {
     pub name: Option<String>,
     pub started_at: MaybeUndefined<DateTime<FixedOffset>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::models::parameter::{DurationUnit, DurationValue, ParameterValue};
+
+    #[test]
+    fn test_parameter_type_from_parameter_content() {
+        // (content, expected)
+        let cases = [
+            (
+                ParameterContent::KeyValue {
+                    key: "強力粉".to_string(),
+                    value: ParameterValue::Quantity {
+                        amount: 300.0,
+                        unit: "g".to_string(),
+                    },
+                },
+                ParameterType::KeyValue,
+            ),
+            (
+                ParameterContent::Duration {
+                    duration: DurationValue::new(90.0, DurationUnit::Minute),
+                    note: "一次発酵".to_string(),
+                },
+                ParameterType::Duration,
+            ),
+            (
+                ParameterContent::TimeMarker {
+                    at: DurationValue::new(30.0, DurationUnit::Minute),
+                    note: "焼成開始から".to_string(),
+                },
+                ParameterType::TimeMarker,
+            ),
+            (
+                ParameterContent::Text {
+                    value: "打ち粉を追加".to_string(),
+                },
+                ParameterType::Text,
+            ),
+        ];
+
+        for (content, expected) in cases {
+            assert_eq!(ParameterType::from(&content), expected);
+        }
+    }
 }
