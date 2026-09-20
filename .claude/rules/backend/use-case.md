@@ -58,26 +58,19 @@ pub struct Input {
 }
 
 pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Project, Error> {
-    // 1. トランザクション開始（書き込み操作を行うため）
-    uow.begin().await
-        .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
-
-    // 2. DB問い合わせが必要な検証（先に行う）
+    // 1. DB問い合わせが必要な検証（先に行う）
     if uow.project_repository().exists_by_name(&input.name).await
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))? {
-        let _ = uow.rollback().await;
         return Err(Error::DuplicateName);
     }
 
-    // 3. ドメインアクション実行
+    // 2. ドメインアクション実行
     let command = create_project::Command { name: input.name };
-    let project = match create_project::run(command) {
-        Ok(p) => p,
-        Err(e) => {
-            let _ = uow.rollback().await;
-            return Err(Error::Domain(e));
-        }
-    };
+    let project = create_project::run(command).map_err(Error::Domain)?;
+
+    // 3. トランザクション開始（書き込み直前に開始する）
+    uow.begin().await
+        .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
 
     // 4. 永続化
     if let Err(e) = uow.project_repository().save(&project).await {
@@ -92,6 +85,13 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Project
     Ok(project)
 }
 ```
+
+**トランザクションの保持は最小限にする**。実際に書き込むのは `save()` のみであるため、
+`begin()` はデータ取得とドメインアクションが成功した後、`save()` の直前で呼び出す。
+読み取りとドメインアクションは書き込みを伴わないためトランザクション内で実行する必要はない。
+
+`begin()` より前のエラーパスではトランザクションが開始されていないため `rollback()` は呼ばない。
+`rollback()` が必要なのは `begin()` 以降（`save()` 失敗時）のみ。
 
 **読み取り専用のユースケース** では `begin()` は不要:
 
@@ -132,7 +132,20 @@ pub async fn execute(repo: &impl ProjectRepository, input: Input) -> Result<...>
 uow.project_repository().save(&project).await?;
 uow.commit().await?;  // トランザクションが開始されていない！
 
-// ✅ ドメインアクションに委譲、UnitOfWork経由、DB検証を先に、begin() で開始
+// ❌ 読み取り・ドメインアクションをトランザクション内で実行（無駄に保持している）
+uow.begin().await?;
+let trial = uow.trial_repository().find_by_id(&trial_id).await?;
+let trial = add_step::run(trial, command)?;
+uow.trial_repository().save(&trial).await?;
+uow.commit().await?;
+
+// ❌ begin() 前のエラーパスで rollback() を呼ぶ（トランザクションが存在しない）
+let Some(trial) = uow.trial_repository().find_by_id(&trial_id).await? else {
+    let _ = uow.rollback().await;
+    return Err(Error::NotFound);
+};
+
+// ✅ ドメインアクションに委譲、UnitOfWork経由、DB検証を先に、save() 直前に begin()
 pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<...> { ... }
 ```
 
@@ -143,5 +156,6 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<...> { 
 - [ ] UnitOfWork経由で永続化
 - [ ] DB検証はドメインアクション実行前
 - [ ] 書き込み操作では`begin()`でトランザクション開始
+- [ ] `begin()`はデータ取得・ドメインアクションの後、`save()`の直前で呼んでいる（保持は最小限）
 - [ ] 成功後に`commit()`を呼んでいる
-- [ ] エラー時は`rollback()`を呼んでいる
+- [ ] `begin()`以降のエラー時のみ`rollback()`を呼んでいる（`begin()`前は呼ばない）
