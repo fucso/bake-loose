@@ -73,7 +73,12 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Project
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
 
     // 4. 永続化
-    if let Err(e) = uow.project_repository().save(&project).await {
+    // save() の結果は必ずブロック内でローカルに束縛してから判定する（理由は後述）
+    let save_result = {
+        let repo = uow.project_repository();
+        repo.save(&project).await
+    };
+    if let Err(e) = save_result {
         let _ = uow.rollback().await;
         return Err(Error::Infrastructure(format!("{:?}", e)));
     }
@@ -92,6 +97,32 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Project
 
 `begin()` より前のエラーパスではトランザクションが開始されていないため `rollback()` は呼ばない。
 `rollback()` が必要なのは `begin()` 以降（`save()` 失敗時）のみ。
+
+**`save()` の結果は必ずローカル変数に束縛してから判定する**。
+
+```rust
+// ❌ リポジトリの一時値が if let 文の終わりまで生存し、rollback() が必ず失敗する
+if let Err(e) = uow.project_repository().save(&project).await {
+    let _ = uow.rollback().await;  // Arc::try_unwrap が失敗し ROLLBACK が発行されない
+    return Err(Error::Infrastructure(format!("{:?}", e)));
+}
+
+// ✅ ブロック内で束縛し、一時値を drop させてから判定する
+let save_result = {
+    let repo = uow.project_repository();
+    repo.save(&project).await
+};
+if let Err(e) = save_result {
+    let _ = uow.rollback().await;
+    return Err(Error::Infrastructure(format!("{:?}", e)));
+}
+```
+
+`xxx_repository()` が返すリポジトリはトランザクションの `Arc` を clone して保持する。
+edition 2021 では `if let` のスクルーティニー式で作られた一時値は `if let` 文全体の終わりまで
+生存するため、本体で `rollback()` を呼ぶ時点でも参照が残る。その結果
+`PgUnitOfWork::rollback()` の `Arc::try_unwrap` が失敗し、明示的な `ROLLBACK` が発行されない
+（sqlx の `Transaction: Drop` による暗黙のロールバックに依存する状態になる）。
 
 **読み取り専用のユースケース** では `begin()` は不要:
 
@@ -159,3 +190,4 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<...> { 
 - [ ] `begin()`はデータ取得・ドメインアクションの後、`save()`の直前で呼んでいる（保持は最小限）
 - [ ] 成功後に`commit()`を呼んでいる
 - [ ] `begin()`以降のエラー時のみ`rollback()`を呼んでいる（`begin()`前は呼ばない）
+- [ ] `save()`の結果をブロック内でローカル変数に束縛してから判定している（`if let Err(e) = uow.xxx_repository().save(..).await` と書いていない）
