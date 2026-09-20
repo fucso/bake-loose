@@ -18,6 +18,11 @@ pub struct Input {
 pub enum Error {
     Domain(create_project::Error),
     DuplicateName,
+    /// 一意制約違反など、並行操作との競合（リトライで解消し得る）
+    Conflict {
+        entity: String,
+        field: String,
+    },
     Infrastructure(String),
 }
 
@@ -37,6 +42,10 @@ impl From<RepositoryError> for Error {
                 log::warn!("Conflict: {}.{}", entity, field);
                 Error::DuplicateName
             }
+            // 名前以外の一意制約違反も並行操作との競合であり内部エラーではない。
+            // 制約名が取得できず field が "unknown" になった場合もここに落ちるため、
+            // 内部エラーではなく「競合のためリトライを促す」表示になる。
+            RepositoryError::Conflict { entity, field } => Error::Conflict { entity, field },
             other => Error::Infrastructure(format!("{:?}", other)),
         }
     }
@@ -186,10 +195,13 @@ mod tests {
         assert_eq!(uow.commit_count(), 0);
     }
 
-    /// name 以外の一意制約違反は DuplicateName に畳まず Infrastructure として扱う
+    /// name 以外の一意制約違反は DuplicateName に畳まず Conflict として扱う
     ///
     /// 将来 projects に別の一意制約が追加されたとき、
     /// 無関係な競合まで「同じ名前のプロジェクトが既に存在します」と表示しないこと。
+    ///
+    /// 以前は Infrastructure に畳んでいたが、DB が検出した制約違反は
+    /// サーバー内部の障害ではなくリトライで解消し得る競合であるため Conflict に改めた。
     #[tokio::test]
     async fn test_execute_does_not_map_non_name_conflict_to_duplicate_name() {
         let mut uow = MockUnitOfWork::default();
@@ -203,7 +215,39 @@ mod tests {
 
         let result = execute(&mut uow, input).await;
 
-        assert!(matches!(result, Err(Error::Infrastructure(_))));
+        assert_eq!(
+            result.unwrap_err(),
+            Error::Conflict {
+                entity: "project".to_string(),
+                field: "slug".to_string(),
+            }
+        );
+    }
+
+    /// 制約名が取得できず field が "unknown" になった競合も Conflict として扱う
+    ///
+    /// 本来は名前の重複かもしれないが、判別できない以上 DuplicateName とは言い切れない。
+    /// 内部エラーではなくリトライを促す競合に倒す。
+    #[tokio::test]
+    async fn test_execute_maps_unknown_field_conflict_to_conflict() {
+        let mut uow = MockUnitOfWork::default();
+        uow.fail_save_with(RepositoryError::Conflict {
+            entity: "project".to_string(),
+            field: "unknown".to_string(),
+        });
+        let input = Input {
+            name: "新規プロジェクト".to_string(),
+        };
+
+        let result = execute(&mut uow, input).await;
+
+        assert_eq!(
+            result.unwrap_err(),
+            Error::Conflict {
+                entity: "project".to_string(),
+                field: "unknown".to_string(),
+            }
+        );
     }
 
     #[tokio::test]

@@ -85,7 +85,7 @@ fn conflict_field(constraint: Option<&str>, entity: &str) -> String {
 /// - **参照する側** の INSERT/UPDATE: 参照先の行が存在しない
 ///   → `NotFound`（例: `trials_project_id_fkey` を entity `trial` で踏む）
 /// - **参照される側** の DELETE/UPDATE: まだ他の行から参照されている
-///   → `Conflict`（例: `trials_project_id_fkey` を entity `project` で踏む。
+///   → `StillReferenced`（例: `trials_project_id_fkey` を entity `project` で踏む。
 ///   `trials.project_id` は `ON DELETE RESTRICT` のため `DELETE FROM projects` で発生する）
 ///
 /// 命名規約（`super::naming_conventions`）により制約名は参照する側のテーブル名（複数形）で
@@ -103,10 +103,11 @@ fn foreign_key_violation(constraint: Option<&str>, entity: &str) -> RepositoryEr
     };
 
     // 制約名が呼び出し元のテーブル接頭辞で始まらない = 自分が「参照される側」
+    // どの制約に阻まれたかを呼び出し側が追えるよう、制約名をそのまま渡す
     let Some(name) = strip_table_prefix_opt(name, entity) else {
-        return RepositoryError::Conflict {
+        return RepositoryError::StillReferenced {
             entity: entity.to_string(),
-            field: constraint.unwrap_or(UNKNOWN).to_string(),
+            constraint: constraint.unwrap_or(UNKNOWN).to_string(),
         };
     };
 
@@ -273,12 +274,28 @@ mod tests {
     }
 
     /// 参照される側（projects）の操作で 23503 が上がった場合は
-    /// 「まだ参照されている」競合であり、NotFound ではなく Conflict になる
+    /// 「まだ参照されている」ことを意味するため、NotFound でも Conflict でもなく
+    /// StillReferenced になる（リトライしても解消しない）
     #[test]
-    fn test_foreign_key_violation_from_referenced_side_maps_to_conflict() {
+    fn test_foreign_key_violation_from_referenced_side_maps_to_still_referenced() {
         let error = db_error(FOREIGN_KEY_VIOLATION, Some("trials_project_id_fkey"));
 
         assert_eq!(
+            map_sqlx_error(error, "project"),
+            RepositoryError::StillReferenced {
+                entity: "project".to_string(),
+                constraint: "trials_project_id_fkey".to_string(),
+            }
+        );
+    }
+
+    /// `StillReferenced` は `Conflict` とは別物であり、
+    /// 一意制約違反用の `Conflict.field`（カラム名相当）に制約名が混ざらない
+    #[test]
+    fn test_foreign_key_violation_from_referenced_side_is_not_conflict() {
+        let error = db_error(FOREIGN_KEY_VIOLATION, Some("trials_project_id_fkey"));
+
+        assert_ne!(
             map_sqlx_error(error, "project"),
             RepositoryError::Conflict {
                 entity: "project".to_string(),
@@ -290,7 +307,7 @@ mod tests {
     /// 向きの判定は制約名とエンティティの組み合わせだけで決まる
     ///
     /// 同じ `steps_trial_id_fkey` でも、entity が `step`（参照する側）なら NotFound、
-    /// `trial`（参照される側）なら Conflict になる。
+    /// `trial`（参照される側）なら StillReferenced になる。
     #[test]
     fn test_foreign_key_violation_direction_depends_on_calling_entity() {
         let from_referencing_side = db_error(FOREIGN_KEY_VIOLATION, Some("steps_trial_id_fkey"));
@@ -305,9 +322,9 @@ mod tests {
         let from_referenced_side = db_error(FOREIGN_KEY_VIOLATION, Some("steps_trial_id_fkey"));
         assert_eq!(
             map_sqlx_error(from_referenced_side, "trial"),
-            RepositoryError::Conflict {
+            RepositoryError::StillReferenced {
                 entity: "trial".to_string(),
-                field: "steps_trial_id_fkey".to_string(),
+                constraint: "steps_trial_id_fkey".to_string(),
             }
         );
     }
@@ -318,16 +335,16 @@ mod tests {
     /// 仮に単数形にも一致させると、別テーブル `step_notes` の制約名
     /// `step_notes_step_id_fkey` をエンティティ `step` で踏んだときに
     /// 誤ったエンティティ名（`notes_step`）の NotFound を返してしまう。
-    /// ここでは規約どおり「参照される側」と判定され Conflict になる。
+    /// ここでは規約どおり「参照される側」と判定され StillReferenced になる。
     #[test]
     fn test_foreign_key_violation_does_not_match_singular_table_prefix() {
         let error = db_error(FOREIGN_KEY_VIOLATION, Some("step_notes_step_id_fkey"));
 
         assert_eq!(
             map_sqlx_error(error, "step"),
-            RepositoryError::Conflict {
+            RepositoryError::StillReferenced {
                 entity: "step".to_string(),
-                field: "step_notes_step_id_fkey".to_string(),
+                constraint: "step_notes_step_id_fkey".to_string(),
             }
         );
     }

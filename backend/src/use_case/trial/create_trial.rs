@@ -36,7 +36,9 @@ impl From<RepositoryError> for Error {
         match error {
             // 一意制約違反は並行操作との競合であり、リトライで解消し得る
             RepositoryError::Conflict { entity, field } => Error::Conflict { entity, field },
-            // 外部キー違反は参照先が並行して削除されたことを意味する
+            // 外部キー違反は参照先が並行して削除されたことを意味する。
+            // trials が持つ外部キーは project_id のみのため、参照先は必ず Project になる。
+            // エンティティ名で振り分ける余地がないので ProjectNotFound に倒す
             RepositoryError::NotFound { .. } => Error::ProjectNotFound,
             other => Error::Infrastructure(format!("{:?}", other)),
         }

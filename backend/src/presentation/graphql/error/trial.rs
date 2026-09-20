@@ -9,7 +9,7 @@ use crate::domain::actions::trial::{
     update_parameter as update_parameter_action, update_step as update_step_action,
     update_trial as update_trial_action,
 };
-use crate::presentation::graphql::error::common::{GraphQLError, UserFacingError};
+use crate::presentation::graphql::error::common::{conflict_error, GraphQLError, UserFacingError};
 use crate::use_case::trial::{
     add_parameter, add_step, complete_step, complete_trial, create_trial, get_trial,
     list_trials_by_project, remove_parameter, update_parameter, update_step, update_trial,
@@ -21,18 +21,6 @@ use crate::use_case::trial::{
 fn internal_error(e: &str) -> GraphQLError {
     log::error!("Infrastructure error: {}", e);
     GraphQLError::new("内部エラーが発生しました", "INTERNAL_ERROR")
-}
-
-/// 競合エラー
-///
-/// 一意制約違反など、同じ対象への並行操作によって発生する競合。
-/// 内部エラーではなくリトライで解消し得るため、その旨をユーザーに伝える。
-///
-/// ユーザーには詳細を見せないが、本番で競合が多発したときに
-/// 「どのエンティティのどの制約か」を追えるようログには残す。
-fn conflict_error(entity: &str, field: &str) -> GraphQLError {
-    log::warn!("Conflict: {}.{}", entity, field);
-    GraphQLError::new("他の操作と競合しました。もう一度お試しください", "CONFLICT")
 }
 
 /// 「指定されたTrialが見つかりません」エラー
@@ -52,12 +40,33 @@ fn parameter_not_found() -> GraphQLError {
     GraphQLError::new("指定されたParameterが見つかりません", "NOT_FOUND")
 }
 
+/// 「指定されたProjectが見つかりません」エラー
+fn project_not_found() -> GraphQLError {
+    GraphQLError::new("指定されたProjectが見つかりません", "NOT_FOUND")
+}
+
+/// 外部キー違反で見つからなかった参照先を、エンティティ名に応じたメッセージへ振り分ける
+///
+/// 参照先は Trial とは限らず、例えば `parameters_step_id_fkey` の違反なら Step が
+/// 並行して削除されている。一律に Trial のメッセージを返すと、
+/// 実際に消えたのは Step なのに「Trialが見つかりません」と誤って案内してしまう。
+///
+/// 全ユースケースで同じ振り分けを繰り返さないよう、ここに集約する。
+/// 未知のエンティティ名は内部名を露出させないため汎用メッセージへ倒す。
+fn reference_not_found(entity: &str) -> GraphQLError {
+    match entity {
+        "trial" => trial_not_found(),
+        "step" => step_not_found(),
+        "parameter" => parameter_not_found(),
+        "project" => project_not_found(),
+        _ => GraphQLError::new("指定されたデータが見つかりません", "NOT_FOUND"),
+    }
+}
+
 impl UserFacingError for create_trial::Error {
     fn to_user_facing(&self) -> GraphQLError {
         match self {
-            create_trial::Error::ProjectNotFound => {
-                GraphQLError::new("指定されたProjectが見つかりません", "NOT_FOUND")
-            }
+            create_trial::Error::ProjectNotFound => project_not_found(),
             create_trial::Error::Domain(create_trial_action::Error::InvalidTrialName(
                 create_trial_action::TrialNameError::EmptyName,
             )) => GraphQLError::new("Trial名を入力してください", "VALIDATION_ERROR"),
@@ -95,6 +104,7 @@ impl UserFacingError for update_trial::Error {
                 format!("Trial名は{}文字以内で入力してください", max),
                 "VALIDATION_ERROR",
             ),
+            update_trial::Error::ReferenceNotFound { entity } => reference_not_found(entity),
             update_trial::Error::Conflict { entity, field } => conflict_error(entity, field),
             update_trial::Error::Infrastructure(e) => internal_error(e),
         }
@@ -114,6 +124,7 @@ impl UserFacingError for complete_trial::Error {
             complete_trial::Error::Domain(complete_trial_action::Error::TrialAlreadyCompleted) => {
                 GraphQLError::new("Trialは既に完了しています", "VALIDATION_ERROR")
             }
+            complete_trial::Error::ReferenceNotFound { entity } => reference_not_found(entity),
             complete_trial::Error::Conflict { entity, field } => conflict_error(entity, field),
             complete_trial::Error::Infrastructure(e) => internal_error(e),
         }
@@ -145,6 +156,7 @@ impl UserFacingError for add_step::Error {
                 format!("Step名は{}文字以内で入力してください", max),
                 "VALIDATION_ERROR",
             ),
+            add_step::Error::ReferenceNotFound { entity } => reference_not_found(entity),
             add_step::Error::Conflict { entity, field } => conflict_error(entity, field),
             add_step::Error::Infrastructure(e) => internal_error(e),
         }
@@ -177,6 +189,7 @@ impl UserFacingError for update_step::Error {
                 format!("Step名は{}文字以内で入力してください", max),
                 "VALIDATION_ERROR",
             ),
+            update_step::Error::ReferenceNotFound { entity } => reference_not_found(entity),
             update_step::Error::Conflict { entity, field } => conflict_error(entity, field),
             update_step::Error::Infrastructure(e) => internal_error(e),
         }
@@ -217,6 +230,7 @@ impl UserFacingError for add_parameter::Error {
             add_parameter::Error::Domain(add_parameter_action::Error::InvalidParameter(
                 add_parameter_action::ParameterValidationError::NonPositiveQuantityAmount,
             )) => GraphQLError::new("数値は0より大きい値を入力してください", "VALIDATION_ERROR"),
+            add_parameter::Error::ReferenceNotFound { entity } => reference_not_found(entity),
             add_parameter::Error::Conflict { entity, field } => conflict_error(entity, field),
             add_parameter::Error::Infrastructure(e) => internal_error(e),
         }
@@ -251,6 +265,7 @@ impl UserFacingError for remove_parameter::Error {
             remove_parameter::Error::Domain(remove_parameter_action::Error::ParameterNotFound) => {
                 parameter_not_found()
             }
+            remove_parameter::Error::ReferenceNotFound { entity } => reference_not_found(entity),
             remove_parameter::Error::Conflict { entity, field } => conflict_error(entity, field),
             remove_parameter::Error::Infrastructure(e) => internal_error(e),
         }
@@ -297,6 +312,7 @@ impl UserFacingError for update_parameter::Error {
             update_parameter::Error::Domain(update_parameter_action::Error::InvalidParameter(
                 update_parameter_action::ParameterValidationError::NonPositiveQuantityAmount,
             )) => GraphQLError::new("数値は0より大きい値を入力してください", "VALIDATION_ERROR"),
+            update_parameter::Error::ReferenceNotFound { entity } => reference_not_found(entity),
             update_parameter::Error::Conflict { entity, field } => conflict_error(entity, field),
             update_parameter::Error::Infrastructure(e) => internal_error(e),
         }
@@ -322,6 +338,7 @@ impl UserFacingError for complete_step::Error {
             complete_step::Error::Domain(complete_step_action::Error::StepAlreadyCompleted) => {
                 GraphQLError::new("Stepは既に完了しています", "VALIDATION_ERROR")
             }
+            complete_step::Error::ReferenceNotFound { entity } => reference_not_found(entity),
             complete_step::Error::Conflict { entity, field } => conflict_error(entity, field),
             complete_step::Error::Infrastructure(e) => internal_error(e),
         }
@@ -407,6 +424,67 @@ mod tests {
         assert_eq!(
             add_parameter::Error::Conflict { entity, field }.to_user_facing(),
             expected
+        );
+    }
+
+    /// 外部キー違反で消えたのが Step なら Step のメッセージを返す
+    ///
+    /// 以前は RepositoryError::NotFound のエンティティ名を捨てて一律
+    /// `trial_not_found()` を返していたため、`parameters_step_id_fkey` 違反でも
+    /// 「指定されたTrialが見つかりません」と誤って案内していた。
+    #[test]
+    fn test_reference_not_found_for_step_returns_step_message() {
+        let error = add_parameter::Error::ReferenceNotFound {
+            entity: "step".to_string(),
+        }
+        .to_user_facing();
+
+        assert_eq!(
+            error,
+            GraphQLError::new("指定されたStepが見つかりません", "NOT_FOUND")
+        );
+        assert_ne!(
+            error,
+            GraphQLError::new("指定されたTrialが見つかりません", "NOT_FOUND")
+        );
+    }
+
+    /// 参照先のエンティティ名ごとに対応するメッセージへ振り分ける
+    #[test]
+    fn test_reference_not_found_dispatches_by_entity() {
+        assert_eq!(
+            reference_not_found("trial"),
+            GraphQLError::new("指定されたTrialが見つかりません", "NOT_FOUND")
+        );
+        assert_eq!(
+            reference_not_found("step"),
+            GraphQLError::new("指定されたStepが見つかりません", "NOT_FOUND")
+        );
+        assert_eq!(
+            reference_not_found("parameter"),
+            GraphQLError::new("指定されたParameterが見つかりません", "NOT_FOUND")
+        );
+        assert_eq!(
+            reference_not_found("project"),
+            GraphQLError::new("指定されたProjectが見つかりません", "NOT_FOUND")
+        );
+    }
+
+    /// 未知のエンティティ名は内部名を露出させず汎用メッセージに倒す
+    #[test]
+    fn test_reference_not_found_falls_back_to_generic_message() {
+        assert_eq!(
+            reference_not_found("feedback"),
+            GraphQLError::new("指定されたデータが見つかりません", "NOT_FOUND")
+        );
+    }
+
+    /// 集約ルートが見つからない NotFound は従来どおり Trial のメッセージ
+    #[test]
+    fn test_not_found_still_maps_to_trial_message() {
+        assert_eq!(
+            add_parameter::Error::NotFound.to_user_facing(),
+            GraphQLError::new("指定されたTrialが見つかりません", "NOT_FOUND")
         );
     }
 

@@ -86,6 +86,8 @@ impl From<create_project::Error> for GraphQLError {
 - `VALIDATION_ERROR`: 入力バリデーション
 - `NOT_FOUND`: リソース不存在
 - `DUPLICATE_ERROR`: 重複
+- `CONFLICT`: 並行操作との競合（リトライ可能）
+- `STILL_REFERENCED`: 他の行から参照されているため実行できない（リトライ不可）
 - `INTERNAL_ERROR`: 内部エラー（詳細は隠す）
 
 ## アンチパターン

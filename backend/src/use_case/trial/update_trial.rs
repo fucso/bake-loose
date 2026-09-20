@@ -25,6 +25,14 @@ pub struct Input {
 pub enum Error {
     NotFound,
     Domain(update_trial::Error),
+    /// 参照先の行が並行して削除された（外部キー違反）
+    ///
+    /// `entity` には参照先のエンティティ名（"trial" / "step" / "parameter" / "project"）が入る。
+    /// どのエンティティが見つからないかでユーザー向けメッセージが変わるため、
+    /// 集約ルートが見つからない `NotFound` とは区別する。
+    ReferenceNotFound {
+        entity: String,
+    },
     /// 一意制約違反など、並行操作との競合（リトライで解消し得る）
     Conflict {
         entity: String,
@@ -38,8 +46,10 @@ impl From<RepositoryError> for Error {
         match error {
             // 一意制約違反は並行操作との競合であり、リトライで解消し得る
             RepositoryError::Conflict { entity, field } => Error::Conflict { entity, field },
-            // 外部キー違反は参照先が並行して削除されたことを意味する
-            RepositoryError::NotFound { .. } => Error::NotFound,
+            // 外部キー違反は参照先が並行して削除されたことを意味する。
+            // 参照先が Trial とは限らない（例: parameters_step_id_fkey なら Step）ため、
+            // エンティティ名を捨てずに presentation 層へ引き渡す
+            RepositoryError::NotFound { entity, .. } => Error::ReferenceNotFound { entity },
             other => Error::Infrastructure(format!("{:?}", other)),
         }
     }
