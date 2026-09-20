@@ -153,12 +153,53 @@ impl ProjectRepository for PgProjectRepository {
             .fetch_optional(query)
             .await
             .map(|row| row.map(Project::from))
-            .map_err(|e| RepositoryError::Internal { message: e.to_string() })
+            .map_err(|e| map_sqlx_error(e, "project"))
     }
 
     // find_all, save, exists_by_name, ...
 }
 ```
+
+## スキーマ命名規約
+
+DB のスキーマ名はプロジェクトのルールとして以下に統一する。PostgreSQL がデフォルトで付与する名前は
+リネームせずそのまま使い、明示的に付与するのはインデックスのみとする。
+
+| 対象 | 命名 | 備考 |
+|------|------|------|
+| テーブル名 | 複数形の snake_case | `projects` / `trials` / `steps` / `parameters` |
+| エンティティ名（Rust） | テーブル名の単数形 | `project` / `trial` / `step` / `parameter` |
+| 主キー | `{table}_pkey` | PostgreSQL のデフォルト。リネームしない |
+| 一意制約 | `{table}_{columns}_key` | PostgreSQL のデフォルト。リネームしない |
+| 外部キー | `{table}_{column}_fkey` | PostgreSQL のデフォルト。リネームしない。`{table}` は常に **参照する側** |
+| インデックス | `idx_{table}_{columns}` | `CREATE INDEX` で明示的に付与する |
+
+**一意インデックス**は `CREATE UNIQUE INDEX` で一意性を表現する。`uq_` / `unique_` のような
+接頭辞や `_unique` / `_idx` のような接尾辞は使用しない。
+
+### 現在の制約名・インデックス名
+
+| 名前 | 種別 | 定義元 |
+|------|------|--------|
+| `projects_pkey` / `trials_pkey` / `steps_pkey` / `parameters_pkey` | 主キー | `id UUID PRIMARY KEY` |
+| `steps_trial_id_position_key` | 一意制約 | `UNIQUE (trial_id, position)` |
+| `trials_project_id_fkey` | 外部キー | `trials.project_id -> projects.id` |
+| `steps_trial_id_fkey` | 外部キー | `steps.trial_id -> trials.id` |
+| `parameters_step_id_fkey` | 外部キー | `parameters.step_id -> steps.id` |
+| `idx_projects_name` | 一意インデックス | `CREATE UNIQUE INDEX` |
+| `idx_trials_project_id` | インデックス | `CREATE INDEX` |
+| `idx_parameters_step_id` | インデックス | `CREATE INDEX` |
+
+### Rust 側の定義
+
+上記の接頭辞・接尾辞は `backend/src/repository/naming_conventions.rs` に定数として定義する。
+制約名からテーブル接頭辞を取り除くヘルパーも同モジュールに集約しており、
+テーブル名が複数形であることを前提に `{entity}s_` のみを対象とする。
+
+`map_sqlx_error` はこの規約を前提に制約名からエンティティ名・フィールド名を復元する。
+**規約から外れた名前を付けてもコンパイルは通る**ため、リネームするとエラー分類だけが静かに劣化する
+（一意制約違反が `Conflict` の `field` に制約名がそのまま現れる、外部キー違反の向き判定が崩れる等）。
+マイグレーションで制約名を変更する場合は `naming_conventions.rs` とそのテストも併せて更新すること。
 
 ## アンチパターン
 
@@ -187,3 +228,7 @@ let mut tx = self.pool.begin().await?;
 - [ ] DBモデルとドメインモデルが分離
 - [ ] プレースホルダー使用（SQLインジェクション対策）
 - [ ] UPSERT（ON CONFLICT）で冪等性確保
+- [ ] sqlx エラーは `map_sqlx_error` で変換する（`RepositoryError::Internal` に畳まない）
+- [ ] テーブル名は複数形の snake_case、エンティティ名はその単数形
+- [ ] 主キー・一意制約・外部キーは PostgreSQL のデフォルト名をリネームしない
+- [ ] インデックスは `idx_{table}_{columns}` で明示的に命名し、一意性は `CREATE UNIQUE INDEX` で表現する

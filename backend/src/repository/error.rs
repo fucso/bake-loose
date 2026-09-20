@@ -4,8 +4,15 @@
 //! 制約違反（同一 Trial への並行 addStep による position の重複など）まで
 //! 内部エラーとして扱われてしまう。
 //! SQLSTATE を見て、呼び出し側が意味を判断できるエラーへ振り分ける。
+//!
+//! 制約名からエンティティ名・フィールド名を復元する処理は、
+//! プロジェクトのスキーマ命名規約（`super::naming_conventions`）に依存する。
 
 use crate::ports::error::RepositoryError;
+use crate::repository::naming_conventions::{
+    strip_prefixes, strip_suffixes, strip_table_prefix, strip_table_prefix_opt, FOREIGN_KEY_SUFFIX,
+    INDEX_PREFIXES, PRIMARY_KEY_SUFFIX, UNIQUE_SUFFIXES,
+};
 
 /// 一意制約違反の SQLSTATE
 const UNIQUE_VIOLATION: &str = "23505";
@@ -16,16 +23,11 @@ const FOREIGN_KEY_VIOLATION: &str = "23503";
 /// 制約名から情報を取り出せなかった場合のプレースホルダー
 const UNKNOWN: &str = "unknown";
 
-/// インデックス名によく使われる接頭辞
-const INDEX_PREFIXES: [&str; 3] = ["idx_", "uq_", "unique_"];
-
-/// 一意制約・インデックス名によく使われる接尾辞
-const UNIQUE_SUFFIXES: [&str; 3] = ["_key", "_unique", "_idx"];
-
 /// sqlx のエラーを `RepositoryError` に変換する
 ///
 /// `entity` には問い合わせ対象のエンティティ名（"trial" / "step" / "parameter" / "project"）を渡す。
-/// 制約名の接頭辞除去にも利用するため、テーブル名ではなく単数形のエンティティ名を渡すこと。
+/// 制約名の接頭辞除去にも利用するため、命名規約どおり複数形のテーブル名ではなく
+/// 単数形のエンティティ名を渡すこと（`super::naming_conventions` を参照）。
 pub fn map_sqlx_error(error: sqlx::Error, entity: &str) -> RepositoryError {
     let sqlx::Error::Database(db_error) = &error else {
         return RepositoryError::Internal {
@@ -61,7 +63,7 @@ fn conflict_field(constraint: Option<&str>, entity: &str) -> String {
     };
 
     // 主キー制約名はカラム名を含まないため id とみなす
-    if constraint.ends_with("_pkey") {
+    if constraint.ends_with(PRIMARY_KEY_SUFFIX) {
         return "id".to_string();
     }
 
@@ -86,8 +88,8 @@ fn conflict_field(constraint: Option<&str>, entity: &str) -> String {
 ///   → `Conflict`（例: `trials_project_id_fkey` を entity `project` で踏む。
 ///   `trials.project_id` は `ON DELETE RESTRICT` のため `DELETE FROM projects` で発生する）
 ///
-/// 制約名は参照する側のテーブル名で始まる（`trials_...`）ため、
-/// 呼び出し元のテーブル接頭辞と一致するかどうかで向きを判別する。
+/// 命名規約（`super::naming_conventions`）により制約名は参照する側のテーブル名（複数形）で
+/// 始まる（`trials_...`）ため、呼び出し元のテーブル接頭辞と一致するかどうかで向きを判別する。
 /// 制約名が取得できない場合は向きを判別できないため、従来どおり `NotFound` に倒す。
 fn foreign_key_violation(constraint: Option<&str>, entity: &str) -> RepositoryError {
     let not_found = |referenced: &str| RepositoryError::NotFound {
@@ -96,7 +98,7 @@ fn foreign_key_violation(constraint: Option<&str>, entity: &str) -> RepositoryEr
         id: UNKNOWN.to_string(),
     };
 
-    let Some(name) = constraint.and_then(|c| c.strip_suffix("_fkey")) else {
+    let Some(name) = constraint.and_then(|c| c.strip_suffix(FOREIGN_KEY_SUFFIX)) else {
         return not_found(entity);
     };
 
@@ -115,38 +117,6 @@ fn foreign_key_violation(constraint: Option<&str>, entity: &str) -> RepositoryEr
     } else {
         not_found(referenced)
     }
-}
-
-/// 先頭に一致する接頭辞をひとつ取り除く
-fn strip_prefixes<'a>(name: &'a str, prefixes: &[&str]) -> &'a str {
-    prefixes
-        .iter()
-        .find_map(|prefix| name.strip_prefix(prefix))
-        .unwrap_or(name)
-}
-
-/// 末尾に一致する接尾辞をひとつ取り除く
-fn strip_suffixes<'a>(name: &'a str, suffixes: &[&str]) -> &'a str {
-    suffixes
-        .iter()
-        .find_map(|suffix| name.strip_suffix(suffix))
-        .unwrap_or(name)
-}
-
-/// テーブル名に相当する接頭辞（`steps_` / `step_`）を取り除く
-///
-/// どちらの接頭辞にも一致しない場合は `None` を返す。
-fn strip_table_prefix_opt<'a>(name: &'a str, entity: &str) -> Option<&'a str> {
-    [format!("{}s_", entity), format!("{}_", entity)]
-        .iter()
-        .find_map(|prefix| name.strip_prefix(prefix.as_str()))
-}
-
-/// テーブル名に相当する接頭辞（`steps_` / `step_`）を取り除く
-///
-/// 一致しない場合は元の文字列をそのまま返す。
-fn strip_table_prefix<'a>(name: &'a str, entity: &str) -> &'a str {
-    strip_table_prefix_opt(name, entity).unwrap_or(name)
 }
 
 #[cfg(test)]
@@ -338,6 +308,26 @@ mod tests {
             RepositoryError::Conflict {
                 entity: "trial".to_string(),
                 field: "steps_trial_id_fkey".to_string(),
+            }
+        );
+    }
+
+    /// テーブル接頭辞の判定は複数形のみを対象とする
+    ///
+    /// 命名規約によりテーブル名は常に複数形のため、単数形（`step_`）には一致させない。
+    /// 仮に単数形にも一致させると、別テーブル `step_notes` の制約名
+    /// `step_notes_step_id_fkey` をエンティティ `step` で踏んだときに
+    /// 誤ったエンティティ名（`notes_step`）の NotFound を返してしまう。
+    /// ここでは規約どおり「参照される側」と判定され Conflict になる。
+    #[test]
+    fn test_foreign_key_violation_does_not_match_singular_table_prefix() {
+        let error = db_error(FOREIGN_KEY_VIOLATION, Some("step_notes_step_id_fkey"));
+
+        assert_eq!(
+            map_sqlx_error(error, "step"),
+            RepositoryError::Conflict {
+                entity: "step".to_string(),
+                field: "step_notes_step_id_fkey".to_string(),
             }
         );
     }
