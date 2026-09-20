@@ -26,7 +26,6 @@ pub struct PgTrialRepository {
 }
 
 impl PgTrialRepository {
-    /// 新しい PgTrialRepository を作成する
     pub fn new(executor: PgExecutor) -> Self {
         Self { executor }
     }
@@ -390,7 +389,6 @@ mod tests {
         let found = repo.find_by_id(trial.id()).await.unwrap().unwrap();
         assert_eq!(found.steps().len(), 1);
 
-        // aggregate から Step を取り除いて保存し直す
         trial.steps_mut().retain(|s| s.id() != &step_id);
         repo.save(&trial).await.unwrap();
 
@@ -422,7 +420,6 @@ mod tests {
         let found = repo.find_by_id(trial.id()).await.unwrap().unwrap();
         assert_eq!(found.steps()[0].parameters().len(), 1);
 
-        // aggregate から Parameter を取り除いて保存し直す
         let step_mut = trial
             .steps_mut()
             .iter_mut()

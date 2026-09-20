@@ -7,7 +7,6 @@ use crate::presentation::graphql::error::UserFacingError;
 use crate::presentation::graphql::types::{project::CreateProjectInput, project::Project};
 use crate::use_case::project::create_project;
 
-/// プロジェクト関連のミューテーション
 #[derive(Default)]
 pub struct ProjectMutation;
 

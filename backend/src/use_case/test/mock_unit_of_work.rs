@@ -16,8 +16,6 @@ use crate::ports::{ProjectSort, ProjectSortColumn, RepositoryError, SortDirectio
 /// `None` の場合は通常どおり保存される。
 type SaveFailure = Arc<StdMutex<Option<RepositoryError>>>;
 
-/// 設定されている `save()` 失敗エラーを取り出す
-///
 /// ロックを await をまたいで保持しないよう、同期関数として切り出している。
 fn save_failure(failure: &SaveFailure) -> Option<RepositoryError> {
     failure.lock().expect("save failure lock poisoned").clone()
@@ -40,13 +38,10 @@ fn save_failure(failure: &SaveFailure) -> Option<RepositoryError> {
 /// トランザクション中に取得したリポジトリだけがハンドルを保持する。
 type TxHandle = Arc<()>;
 
-/// ハンドルを掴んでいるリポジトリが残っていないかを検査する
 fn transaction_is_free(handle: &TxHandle) -> bool {
     Arc::strong_count(handle) == 1
 }
 
-/// テスト用の MockProjectRepository
-///
 /// MockUnitOfWork 内のデータを共有するため Arc<Mutex> を使用
 #[derive(Clone)]
 pub struct MockProjectRepository {
@@ -85,7 +80,6 @@ impl ProjectRepository for MockProjectRepository {
         let projects_guard = self.projects.lock().await;
         let mut projects = projects_guard.clone();
 
-        // ソート処理
         projects.sort_by(|a, b| {
             let cmp = match sort.column {
                 ProjectSortColumn::Name => a.name().cmp(b.name()),
@@ -120,8 +114,6 @@ impl ProjectRepository for MockProjectRepository {
     }
 }
 
-/// テスト用の MockTrialRepository
-///
 /// MockUnitOfWork 内のデータを共有するため Arc<Mutex> を使用
 #[derive(Clone)]
 pub struct MockTrialRepository {
@@ -180,7 +172,6 @@ impl TrialRepository for MockTrialRepository {
     }
 }
 
-/// テスト用の MockUnitOfWork
 pub struct MockUnitOfWork {
     projects: Arc<Mutex<Vec<Project>>>,
     trials: Arc<Mutex<Vec<Trial>>>,
@@ -236,12 +227,10 @@ impl MockUnitOfWork {
             .expect("save failure lock poisoned") = Some(error);
     }
 
-    /// `commit()` が呼ばれた回数
     pub fn commit_count(&self) -> usize {
         self.commit_count
     }
 
-    /// `rollback()` が呼ばれた回数
     pub fn rollback_count(&self) -> usize {
         self.rollback_count
     }

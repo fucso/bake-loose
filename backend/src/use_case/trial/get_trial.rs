@@ -13,7 +13,6 @@ pub enum Error {
     Infrastructure(String),
 }
 
-/// IDでTrialを取得する
 pub async fn execute<U: UnitOfWork>(uow: &mut U, id: Uuid) -> Result<Option<Trial>, Error> {
     uow.trial_repository()
         .find_by_id(&TrialId(id))

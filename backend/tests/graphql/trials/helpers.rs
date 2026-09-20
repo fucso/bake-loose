@@ -9,7 +9,6 @@ use crate::graphql::schema::execute_graphql;
 pub const TRIAL_ID: &str = "33333333-3333-3333-3333-333333333333";
 pub const COMPLETED_TRIAL_ID: &str = "66666666-6666-6666-6666-666666666666";
 
-/// `addStep` で Step を追加し、そのレスポンスを返す
 pub async fn add_step(pool: PgPool, trial_id: &str, name: &str) -> serde_json::Value {
     let query = format!(
         r#"
@@ -29,7 +28,6 @@ pub async fn add_step(pool: PgPool, trial_id: &str, name: &str) -> serde_json::V
     execute_graphql(pool, &query).await
 }
 
-/// `addParameter` で Step にパラメーターを1件追加し、そのレスポンスを返す
 pub async fn add_parameter(
     pool: PgPool,
     trial_id: &str,

@@ -6,8 +6,6 @@ use async_graphql::{InputObject, Object, ID};
 
 use crate::domain::models::project::Project as DomainProject;
 
-/// GraphQL 用の Project 型
-///
 /// ドメインモデルを直接公開せず、ラッパー型として定義する。
 pub struct Project(pub DomainProject);
 

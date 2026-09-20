@@ -14,7 +14,6 @@ pub enum Error {
     Infrastructure(String),
 }
 
-/// プロジェクトに紐づくTrial一覧を取得する
 pub async fn execute<U: UnitOfWork>(uow: &mut U, project_id: Uuid) -> Result<Vec<Trial>, Error> {
     uow.trial_repository()
         .find_all_by_project(&ProjectId(project_id))

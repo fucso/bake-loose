@@ -10,7 +10,6 @@ use crate::ports::{RepositoryError, UnitOfWork};
 
 use super::save_trial;
 
-/// ユースケースの入力
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Input {
     pub project_id: Uuid,
@@ -18,25 +17,18 @@ pub struct Input {
     pub memo: Option<String>,
 }
 
-/// ユースケースのエラー
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
     ProjectNotFound,
     Domain(create_trial::Error),
-    /// 一意制約違反など、並行操作との競合（リトライで解消し得る）
-    Conflict {
-        entity: String,
-        field: String,
-    },
+    Conflict { entity: String, field: String },
     Infrastructure(String),
 }
 
 impl From<RepositoryError> for Error {
     fn from(error: RepositoryError) -> Self {
         match error {
-            // 一意制約違反は並行操作との競合であり、リトライで解消し得る
             RepositoryError::Conflict { entity, field } => Error::Conflict { entity, field },
-            // 外部キー違反は参照先が並行して削除されたことを意味する。
             // trials が持つ外部キーは project_id のみのため、参照先は必ず Project になる。
             // エンティティ名で振り分ける余地がないので ProjectNotFound に倒す
             RepositoryError::NotFound { .. } => Error::ProjectNotFound,
@@ -45,7 +37,6 @@ impl From<RepositoryError> for Error {
     }
 }
 
-/// ユースケースの実行
 pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, Error> {
     // 1. DB問い合わせが必要な検証（先に行う）
     let project_id = ProjectId(input.project_id);
@@ -112,7 +103,6 @@ mod tests {
         assert_eq!(trial.name(), Some("焼成温度検証"));
         assert_eq!(trial.memo(), Some("初回"));
 
-        // モックのリポジトリに保存されていることを確認
         let saved_trial = uow.trial_repository().find_by_id(trial.id()).await.unwrap();
         assert!(saved_trial.is_some());
     }
@@ -150,7 +140,6 @@ mod tests {
         let result = execute(&mut uow, input).await;
 
         assert!(matches!(result, Err(Error::Infrastructure(_))));
-        // ロールバックが実際に発行され、コミットは呼ばれていないこと
         assert_eq!(uow.rollback_count(), 1);
         assert_eq!(
             uow.rollback_success_count(),

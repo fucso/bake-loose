@@ -7,7 +7,6 @@ use sqlx::PgPool;
 
 use crate::repository::PgUnitOfWork;
 
-/// Context に `PgUnitOfWork` を作成するヘルパーを追加
 pub trait ContextExt {
     fn create_unit_of_work(&self) -> Result<PgUnitOfWork>;
 }

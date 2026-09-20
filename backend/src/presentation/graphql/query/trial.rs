@@ -10,7 +10,6 @@ use crate::presentation::graphql::error::UserFacingError;
 use crate::presentation::graphql::types::trial::Trial;
 use crate::use_case::trial::{get_trial, list_trials_by_project};
 
-/// Trial クエリリゾルバー
 #[derive(Default)]
 pub struct TrialQuery;
 

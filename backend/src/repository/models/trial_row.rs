@@ -10,7 +10,6 @@ use crate::domain::models::trial::{Trial, TrialId, TrialStatus};
 use crate::domain::timezone::JstDateTime;
 use crate::ports::error::RepositoryError;
 
-/// trials テーブルの行を表すDBモデル
 #[derive(Debug, FromRow)]
 pub struct TrialRow {
     pub id: Uuid,
@@ -50,7 +49,6 @@ impl TrialRow {
         ))
     }
 
-    /// TrialStatus を DB カラム値へ変換する
     pub fn status_column(status: &TrialStatus) -> &'static str {
         match status {
             TrialStatus::InProgress => "in_progress",

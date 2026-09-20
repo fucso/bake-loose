@@ -26,12 +26,10 @@ pub struct PgUnitOfWork {
 }
 
 impl PgUnitOfWork {
-    /// 新しい PgUnitOfWork を作成する
     pub fn new(pool: PgPool) -> Self {
         Self { pool, tx: None }
     }
 
-    /// 現在の Executor を取得する
     fn executor(&self) -> PgExecutor {
         match &self.tx {
             Some(tx) => PgExecutor::from_transaction(tx.clone()),
@@ -77,7 +75,6 @@ impl UnitOfWork for PgUnitOfWork {
             message: "No transaction to commit".to_string(),
         })?;
 
-        // Arc から Transaction を取り出す
         // この時点で他にこの Arc を参照しているリポジトリはないはず
         let tx = Arc::try_unwrap(tx_arc)
             .map_err(|_| RepositoryError::Internal {
@@ -95,7 +92,6 @@ impl UnitOfWork for PgUnitOfWork {
             message: "No transaction to rollback".to_string(),
         })?;
 
-        // Arc から Transaction を取り出す
         let tx = Arc::try_unwrap(tx_arc)
             .map_err(|_| RepositoryError::Internal {
                 message: "Transaction is still in use".to_string(),

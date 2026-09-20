@@ -5,12 +5,10 @@ use uuid::Uuid;
 
 use super::step::StepId;
 
-/// ParameterID
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ParameterId(pub Uuid);
 
 impl ParameterId {
-    /// 新しいParameterIDを生成する
     pub fn new() -> Self {
         Self(Uuid::new_v4())
     }
@@ -22,7 +20,6 @@ impl Default for ParameterId {
     }
 }
 
-/// 時間の単位
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DurationUnit {
@@ -32,7 +29,6 @@ pub enum DurationUnit {
     Second,
 }
 
-/// 数値と単位を持つ時間量
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct DurationValue {
     pub value: f64,
@@ -84,17 +80,23 @@ pub enum ParameterValue {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ParameterContent {
-    /// キーと値のペア（例: 強力粉: 300g）
-    KeyValue { key: String, value: ParameterValue },
+    KeyValue {
+        key: String,
+        value: ParameterValue,
+    },
     /// 経過時間（例: 発酵時間 90分）
     Duration {
         duration: DurationValue,
         note: String,
     },
     /// 時間マーカー（例: 焼成開始から30分後）
-    TimeMarker { at: DurationValue, note: String },
-    /// 自由記述テキスト
-    Text { value: String },
+    TimeMarker {
+        at: DurationValue,
+        note: String,
+    },
+    Text {
+        value: String,
+    },
 }
 
 /// Parameter（Step に紐づく記録要素）
@@ -115,7 +117,6 @@ impl Parameter {
         }
     }
 
-    /// 生データからParameterを構築する
     pub fn from_raw(id: ParameterId, step_id: StepId, content: ParameterContent) -> Self {
         Self {
             id,
@@ -136,7 +137,6 @@ impl Parameter {
         &self.content
     }
 
-    /// content を設定する
     pub fn set_content(&mut self, content: ParameterContent) {
         self.content = content;
     }

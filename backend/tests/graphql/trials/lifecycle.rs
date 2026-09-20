@@ -9,7 +9,6 @@ const PROJECT_ID: &str = "11111111-1111-1111-1111-111111111111";
 
 #[sqlx::test(migrations = "./migrations", fixtures("../../fixtures/projects.sql"))]
 async fn test_full_trial_lifecycle(pool: PgPool) {
-    // 1. Trialを作成する
     let create_query = format!(
         r#"mutation {{
             createTrial(input: {{ projectId: "{PROJECT_ID}", name: "焼成温度検証" }}) {{ id status }}
@@ -19,7 +18,6 @@ async fn test_full_trial_lifecycle(pool: PgPool) {
     let trial_id = created["createTrial"]["id"].as_str().unwrap().to_string();
     assert_eq!(created["createTrial"]["status"], "IN_PROGRESS");
 
-    // 2. Stepを追加する
     let add_step_query = format!(
         r#"mutation {{
             addStep(trialId: "{trial_id}", input: {{ name: "こね" }}) {{ id name isCompleted }}
@@ -30,7 +28,6 @@ async fn test_full_trial_lifecycle(pool: PgPool) {
     assert_eq!(added["addStep"]["name"], "こね");
     assert_eq!(added["addStep"]["isCompleted"], false);
 
-    // 3. Stepを更新する
     let update_step_query = format!(
         r#"mutation {{
             updateStep(trialId: "{trial_id}", stepId: "{step_id}", input: {{ name: "一次発酵" }}) {{
@@ -41,7 +38,6 @@ async fn test_full_trial_lifecycle(pool: PgPool) {
     let updated = execute_graphql(pool.clone(), &update_step_query).await;
     assert_eq!(updated["updateStep"]["name"], "一次発酵");
 
-    // 4. StepにParameterを追加する
     let parameter_added = add_parameter(
         pool.clone(),
         &trial_id,
@@ -66,7 +62,6 @@ async fn test_full_trial_lifecycle(pool: PgPool) {
         })
     );
 
-    // 5. Stepを完了する
     let complete_step_query = format!(
         r#"mutation {{
             completeStep(trialId: "{trial_id}", stepId: "{step_id}") {{ isCompleted }}
@@ -75,13 +70,12 @@ async fn test_full_trial_lifecycle(pool: PgPool) {
     let step_completed = execute_graphql(pool.clone(), &complete_step_query).await;
     assert_eq!(step_completed["completeStep"]["isCompleted"], true);
 
-    // 6. Trialを完了する
     let complete_trial_query =
         format!(r#"mutation {{ completeTrial(id: "{trial_id}") {{ status }} }}"#);
     let trial_completed = execute_graphql(pool.clone(), &complete_trial_query).await;
     assert_eq!(trial_completed["completeTrial"]["status"], "COMPLETED");
 
-    // 7. trial クエリで最終状態を確認する
+    // trial クエリで最終状態を確認する
     let get_query = format!(
         r#"{{
             trial(id: "{trial_id}") {{
@@ -113,7 +107,7 @@ async fn test_full_trial_lifecycle(pool: PgPool) {
         }])
     );
 
-    // 8. trialsByProject クエリでも取得できることを確認する
+    // trialsByProject クエリでも取得できることを確認する
     let list_query = format!(r#"{{ trialsByProject(projectId: "{PROJECT_ID}") {{ id status }} }}"#);
     let list = execute_graphql(pool, &list_query).await;
     assert_eq!(

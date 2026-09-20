@@ -24,11 +24,9 @@ async fn test_creates_project_successfully(pool: PgPool) {
     let query = build_mutation("新規プロジェクト");
     let data = execute_graphql(pool, &query).await;
 
-    // レスポンス検証
     let project = &data["createProject"];
     assert_eq!(project["name"], "新規プロジェクト");
 
-    // id が UUID 形式であることを検証
     let id_str = project["id"].as_str().unwrap();
     assert!(Uuid::parse_str(id_str).is_ok());
 }

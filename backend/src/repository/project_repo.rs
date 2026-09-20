@@ -20,7 +20,6 @@ pub struct PgProjectRepository {
 }
 
 impl PgProjectRepository {
-    /// 新しい PgProjectRepository を作成する
     pub fn new(executor: PgExecutor) -> Self {
         Self { executor }
     }
@@ -89,7 +88,6 @@ mod tests {
     use sqlx::PgPool;
     use uuid::Uuid;
 
-    /// テスト用データを投入する
     async fn insert_test_project(pool: &PgPool, id: Uuid, name: &str) {
         sqlx::query(
             r#"
@@ -108,15 +106,12 @@ mod tests {
     async fn test_find_by_id_returns_project_when_exists(pool: PgPool) {
         let repo = PgProjectRepository::new(PgExecutor::from_pool(pool.clone()));
 
-        // テストデータ作成
         let test_id = Uuid::new_v4();
         let test_name = "テスト用ピザ生地";
         insert_test_project(&pool, test_id, test_name).await;
 
-        // テスト実行
         let result = repo.find_by_id(&ProjectId(test_id)).await;
 
-        // 検証
         assert!(result.is_ok());
         let project = result.unwrap();
         assert!(project.is_some());
@@ -129,11 +124,9 @@ mod tests {
     async fn test_find_by_id_returns_none_when_not_exists(pool: PgPool) {
         let repo = PgProjectRepository::new(PgExecutor::from_pool(pool));
 
-        // 存在しないIDで検索
         let non_existent_id = Uuid::new_v4();
         let result = repo.find_by_id(&ProjectId(non_existent_id)).await;
 
-        // 検証
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
     }
@@ -142,7 +135,6 @@ mod tests {
     async fn test_find_all_with_name_asc(pool: PgPool) {
         let repo = PgProjectRepository::new(PgExecutor::from_pool(pool.clone()));
 
-        // テストデータ作成（名前順の確認）
         let test_id1 = Uuid::new_v4();
         let test_id2 = Uuid::new_v4();
         let test_id3 = Uuid::new_v4();
@@ -150,16 +142,13 @@ mod tests {
         insert_test_project(&pool, test_id2, "アップルパイ").await;
         insert_test_project(&pool, test_id3, "バゲット").await;
 
-        // テスト実行
         let sort = ProjectSort::new(ProjectSortColumn::Name, SortDirection::Asc);
         let result = repo.find_all(sort).await;
 
-        // 検証
         assert!(result.is_ok());
         let projects = result.unwrap();
         assert_eq!(projects.len(), 3);
 
-        // name ASC順: アップルパイ, チーズケーキ, バゲット
         assert_eq!(projects[0].name(), "アップルパイ");
         assert_eq!(projects[1].name(), "チーズケーキ");
         assert_eq!(projects[2].name(), "バゲット");
@@ -169,7 +158,6 @@ mod tests {
     async fn test_find_all_with_created_at_desc(pool: PgPool) {
         let repo = PgProjectRepository::new(PgExecutor::from_pool(pool.clone()));
 
-        // テストデータ作成（順序確認のため2件）
         let test_id1 = Uuid::new_v4();
         let test_id2 = Uuid::new_v4();
         insert_test_project(&pool, test_id1, "プロジェクト1").await;
@@ -177,16 +165,13 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
         insert_test_project(&pool, test_id2, "プロジェクト2").await;
 
-        // テスト実行
         let sort = ProjectSort::new(ProjectSortColumn::CreatedAt, SortDirection::Desc);
         let result = repo.find_all(sort).await;
 
-        // 検証
         assert!(result.is_ok());
         let projects = result.unwrap();
         assert_eq!(projects.len(), 2);
 
-        // created_at DESC順なので、後に投入した test_id2 が先に来る
         assert_eq!(projects[0].id().0, test_id2);
         assert_eq!(projects[1].id().0, test_id1);
     }
@@ -200,7 +185,6 @@ mod tests {
         let result = repo.save(&new_project).await;
         assert!(result.is_ok());
 
-        // find_by_id で検証
         let found = repo.find_by_id(new_project.id()).await.unwrap().unwrap();
         assert_eq!(found.name(), "新規プロジェクト");
     }
@@ -209,7 +193,6 @@ mod tests {
     async fn test_save_updates_existing_project(pool: PgPool) {
         let repo = PgProjectRepository::new(PgExecutor::from_pool(pool.clone()));
 
-        // 既存データ作成
         let existing_id = Uuid::new_v4();
         insert_test_project(&pool, existing_id, "更新前プロジェクト").await;
         let project_to_update = repo
@@ -218,7 +201,6 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        // 更新
         let updated_project = Project::from_raw(
             project_to_update.id().clone(),
             "更新後プロジェクト".to_string(),
@@ -226,7 +208,6 @@ mod tests {
         let result = repo.save(&updated_project).await;
         assert!(result.is_ok());
 
-        // find_by_id で検証
         let found = repo
             .find_by_id(&ProjectId(existing_id))
             .await
@@ -239,7 +220,6 @@ mod tests {
     async fn test_exists_by_name_returns_true_when_exists(pool: PgPool) {
         let repo = PgProjectRepository::new(PgExecutor::from_pool(pool.clone()));
 
-        // 既存データ作成
         insert_test_project(&pool, Uuid::new_v4(), "存在するプロジェクト").await;
 
         let result = repo.exists_by_name("存在するプロジェクト").await;

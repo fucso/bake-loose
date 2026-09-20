@@ -74,7 +74,6 @@ fn find_parameter(
         })
 }
 
-/// Trial 関連のミューテーション
 #[derive(Default)]
 pub struct TrialMutation;
 

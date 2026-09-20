@@ -14,32 +14,24 @@ fn jst_offset() -> FixedOffset {
     FixedOffset::east_opt(9 * 3600).expect("JST offset (+09:00) is always valid")
 }
 
-/// JST（日本標準時）で表現された日時
-///
 /// アプリケーション内の日時はすべてこの型を通して扱う。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JstDateTime(DateTime<FixedOffset>);
 
 impl JstDateTime {
-    /// 現在時刻を取得する
     pub fn now() -> Self {
         Self::from_utc(Utc::now())
     }
 
-    /// UTCの日時からJSTへ変換する
     pub fn from_utc(dt: DateTime<Utc>) -> Self {
         Self(dt.with_timezone(&jst_offset()))
     }
 
-    /// 任意のオフセット付き日時をJSTへ正規化して変換する
-    ///
     /// GraphQL入力など、外部から受け取ったオフセット付き日時をJSTへ正規化する境界で使用する。
     pub fn from_fixed_offset(dt: DateTime<FixedOffset>) -> Self {
         Self(dt.with_timezone(&jst_offset()))
     }
 
-    /// `chrono::DateTime<FixedOffset>` として取り出す
-    ///
     /// GraphQLスカラーへの変換・DB永続化のバインドなど、外部境界専用。
     pub fn into_fixed_offset(self) -> DateTime<FixedOffset> {
         self.0

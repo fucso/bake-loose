@@ -8,8 +8,6 @@ pub enum Error {
     StepNotFound,
 }
 
-/// 指定 ID の Step が Trial に存在することを検証する
-///
 /// 判定結果のみを返す。実態が必要な場合は呼び出し側（Action の validate）で
 /// `state.steps()` から取得する。
 pub fn require_exists(trial: &Trial, step_id: &StepId) -> Result<(), Error> {

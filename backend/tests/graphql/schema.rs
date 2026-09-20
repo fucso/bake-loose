@@ -6,7 +6,6 @@
 use bake_loose::presentation::graphql::build_schema;
 use sqlx::PgPool;
 
-/// GraphQL クエリを実行し、レスポンスの JSON を返す
 pub async fn execute_graphql(pool: PgPool, query: &str) -> serde_json::Value {
     let schema = build_schema(pool);
     let response = schema.execute(query).await;

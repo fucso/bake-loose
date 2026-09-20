@@ -7,7 +7,6 @@ pub enum Error {
     StepAlreadyCompleted,
 }
 
-/// Step が未完了（InProgress）であることを検証する
 pub fn require_in_progress(step: &Step) -> Result<(), Error> {
     if step.is_completed() {
         return Err(Error::StepAlreadyCompleted);

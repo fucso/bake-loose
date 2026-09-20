@@ -7,7 +7,6 @@ pub enum Error {
     TrialAlreadyCompleted,
 }
 
-/// Trial が InProgress であることを検証する
 pub fn require_in_progress(trial: &Trial) -> Result<(), Error> {
     if trial.status() == &TrialStatus::Completed {
         return Err(Error::TrialAlreadyCompleted);

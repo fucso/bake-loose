@@ -49,8 +49,6 @@ impl From<&ParameterContent> for ParameterType {
     }
 }
 
-/// GraphQL 用の Parameter 型
-///
 /// ドメインモデルを直接公開せず、ラッパー型として定義する。
 pub struct Parameter(pub DomainParameter);
 
@@ -78,8 +76,6 @@ impl From<DomainParameter> for Parameter {
     }
 }
 
-/// GraphQL 用の Step 型
-///
 /// ドメインモデルを直接公開せず、ラッパー型として定義する。
 pub struct Step(pub DomainStep);
 
@@ -135,8 +131,6 @@ impl From<DomainStep> for Step {
     }
 }
 
-/// GraphQL 用の Trial 型
-///
 /// ドメインモデルを直接公開せず、ラッパー型として定義する。
 pub struct Trial(pub DomainTrial);
 
@@ -229,7 +223,6 @@ mod tests {
 
     #[test]
     fn test_parameter_type_from_parameter_content() {
-        // (content, expected)
         let cases = [
             (
                 ParameterContent::KeyValue {

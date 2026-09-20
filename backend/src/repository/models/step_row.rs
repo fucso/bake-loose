@@ -9,7 +9,6 @@ use crate::domain::models::step::{Step, StepId};
 use crate::domain::models::trial::TrialId;
 use crate::domain::timezone::JstDateTime;
 
-/// steps テーブルの行を表すDBモデル
 #[derive(Debug, FromRow)]
 pub struct StepRow {
     pub id: Uuid,
@@ -23,7 +22,6 @@ pub struct StepRow {
 }
 
 impl StepRow {
-    /// Parameter一覧と合わせてドメインモデルに変換する
     pub fn into_domain(self, parameters: Vec<Parameter>) -> Step {
         Step::from_raw(
             StepId(self.id),

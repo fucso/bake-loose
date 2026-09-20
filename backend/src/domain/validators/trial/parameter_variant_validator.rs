@@ -35,7 +35,6 @@ fn same_variant(a: &ParameterContent, b: &ParameterContent) -> bool {
     }
 }
 
-/// 既存の ParameterContent と新しい ParameterContent が同じバリアントであることを検証する
 pub fn require_same_variant(
     existing: &ParameterContent,
     new: &ParameterContent,

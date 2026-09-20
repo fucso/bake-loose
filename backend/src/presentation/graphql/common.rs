@@ -5,8 +5,6 @@ use uuid::Uuid;
 
 use crate::presentation::graphql::error::GraphQLError;
 
-/// GraphQL の ID を UUID にパースする
-///
 /// パースに失敗した場合は種別によらず統一されたメッセージ・コードを返す。
 pub fn parse_uuid(id: &ID) -> Result<Uuid> {
     Uuid::parse_str(&id.0)

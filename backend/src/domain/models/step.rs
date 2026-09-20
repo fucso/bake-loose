@@ -7,12 +7,10 @@ use super::parameter::{Parameter, ParameterId};
 use super::trial::TrialId;
 use crate::domain::timezone::JstDateTime;
 
-/// StepID
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct StepId(pub Uuid);
 
 impl StepId {
-    /// 新しいStepIDを生成する
     pub fn new() -> Self {
         Self(Uuid::new_v4())
     }
@@ -59,7 +57,6 @@ impl Step {
         }
     }
 
-    /// 生データからStepを構築する
     pub fn from_raw(
         id: StepId,
         trial_id: TrialId,
@@ -92,7 +89,6 @@ impl Step {
         &self.name
     }
 
-    /// name を設定する
     pub fn set_name(&mut self, name: String) {
         self.name = name;
     }
@@ -109,13 +105,10 @@ impl Step {
         self.completed_at.as_ref()
     }
 
-    /// 完了済みかどうかを判定する（completed_at の有無で判定）
     pub fn is_completed(&self) -> bool {
         self.completed_at.is_some()
     }
 
-    /// Step の開始日時を設定・クリアする
-    ///
     /// `None` を渡した場合は無着手状態にクリアする。
     /// `update_step` の「開始日時を明示的に未設定へ戻す」操作をサポートするための挙動。
     pub fn start(&mut self, started_at: Option<JstDateTime>) {
@@ -126,28 +119,24 @@ impl Step {
         &self.parameters
     }
 
-    /// Parameter を ID で取得する
     pub fn parameter(&self, id: &ParameterId) -> Option<&Parameter> {
         self.parameters.iter().find(|p| p.id() == id)
     }
 
-    /// Parameter を追加する
     pub fn add_parameter(&mut self, parameter: Parameter) {
         self.parameters.push(parameter);
     }
 
-    /// Parameter を削除する（該当IDが存在しない場合は何もしない）
+    /// 該当IDが存在しない場合は何もしない
     pub fn remove_parameter(&mut self, parameter_id: &ParameterId) {
         self.parameters.retain(|p| p.id() != parameter_id);
     }
 
-    /// Parameter を可変参照で取得する（既存 Parameter の内容更新に使用する）
+    /// 既存 Parameter の内容更新に使用する
     pub fn parameters_mut(&mut self) -> &mut Vec<Parameter> {
         &mut self.parameters
     }
 
-    /// Step を完了状態にする
-    ///
     /// completed_at が未指定の場合は現在時刻を採用する
     pub fn complete(&mut self, completed_at: Option<JstDateTime>) {
         self.completed_at = Some(completed_at.unwrap_or_else(JstDateTime::now));
@@ -295,11 +284,9 @@ mod tests {
         let parameter_id = parameter.id().clone();
         step.add_parameter(parameter);
 
-        // 存在しないIDを remove しても既存の Parameter は残る
         step.remove_parameter(&ParameterId::new());
         assert_eq!(step.parameters().len(), 1);
 
-        // 該当IDを remove すると削除される
         step.remove_parameter(&parameter_id);
         assert_eq!(step.parameters().len(), 0);
     }

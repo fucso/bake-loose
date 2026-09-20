@@ -2,7 +2,6 @@
 //!
 //! モデルに依存しない、SQL の並び順を表現するリソース。
 
-/// ソート方向
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SortDirection {
     #[default]
@@ -11,7 +10,6 @@ pub enum SortDirection {
 }
 
 impl SortDirection {
-    /// SQL の ORDER BY 句で使用する文字列を返す
     pub fn as_sql(&self) -> &'static str {
         match self {
             Self::Asc => "ASC",
@@ -20,15 +18,11 @@ impl SortDirection {
     }
 }
 
-/// ソート可能なカラムを表すトレイト
-///
 /// 各モデルの SortColumn enum がこのトレイトを実装する。
 pub trait SortColumn: Send + Sync + Copy {
-    /// SQL の ORDER BY 句で使用するカラム名を返す
     fn as_sql_column(&self) -> &'static str;
 }
 
-/// ソート条件
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Sort<C: SortColumn> {
     pub column: C,
@@ -48,8 +42,6 @@ impl<C: SortColumn> Sort<C> {
         Self::new(column, SortDirection::Desc)
     }
 
-    /// SQL の ORDER BY 句を生成する
-    ///
     /// 例: "ORDER BY name ASC", "ORDER BY created_at DESC"
     pub fn to_order_by_clause(&self) -> String {
         format!(

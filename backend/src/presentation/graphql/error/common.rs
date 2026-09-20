@@ -2,7 +2,6 @@
 
 use async_graphql::ErrorExtensions;
 
-/// GraphQL エラーのラッパー
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GraphQLError {
     message: String,

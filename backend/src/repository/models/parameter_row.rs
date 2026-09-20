@@ -8,7 +8,6 @@ use uuid::Uuid;
 use crate::domain::models::parameter::{Parameter, ParameterContent, ParameterId};
 use crate::domain::models::step::StepId;
 
-/// parameters テーブルの行を表すDBモデル
 #[derive(Debug, FromRow)]
 pub struct ParameterRow {
     pub id: Uuid,

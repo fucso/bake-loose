@@ -9,8 +9,6 @@ pub enum Error {
     NonPositiveQuantityAmount,
 }
 
-/// ParameterContent が不正な値を持たないことを検証する
-///
 /// - Duration/TimeMarker の DurationValue は非負であること
 /// - KeyValue の Quantity は unit が空文字でないこと、amount が正の値であること
 pub fn validate(content: &ParameterContent) -> Result<(), Error> {

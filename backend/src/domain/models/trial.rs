@@ -7,12 +7,10 @@ use super::step::{Step, StepId};
 use crate::domain::models::project::ProjectId;
 use crate::domain::timezone::JstDateTime;
 
-/// TrialID
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TrialId(pub Uuid);
 
 impl TrialId {
-    /// 新しいTrialIDを生成する
     pub fn new() -> Self {
         Self(Uuid::new_v4())
     }
@@ -24,7 +22,6 @@ impl Default for TrialId {
     }
 }
 
-/// Trial の状態
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TrialStatus {
     InProgress,
@@ -57,7 +54,6 @@ impl Trial {
         }
     }
 
-    /// 生データからTrialを構築する
     #[allow(clippy::too_many_arguments)]
     pub fn from_raw(
         id: TrialId,
@@ -99,7 +95,6 @@ impl Trial {
         &self.status
     }
 
-    /// 完了日時（JST）
     pub fn completed_at(&self) -> Option<&JstDateTime> {
         self.completed_at.as_ref()
     }
@@ -108,33 +103,26 @@ impl Trial {
         &self.steps
     }
 
-    /// Step を ID で取得する
     pub fn step(&self, id: &StepId) -> Option<&Step> {
         self.steps.iter().find(|step| step.id() == id)
     }
 
-    /// Step を可変参照として取得・変更するためのアクセサ
     pub fn steps_mut(&mut self) -> &mut Vec<Step> {
         &mut self.steps
     }
 
-    /// Step を追加する
     pub fn add_step(&mut self, step: Step) {
         self.steps.push(step);
     }
 
-    /// name を設定・クリアする
     pub fn set_name(&mut self, name: Option<String>) {
         self.name = name;
     }
 
-    /// memo を設定・クリアする
     pub fn set_memo(&mut self, memo: Option<String>) {
         self.memo = memo;
     }
 
-    /// Trial を完了状態にする
-    ///
     /// completed_at が未指定の場合は現在時刻を採用する
     pub fn complete(&mut self, completed_at: Option<JstDateTime>) {
         self.status = TrialStatus::Completed;

@@ -11,7 +11,6 @@ pub enum Error {
     Infrastructure(String),
 }
 
-/// IDでプロジェクトを取得する
 pub async fn execute<U: UnitOfWork>(uow: &mut U, id: &ProjectId) -> Result<Option<Project>, Error> {
     uow.project_repository()
         .find_by_id(id)
@@ -57,7 +56,6 @@ mod tests {
         let mut uow = MockUnitOfWork::default();
         uow.project_repository().save(&project).await.unwrap();
 
-        // 存在しないIDで取得
         let non_existing_id = ProjectId(Uuid::new_v4());
         let result = execute(&mut uow, &non_existing_id).await;
 

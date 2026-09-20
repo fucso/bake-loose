@@ -7,22 +7,16 @@ use crate::ports::project_repository::ProjectRepository;
 use crate::ports::unit_of_work::UnitOfWork;
 use crate::use_case::project::save_project;
 
-/// ユースケースの入力
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Input {
     pub name: String,
 }
 
-/// ユースケースのエラー
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
     Domain(create_project::Error),
     DuplicateName,
-    /// 一意制約違反など、並行操作との競合（リトライで解消し得る）
-    Conflict {
-        entity: String,
-        field: String,
-    },
+    Conflict { entity: String, field: String },
     Infrastructure(String),
 }
 
@@ -51,7 +45,6 @@ impl From<RepositoryError> for Error {
     }
 }
 
-/// ユースケースの実行
 pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Project, Error> {
     // 1. 重複チェック
     if uow
@@ -102,7 +95,6 @@ mod tests {
         let project = result.unwrap();
         assert_eq!(project.name(), "新規プロジェクト");
 
-        // モックのリポジトリに保存されていることを確認
         let saved_project = uow
             .project_repository()
             .find_by_id(project.id())
@@ -115,7 +107,6 @@ mod tests {
     async fn test_execute_returns_duplicate_error_when_name_exists() {
         let mut uow = MockUnitOfWork::default();
 
-        // 既存プロジェクトを作成（トランザクションなしで直接保存）
         let existing_project = Project::new("既存プロジェクト".to_string());
         uow.project_repository()
             .save(&existing_project)
@@ -151,7 +142,6 @@ mod tests {
     #[tokio::test]
     async fn test_execute_rolls_back_when_save_fails() {
         let mut uow = MockUnitOfWork::default();
-        // 永続化だけを失敗させる
         uow.fail_save();
         let input = Input {
             name: "新規プロジェクト".to_string(),
@@ -160,7 +150,6 @@ mod tests {
         let result = execute(&mut uow, input).await;
 
         assert!(matches!(result, Err(Error::Infrastructure(_))));
-        // ロールバックが呼ばれ、コミットは呼ばれていないこと
         assert_eq!(uow.rollback_count(), 1);
         assert_eq!(
             uow.rollback_success_count(),
@@ -185,7 +174,6 @@ mod tests {
         let result = execute(&mut uow, input).await;
 
         assert_eq!(result.unwrap_err(), Error::DuplicateName);
-        // ロールバックが呼ばれ、コミットは呼ばれていないこと
         assert_eq!(uow.rollback_count(), 1);
         assert_eq!(
             uow.rollback_success_count(),

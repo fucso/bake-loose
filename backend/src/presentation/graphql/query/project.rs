@@ -11,7 +11,6 @@ use crate::presentation::graphql::error::UserFacingError;
 use crate::presentation::graphql::types::project::Project;
 use crate::use_case::project::{get_project, list_projects};
 
-/// Project クエリリゾルバー
 #[derive(Default)]
 pub struct ProjectQuery;
 
@@ -23,10 +22,8 @@ impl ProjectQuery {
     async fn project(&self, ctx: &Context<'_>, id: ID) -> Result<Option<Project>> {
         let mut uow = ctx.create_unit_of_work()?;
 
-        // ID のパース
         let project_id = ProjectId(parse_uuid(&id)?);
 
-        // ユースケース実行
         let result = get_project::execute(&mut uow, &project_id)
             .await
             .map_err(|e| e.to_user_facing().extend())?;
@@ -38,7 +35,6 @@ impl ProjectQuery {
     async fn projects(&self, ctx: &Context<'_>) -> Result<Vec<Project>> {
         let mut uow = ctx.create_unit_of_work()?;
 
-        // ユースケース実行
         let result = list_projects::execute(&mut uow)
             .await
             .map_err(|e| e.to_user_facing().extend())?;

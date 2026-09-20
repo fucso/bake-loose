@@ -1,5 +1,3 @@
-//! DBモデル
-
 pub mod parameter_row;
 pub mod project_row;
 pub mod step_row;
