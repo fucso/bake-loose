@@ -13,7 +13,7 @@ type ErrorStateProps = {
   className?: string
 }
 
-function ErrorState({ message, onRetry, retryLabel = "再試行", className }: ErrorStateProps) {
+const ErrorState = ({ message, onRetry, retryLabel = "再試行", className }: ErrorStateProps) => {
   return (
     <div
       data-slot="error-state"

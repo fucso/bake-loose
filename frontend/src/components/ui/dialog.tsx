@@ -3,11 +3,11 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 
 import { cn } from "@/lib/utils"
 
-function Dialog(props: ComponentProps<typeof DialogPrimitive.Root>) {
+const Dialog = (props: ComponentProps<typeof DialogPrimitive.Root>) => {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />
 }
 
-function DialogBackdrop({ className, ...props }: ComponentProps<typeof DialogPrimitive.Backdrop>) {
+const DialogBackdrop = ({ className, ...props }: ComponentProps<typeof DialogPrimitive.Backdrop>) => {
   return (
     <DialogPrimitive.Backdrop
       data-slot="dialog-backdrop"
@@ -20,11 +20,11 @@ function DialogBackdrop({ className, ...props }: ComponentProps<typeof DialogPri
   )
 }
 
-function DialogPopup({
+const DialogPopup = ({
   className,
   children,
   ...props
-}: ComponentProps<typeof DialogPrimitive.Popup>) {
+}: ComponentProps<typeof DialogPrimitive.Popup>) => {
   return (
     <DialogPrimitive.Portal data-slot="dialog-portal">
       <DialogBackdrop />
@@ -42,7 +42,7 @@ function DialogPopup({
   )
 }
 
-function DialogTitle({ className, ...props }: ComponentProps<typeof DialogPrimitive.Title>) {
+const DialogTitle = ({ className, ...props }: ComponentProps<typeof DialogPrimitive.Title>) => {
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
@@ -52,7 +52,7 @@ function DialogTitle({ className, ...props }: ComponentProps<typeof DialogPrimit
   )
 }
 
-function DialogClose({ className, ...props }: ComponentProps<typeof DialogPrimitive.Close>) {
+const DialogClose = ({ className, ...props }: ComponentProps<typeof DialogPrimitive.Close>) => {
   return <DialogPrimitive.Close data-slot="dialog-close" className={className} {...props} />
 }
 

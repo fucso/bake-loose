@@ -19,7 +19,7 @@ export default meta
 
 type Story = StoryObj<typeof meta>
 
-function DialogDemo() {
+const DialogDemo = () => {
   const [open, setOpen] = useState(false)
 
   return (

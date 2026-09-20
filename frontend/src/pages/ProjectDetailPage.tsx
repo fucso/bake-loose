@@ -26,7 +26,7 @@ const PROJECT_QUERY = `
   }
 `
 
-function ProjectDetailPage() {
+const ProjectDetailPage = () => {
   const { id } = useParams<{ id: string }>()
   const [{ data, fetching, error }, reexecuteQuery] = useQuery<
     ProjectQueryData,
