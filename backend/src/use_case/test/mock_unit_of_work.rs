@@ -2,8 +2,7 @@
 //!
 //! ユースケースのテストで使用する共通モック。
 
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 use tokio::sync::Mutex;
 
 use crate::domain::models::project::{Project, ProjectId};
@@ -12,21 +11,33 @@ use crate::ports::project_repository::ProjectRepository;
 use crate::ports::trial_repository::TrialRepository;
 use crate::ports::{ProjectSort, ProjectSortColumn, RepositoryError, SortDirection, UnitOfWork};
 
+/// `save()` を失敗させるエラー設定（リポジトリと UnitOfWork で共有する）
+///
+/// `None` の場合は通常どおり保存される。
+type SaveFailure = Arc<StdMutex<Option<RepositoryError>>>;
+
+/// 設定されている `save()` 失敗エラーを取り出す
+///
+/// ロックを await をまたいで保持しないよう、同期関数として切り出している。
+fn save_failure(failure: &SaveFailure) -> Option<RepositoryError> {
+    failure.lock().expect("save failure lock poisoned").clone()
+}
+
 /// テスト用の MockProjectRepository
 ///
 /// MockUnitOfWork 内のデータを共有するため Arc<Mutex> を使用
 #[derive(Clone)]
 pub struct MockProjectRepository {
     projects: Arc<Mutex<Vec<Project>>>,
-    /// true の場合 `save()` が必ず失敗する（ロールバック経路の検証用）
-    save_should_fail: Arc<AtomicBool>,
+    /// 設定されている場合 `save()` が必ずそのエラーで失敗する
+    save_failure: SaveFailure,
 }
 
 impl MockProjectRepository {
-    fn new(projects: Arc<Mutex<Vec<Project>>>, save_should_fail: Arc<AtomicBool>) -> Self {
+    fn new(projects: Arc<Mutex<Vec<Project>>>, save_failure: SaveFailure) -> Self {
         Self {
             projects,
-            save_should_fail,
+            save_failure,
         }
     }
 }
@@ -66,10 +77,8 @@ impl ProjectRepository for MockProjectRepository {
     }
 
     async fn save(&self, project: &Project) -> Result<(), RepositoryError> {
-        if self.save_should_fail.load(Ordering::SeqCst) {
-            return Err(RepositoryError::Internal {
-                message: "save failed (mock)".to_string(),
-            });
+        if let Some(error) = save_failure(&self.save_failure) {
+            return Err(error);
         }
 
         let mut projects = self.projects.lock().await;
@@ -85,15 +94,15 @@ impl ProjectRepository for MockProjectRepository {
 #[derive(Clone)]
 pub struct MockTrialRepository {
     trials: Arc<Mutex<Vec<Trial>>>,
-    /// true の場合 `save()` が必ず失敗する（ロールバック経路の検証用）
-    save_should_fail: Arc<AtomicBool>,
+    /// 設定されている場合 `save()` が必ずそのエラーで失敗する
+    save_failure: SaveFailure,
 }
 
 impl MockTrialRepository {
-    fn new(trials: Arc<Mutex<Vec<Trial>>>, save_should_fail: Arc<AtomicBool>) -> Self {
+    fn new(trials: Arc<Mutex<Vec<Trial>>>, save_failure: SaveFailure) -> Self {
         Self {
             trials,
-            save_should_fail,
+            save_failure,
         }
     }
 }
@@ -118,10 +127,8 @@ impl TrialRepository for MockTrialRepository {
     }
 
     async fn save(&self, trial: &Trial) -> Result<(), RepositoryError> {
-        if self.save_should_fail.load(Ordering::SeqCst) {
-            return Err(RepositoryError::Internal {
-                message: "save failed (mock)".to_string(),
-            });
+        if let Some(error) = save_failure(&self.save_failure) {
+            return Err(error);
         }
 
         let mut trials = self.trials.lock().await;
@@ -136,8 +143,8 @@ pub struct MockUnitOfWork {
     projects: Arc<Mutex<Vec<Project>>>,
     trials: Arc<Mutex<Vec<Trial>>>,
     transaction_started: bool,
-    /// リポジトリと共有する `save()` 失敗フラグ
-    save_should_fail: Arc<AtomicBool>,
+    /// リポジトリと共有する `save()` 失敗設定
+    save_failure: SaveFailure,
     /// `commit()` が呼ばれた回数
     commit_count: usize,
     /// `rollback()` が呼ばれた回数
@@ -150,7 +157,7 @@ impl Default for MockUnitOfWork {
             projects: Arc::new(Mutex::new(Vec::new())),
             trials: Arc::new(Mutex::new(Vec::new())),
             transaction_started: false,
-            save_should_fail: Arc::new(AtomicBool::new(false)),
+            save_failure: Arc::new(StdMutex::new(None)),
             commit_count: 0,
             rollback_count: 0,
         }
@@ -158,12 +165,25 @@ impl Default for MockUnitOfWork {
 }
 
 impl MockUnitOfWork {
-    /// 以降のすべての `save()` を失敗させる
+    /// 以降のすべての `save()` を内部エラーで失敗させる
     ///
     /// 永続化失敗時のロールバック経路を検証するテストで使用する。
     /// テストデータの投入後に呼び出すこと。
     pub fn fail_save(&mut self) {
-        self.save_should_fail.store(true, Ordering::SeqCst);
+        self.fail_save_with(RepositoryError::Internal {
+            message: "save failed (mock)".to_string(),
+        });
+    }
+
+    /// 以降のすべての `save()` を指定したエラーで失敗させる
+    ///
+    /// 一意制約違反（`RepositoryError::Conflict`）など、
+    /// エラー種別ごとのユースケースの振る舞いを検証するテストで使用する。
+    pub fn fail_save_with(&mut self, error: RepositoryError) {
+        *self
+            .save_failure
+            .lock()
+            .expect("save failure lock poisoned") = Some(error);
     }
 
     /// `commit()` が呼ばれた回数
@@ -183,11 +203,11 @@ impl UnitOfWork for MockUnitOfWork {
     type TrialRepo = MockTrialRepository;
 
     fn project_repository(&mut self) -> Self::ProjectRepo {
-        MockProjectRepository::new(self.projects.clone(), self.save_should_fail.clone())
+        MockProjectRepository::new(self.projects.clone(), self.save_failure.clone())
     }
 
     fn trial_repository(&mut self) -> Self::TrialRepo {
-        MockTrialRepository::new(self.trials.clone(), self.save_should_fail.clone())
+        MockTrialRepository::new(self.trials.clone(), self.save_failure.clone())
     }
 
     async fn begin(&mut self) -> Result<(), RepositoryError> {

@@ -6,6 +6,7 @@ use crate::domain::models::project::{Project, ProjectId};
 use crate::ports::error::RepositoryError;
 use crate::ports::project_repository::{ProjectRepository, ProjectSort};
 
+use super::error::map_sqlx_error;
 use super::executor::PgExecutor;
 use super::models::ProjectRow;
 
@@ -35,9 +36,7 @@ impl ProjectRepository for PgProjectRepository {
             .fetch_optional(query)
             .await
             .map(|row| row.map(Project::from))
-            .map_err(|e| RepositoryError::Internal {
-                message: e.to_string(),
-            })
+            .map_err(|e| map_sqlx_error(e, "project"))
     }
 
     async fn find_all(&self, sort: ProjectSort) -> Result<Vec<Project>, RepositoryError> {
@@ -49,9 +48,7 @@ impl ProjectRepository for PgProjectRepository {
             .fetch_all(query)
             .await
             .map(|rows| rows.into_iter().map(Project::from).collect())
-            .map_err(|e| RepositoryError::Internal {
-                message: e.to_string(),
-            })
+            .map_err(|e| map_sqlx_error(e, "project"))
     }
 
     async fn exists_by_name(&self, name: &str) -> Result<bool, RepositoryError> {
@@ -61,9 +58,7 @@ impl ProjectRepository for PgProjectRepository {
         self.executor
             .fetch_one_scalar(query)
             .await
-            .map_err(|e| RepositoryError::Internal {
-                message: e.to_string(),
-            })
+            .map_err(|e| map_sqlx_error(e, "project"))
     }
 
     async fn save(&self, project: &Project) -> Result<(), RepositoryError> {
@@ -83,9 +78,7 @@ impl ProjectRepository for PgProjectRepository {
             .execute(query)
             .await
             .map(|_| ())
-            .map_err(|e| RepositoryError::Internal {
-                message: e.to_string(),
-            })
+            .map_err(|e| map_sqlx_error(e, "project"))
     }
 }
 

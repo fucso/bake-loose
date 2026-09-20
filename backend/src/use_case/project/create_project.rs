@@ -2,6 +2,7 @@
 
 use crate::domain::actions::project::create_project;
 use crate::domain::models::project::Project;
+use crate::ports::error::RepositoryError;
 use crate::ports::project_repository::ProjectRepository;
 use crate::ports::unit_of_work::UnitOfWork;
 
@@ -17,6 +18,18 @@ pub enum Error {
     Domain(create_project::Error),
     DuplicateName,
     Infrastructure(String),
+}
+
+impl From<RepositoryError> for Error {
+    fn from(error: RepositoryError) -> Self {
+        match error {
+            // projects の一意制約はプロジェクト名のみ（id は UPSERT で解決される）。
+            // 事前の重複チェックとの競合ウィンドウで DB 側が検出した重複も
+            // ユーザーから見れば同じ「名前の重複」なので DuplicateName に寄せる。
+            RepositoryError::Conflict { .. } => Error::DuplicateName,
+            other => Error::Infrastructure(format!("{:?}", other)),
+        }
+    }
 }
 
 /// ユースケースの実行
@@ -53,7 +66,7 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Project
     };
     if let Err(e) = save_result {
         let _ = uow.rollback().await;
-        return Err(Error::Infrastructure(format!("{:?}", e)));
+        return Err(Error::from(e));
     }
 
     // 5. コミット
@@ -141,6 +154,26 @@ mod tests {
         let result = execute(&mut uow, input).await;
 
         assert!(matches!(result, Err(Error::Infrastructure(_))));
+        // ロールバックが呼ばれ、コミットは呼ばれていないこと
+        assert_eq!(uow.rollback_count(), 1);
+        assert_eq!(uow.commit_count(), 0);
+    }
+
+    /// 事前チェックとの競合ウィンドウで DB が検出した重複も DuplicateName として返す
+    #[tokio::test]
+    async fn test_execute_returns_duplicate_name_when_save_violates_unique_constraint() {
+        let mut uow = MockUnitOfWork::default();
+        uow.fail_save_with(RepositoryError::Conflict {
+            entity: "project".to_string(),
+            field: "name".to_string(),
+        });
+        let input = Input {
+            name: "新規プロジェクト".to_string(),
+        };
+
+        let result = execute(&mut uow, input).await;
+
+        assert_eq!(result.unwrap_err(), Error::DuplicateName);
         // ロールバックが呼ばれ、コミットは呼ばれていないこと
         assert_eq!(uow.rollback_count(), 1);
         assert_eq!(uow.commit_count(), 0);

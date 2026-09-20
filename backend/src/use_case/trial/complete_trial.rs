@@ -9,7 +9,7 @@ use crate::domain::actions::trial::complete_trial;
 use crate::domain::models::trial::{Trial, TrialId};
 use crate::domain::timezone::JstDateTime;
 use crate::ports::trial_repository::TrialRepository;
-use crate::ports::UnitOfWork;
+use crate::ports::{RepositoryError, UnitOfWork};
 
 /// ユースケースの入力
 ///
@@ -25,7 +25,21 @@ pub struct Input {
 pub enum Error {
     NotFound,
     Domain(complete_trial::Error),
+    /// 一意制約違反など、並行操作との競合（リトライで解消し得る）
+    Conflict,
     Infrastructure(String),
+}
+
+impl From<RepositoryError> for Error {
+    fn from(error: RepositoryError) -> Self {
+        match error {
+            // 一意制約違反は並行操作との競合であり、リトライで解消し得る
+            RepositoryError::Conflict { .. } => Error::Conflict,
+            // 外部キー違反は参照先が並行して削除されたことを意味する
+            RepositoryError::NotFound { .. } => Error::NotFound,
+            other => Error::Infrastructure(format!("{:?}", other)),
+        }
+    }
 }
 
 /// ユースケースの実行
@@ -62,7 +76,7 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
     };
     if let Err(e) = save_result {
         let _ = uow.rollback().await;
-        return Err(Error::Infrastructure(format!("{:?}", e)));
+        return Err(Error::from(e));
     }
 
     // 5. コミット

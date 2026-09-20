@@ -7,7 +7,7 @@ use crate::domain::models::project::ProjectId;
 use crate::domain::models::trial::Trial;
 use crate::ports::project_repository::ProjectRepository;
 use crate::ports::trial_repository::TrialRepository;
-use crate::ports::UnitOfWork;
+use crate::ports::{RepositoryError, UnitOfWork};
 
 /// ユースケースの入力
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -22,7 +22,21 @@ pub struct Input {
 pub enum Error {
     ProjectNotFound,
     Domain(create_trial::Error),
+    /// 一意制約違反など、並行操作との競合（リトライで解消し得る）
+    Conflict,
     Infrastructure(String),
+}
+
+impl From<RepositoryError> for Error {
+    fn from(error: RepositoryError) -> Self {
+        match error {
+            // 一意制約違反は並行操作との競合であり、リトライで解消し得る
+            RepositoryError::Conflict { .. } => Error::Conflict,
+            // 外部キー違反は参照先が並行して削除されたことを意味する
+            RepositoryError::NotFound { .. } => Error::ProjectNotFound,
+            other => Error::Infrastructure(format!("{:?}", other)),
+        }
+    }
 }
 
 /// ユースケースの実行
@@ -61,7 +75,7 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
     };
     if let Err(e) = save_result {
         let _ = uow.rollback().await;
-        return Err(Error::Infrastructure(format!("{:?}", e)));
+        return Err(Error::from(e));
     }
 
     // 5. コミット
@@ -143,6 +157,29 @@ mod tests {
 
         assert!(matches!(result, Err(Error::Infrastructure(_))));
         // ロールバックが呼ばれ、コミットは呼ばれていないこと
+        assert_eq!(uow.rollback_count(), 1);
+        assert_eq!(uow.commit_count(), 0);
+    }
+
+    /// 保存時の外部キー違反（Project が並行して削除された）は
+    /// 内部エラーではなく ProjectNotFound として返す
+    #[tokio::test]
+    async fn test_execute_returns_project_not_found_when_save_violates_foreign_key() {
+        let mut uow = MockUnitOfWork::default();
+        let project_id = seed_project(&mut uow).await;
+        uow.fail_save_with(RepositoryError::NotFound {
+            entity: "project".to_string(),
+            id: "unknown".to_string(),
+        });
+        let input = Input {
+            project_id: project_id.0,
+            name: None,
+            memo: None,
+        };
+
+        let result = execute(&mut uow, input).await;
+
+        assert_eq!(result.unwrap_err(), Error::ProjectNotFound);
         assert_eq!(uow.rollback_count(), 1);
         assert_eq!(uow.commit_count(), 0);
     }

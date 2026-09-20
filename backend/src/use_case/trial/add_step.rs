@@ -9,7 +9,7 @@ use crate::domain::actions::trial::add_step;
 use crate::domain::models::trial::{Trial, TrialId};
 use crate::domain::timezone::JstDateTime;
 use crate::ports::trial_repository::TrialRepository;
-use crate::ports::UnitOfWork;
+use crate::ports::{RepositoryError, UnitOfWork};
 
 /// ユースケースの入力
 pub struct Input {
@@ -23,7 +23,21 @@ pub struct Input {
 pub enum Error {
     NotFound,
     Domain(add_step::Error),
+    /// 一意制約違反など、並行操作との競合（リトライで解消し得る）
+    Conflict,
     Infrastructure(String),
+}
+
+impl From<RepositoryError> for Error {
+    fn from(error: RepositoryError) -> Self {
+        match error {
+            // 一意制約違反は並行操作との競合であり、リトライで解消し得る
+            RepositoryError::Conflict { .. } => Error::Conflict,
+            // 外部キー違反は参照先が並行して削除されたことを意味する
+            RepositoryError::NotFound { .. } => Error::NotFound,
+            other => Error::Infrastructure(format!("{:?}", other)),
+        }
+    }
 }
 
 /// ユースケースの実行
@@ -61,7 +75,7 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
     };
     if let Err(e) = save_result {
         let _ = uow.rollback().await;
-        return Err(Error::Infrastructure(format!("{:?}", e)));
+        return Err(Error::from(e));
     }
 
     // 5. コミット
@@ -135,6 +149,44 @@ mod tests {
             result.unwrap_err(),
             Error::Domain(add_step::Error::TrialAlreadyCompleted)
         );
+    }
+
+    /// 同一 Trial への並行 addStep で position が重複した場合、
+    /// 内部エラーではなく競合エラーとして返す
+    #[tokio::test]
+    async fn test_execute_returns_conflict_when_save_violates_unique_constraint() {
+        let mut uow = MockUnitOfWork::default();
+        let trial = Trial::new(ProjectId::new(), None, None);
+        let trial_id = trial.id().clone();
+        uow.trial_repository().save(&trial).await.unwrap();
+        // テストデータ投入後に永続化だけを一意制約違反で失敗させる
+        uow.fail_save_with(RepositoryError::Conflict {
+            entity: "step".to_string(),
+            field: "trial_id_position".to_string(),
+        });
+
+        let result = execute(&mut uow, input(trial_id.0, "こね")).await;
+
+        assert_eq!(result.unwrap_err(), Error::Conflict);
+        // ロールバックが呼ばれ、コミットは呼ばれていないこと
+        assert_eq!(uow.rollback_count(), 1);
+        assert_eq!(uow.commit_count(), 0);
+    }
+
+    /// 一意制約違反以外の永続化エラーは従来どおり Infrastructure のまま
+    #[tokio::test]
+    async fn test_execute_returns_infrastructure_error_when_save_fails() {
+        let mut uow = MockUnitOfWork::default();
+        let trial = Trial::new(ProjectId::new(), None, None);
+        let trial_id = trial.id().clone();
+        uow.trial_repository().save(&trial).await.unwrap();
+        uow.fail_save();
+
+        let result = execute(&mut uow, input(trial_id.0, "こね")).await;
+
+        assert!(matches!(result, Err(Error::Infrastructure(_))));
+        assert_eq!(uow.rollback_count(), 1);
+        assert_eq!(uow.commit_count(), 0);
     }
 
     #[tokio::test]

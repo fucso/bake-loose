@@ -12,6 +12,7 @@ use crate::domain::models::trial::{Trial, TrialId};
 use crate::ports::error::RepositoryError;
 use crate::ports::trial_repository::TrialRepository;
 
+use super::error::map_sqlx_error;
 use super::executor::PgExecutor;
 use super::models::{ParameterRow, StepRow, TrialRow};
 
@@ -51,9 +52,7 @@ impl PgTrialRepository {
                 .bind(trial_ids),
             )
             .await
-            .map_err(|e| RepositoryError::Internal {
-                message: e.to_string(),
-            })?;
+            .map_err(|e| map_sqlx_error(e, "step"))?;
 
         let step_ids: Vec<Uuid> = step_rows.iter().map(|row| row.id).collect();
 
@@ -71,9 +70,7 @@ impl PgTrialRepository {
                     .bind(&step_ids),
                 )
                 .await
-                .map_err(|e| RepositoryError::Internal {
-                    message: e.to_string(),
-                })?;
+                .map_err(|e| map_sqlx_error(e, "parameter"))?;
 
             for row in parameter_rows {
                 parameters_by_step
@@ -102,13 +99,11 @@ impl TrialRepository for PgTrialRepository {
     async fn find_by_id(&self, id: &TrialId) -> Result<Option<Trial>, RepositoryError> {
         let query = sqlx::query_as::<_, TrialRow>("SELECT * FROM trials WHERE id = $1").bind(id.0);
 
-        let trial_row =
-            self.executor
-                .fetch_optional(query)
-                .await
-                .map_err(|e| RepositoryError::Internal {
-                    message: e.to_string(),
-                })?;
+        let trial_row = self
+            .executor
+            .fetch_optional(query)
+            .await
+            .map_err(|e| map_sqlx_error(e, "trial"))?;
 
         let Some(trial_row) = trial_row else {
             return Ok(None);
@@ -130,13 +125,11 @@ impl TrialRepository for PgTrialRepository {
         )
         .bind(project_id.0);
 
-        let trial_rows =
-            self.executor
-                .fetch_all(query)
-                .await
-                .map_err(|e| RepositoryError::Internal {
-                    message: e.to_string(),
-                })?;
+        let trial_rows = self
+            .executor
+            .fetch_all(query)
+            .await
+            .map_err(|e| map_sqlx_error(e, "trial"))?;
 
         let trial_ids: Vec<Uuid> = trial_rows.iter().map(|row| row.id).collect();
         let mut steps_by_trial = self.fetch_steps_by_trial_ids(&trial_ids).await?;
@@ -175,9 +168,7 @@ impl TrialRepository for PgTrialRepository {
                 .bind(trial.completed_at().copied().map(|d| d.into_fixed_offset())),
             )
             .await
-            .map_err(|e| RepositoryError::Internal {
-                message: e.to_string(),
-            })?;
+            .map_err(|e| map_sqlx_error(e, "trial"))?;
 
         // aggregate から取り除かれた Step を削除する（cascade で Parameter も削除される）
         let step_ids: Vec<Uuid> = trial.steps().iter().map(|step| step.id().0).collect();
@@ -189,9 +180,7 @@ impl TrialRepository for PgTrialRepository {
                     .bind(step_ids),
             )
             .await
-            .map_err(|e| RepositoryError::Internal {
-                message: e.to_string(),
-            })?;
+            .map_err(|e| map_sqlx_error(e, "step"))?;
 
         for step in trial.steps() {
             self.executor
@@ -216,9 +205,7 @@ impl TrialRepository for PgTrialRepository {
                     .bind(step.completed_at().copied().map(|d| d.into_fixed_offset())),
                 )
                 .await
-                .map_err(|e| RepositoryError::Internal {
-                    message: e.to_string(),
-                })?;
+                .map_err(|e| map_sqlx_error(e, "step"))?;
 
             // aggregate から取り除かれた Parameter を削除する
             let parameter_ids: Vec<Uuid> =
@@ -231,9 +218,7 @@ impl TrialRepository for PgTrialRepository {
                         .bind(parameter_ids),
                 )
                 .await
-                .map_err(|e| RepositoryError::Internal {
-                    message: e.to_string(),
-                })?;
+                .map_err(|e| map_sqlx_error(e, "parameter"))?;
 
             for parameter in step.parameters() {
                 self.executor
@@ -252,9 +237,7 @@ impl TrialRepository for PgTrialRepository {
                         .bind(sqlx::types::Json(parameter.content().clone())),
                     )
                     .await
-                    .map_err(|e| RepositoryError::Internal {
-                        message: e.to_string(),
-                    })?;
+                    .map_err(|e| map_sqlx_error(e, "parameter"))?;
             }
         }
 
