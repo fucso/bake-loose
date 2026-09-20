@@ -177,18 +177,8 @@ DB のスキーマ名はプロジェクトのルールとして以下に統一�
 **一意インデックス**は `CREATE UNIQUE INDEX` で一意性を表現する。`uq_` / `unique_` のような
 接頭辞や `_unique` / `_idx` のような接尾辞は使用しない。
 
-### 現在の制約名・インデックス名
-
-| 名前 | 種別 | 定義元 |
-|------|------|--------|
-| `projects_pkey` / `trials_pkey` / `steps_pkey` / `parameters_pkey` | 主キー | `id UUID PRIMARY KEY` |
-| `steps_trial_id_position_key` | 一意制約 | `UNIQUE (trial_id, position)` |
-| `trials_project_id_fkey` | 外部キー | `trials.project_id -> projects.id` |
-| `steps_trial_id_fkey` | 外部キー | `steps.trial_id -> trials.id` |
-| `parameters_step_id_fkey` | 外部キー | `parameters.step_id -> steps.id` |
-| `idx_projects_name` | 一意インデックス | `CREATE UNIQUE INDEX` |
-| `idx_trials_project_id` | インデックス | `CREATE INDEX` |
-| `idx_parameters_step_id` | インデックス | `CREATE INDEX` |
+制約名の `{table}_` 接頭辞から外部キーの向きを判定するため、**既存テーブル名の複数形で始まる
+テーブル名**（例: `steps` が存在する状態での `steps_archive`）は作らない。
 
 ### Rust 側の定義
 
