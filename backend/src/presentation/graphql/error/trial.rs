@@ -443,10 +443,6 @@ mod tests {
             error,
             GraphQLError::new("指定されたStepが見つかりません", "NOT_FOUND")
         );
-        assert_ne!(
-            error,
-            GraphQLError::new("指定されたTrialが見つかりません", "NOT_FOUND")
-        );
     }
 
     /// 参照先のエンティティ名ごとに対応するメッセージへ振り分ける

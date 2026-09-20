@@ -92,10 +92,6 @@ mod tests {
             error,
             GraphQLError::new("他の操作と競合しました。もう一度お試しください", "CONFLICT")
         );
-        assert_ne!(
-            error,
-            GraphQLError::new("内部エラーが発生しました", "INTERNAL_ERROR")
-        );
     }
 
     /// 名前の重複は従来どおり DUPLICATE_ERROR のまま
