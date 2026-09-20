@@ -43,6 +43,7 @@ backend/src/use_case/
 // src/use_case/project/create_project.rs
 
 use crate::domain::actions::project::create_project;
+use crate::ports::error::RepositoryError;
 use crate::ports::project_repository::ProjectRepository;
 use crate::ports::unit_of_work::UnitOfWork;
 use crate::use_case::project::save_project;
@@ -51,7 +52,28 @@ use crate::use_case::project::save_project;
 pub enum Error {
     Domain(create_project::Error),
     DuplicateName,
+    /// 一意制約違反など、並行操作との競合（リトライで解消し得る）
+    Conflict { entity: String, field: String },
     Infrastructure(String),
+}
+
+// save ヘルパーは `RepositoryError` を返すため、
+// `save_project(uow, &project).await?` の `?` はこの From 実装に依存する。
+// 書き込みユースケースには必ず用意すること。
+impl From<RepositoryError> for Error {
+    fn from(error: RepositoryError) -> Self {
+        match error {
+            // 事前の重複チェックとの競合ウィンドウで DB が検出した名前の重複は、
+            // ユーザーから見れば同じ「名前の重複」なので DuplicateName に寄せる
+            RepositoryError::Conflict { ref entity, ref field } if field == "name" => {
+                log::warn!("Conflict: {}.{}", entity, field);
+                Error::DuplicateName
+            }
+            // 名前以外の一意制約違反も内部エラーではなく競合として扱う
+            RepositoryError::Conflict { entity, field } => Error::Conflict { entity, field },
+            other => Error::Infrastructure(format!("{:?}", other)),
+        }
+    }
 }
 
 pub struct Input {
@@ -100,6 +122,13 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Project
 
 ヘルパーは「リポジトリの生存範囲をブロックで閉じ、失敗時に `rollback()` を呼び、
 その失敗をログに残す」までを内包する。ユースケース側に書き込み手順を展開しないこと。
+
+ヘルパーは `RepositoryError` を返すため、`save_xxx(uow, &aggregate).await?` の `?` は
+ユースケースの `impl From<RepositoryError> for Error` を経由する。この From 実装が無いと
+コンパイルが通らないため、書き込みユースケースには必ず定義する。
+外部キーを持つ集約（Trial など）では `RepositoryError::NotFound`（外部キー違反）を
+`ReferenceNotFound { entity }` に、参照先が一意に定まる場合は `ProjectNotFound` のような
+具体的な種別に振り分ける（実例は `use_case/trial/add_parameter.rs`、`use_case/trial/create_trial.rs`）。
 
 ```rust
 // ❌ リポジトリの一時値が if let 文の終わりまで生存し、rollback() が必ず失敗する

@@ -33,6 +33,11 @@ fn save_failure(failure: &SaveFailure) -> Option<RepositoryError> {
 ///
 /// モックが無条件に成功していると「rollback が呼ばれるが失敗する」という
 /// 本番固有の不具合を再現できないため、同型のハンドルで同じ制約をモデル化する。
+///
+/// なお本番では `tx` が `None`（トランザクション外）のとき、リポジトリは
+/// トランザクションではなく pool を保持するため、この Arc を掴まない。
+/// そのためリポジトリへ渡すハンドルは `Option<TxHandle>` とし、
+/// トランザクション中に取得したリポジトリだけがハンドルを保持する。
 type TxHandle = Arc<()>;
 
 /// ハンドルを掴んでいるリポジトリが残っていないかを検査する
@@ -48,15 +53,18 @@ pub struct MockProjectRepository {
     projects: Arc<Mutex<Vec<Project>>>,
     /// 設定されている場合 `save()` が必ずそのエラーで失敗する
     save_failure: SaveFailure,
-    /// トランザクションハンドル（生存している間は commit/rollback を失敗させる）
-    _tx_handle: TxHandle,
+    /// トランザクションハンドル（トランザクション中に取得した場合のみ `Some`）
+    ///
+    /// 保持している間は commit/rollback を失敗させる。
+    /// トランザクション外で取得した場合は本番の pool 相当となり `None`。
+    _tx_handle: Option<TxHandle>,
 }
 
 impl MockProjectRepository {
     fn new(
         projects: Arc<Mutex<Vec<Project>>>,
         save_failure: SaveFailure,
-        tx_handle: TxHandle,
+        tx_handle: Option<TxHandle>,
     ) -> Self {
         Self {
             projects,
@@ -120,12 +128,19 @@ pub struct MockTrialRepository {
     trials: Arc<Mutex<Vec<Trial>>>,
     /// 設定されている場合 `save()` が必ずそのエラーで失敗する
     save_failure: SaveFailure,
-    /// トランザクションハンドル（生存している間は commit/rollback を失敗させる）
-    _tx_handle: TxHandle,
+    /// トランザクションハンドル（トランザクション中に取得した場合のみ `Some`）
+    ///
+    /// 保持している間は commit/rollback を失敗させる。
+    /// トランザクション外で取得した場合は本番の pool 相当となり `None`。
+    _tx_handle: Option<TxHandle>,
 }
 
 impl MockTrialRepository {
-    fn new(trials: Arc<Mutex<Vec<Trial>>>, save_failure: SaveFailure, tx_handle: TxHandle) -> Self {
+    fn new(
+        trials: Arc<Mutex<Vec<Trial>>>,
+        save_failure: SaveFailure,
+        tx_handle: Option<TxHandle>,
+    ) -> Self {
         Self {
             trials,
             save_failure,
@@ -169,7 +184,6 @@ impl TrialRepository for MockTrialRepository {
 pub struct MockUnitOfWork {
     projects: Arc<Mutex<Vec<Project>>>,
     trials: Arc<Mutex<Vec<Trial>>>,
-    transaction_started: bool,
     /// リポジトリと共有する `save()` 失敗設定
     save_failure: SaveFailure,
     /// `commit()` が呼ばれた回数
@@ -178,8 +192,12 @@ pub struct MockUnitOfWork {
     rollback_count: usize,
     /// `rollback()` が成功した回数
     rollback_success_count: usize,
-    /// リポジトリへ clone して渡すトランザクションハンドル
-    tx_handle: TxHandle,
+    /// 進行中のトランザクションを表すハンドル
+    ///
+    /// 本番の `PgUnitOfWork::tx` に対応し、`Some` の間だけトランザクション中とみなす。
+    /// トランザクション状態を別のフラグで二重管理すると本番と挙動がずれるため、
+    /// このフィールドだけで状態を表す。
+    tx_handle: Option<TxHandle>,
 }
 
 impl Default for MockUnitOfWork {
@@ -187,12 +205,11 @@ impl Default for MockUnitOfWork {
         Self {
             projects: Arc::new(Mutex::new(Vec::new())),
             trials: Arc::new(Mutex::new(Vec::new())),
-            transaction_started: false,
             save_failure: Arc::new(StdMutex::new(None)),
             commit_count: 0,
             rollback_count: 0,
             rollback_success_count: 0,
-            tx_handle: Arc::new(()),
+            tx_handle: None,
         }
     }
 }
@@ -261,49 +278,138 @@ impl UnitOfWork for MockUnitOfWork {
     }
 
     async fn begin(&mut self) -> Result<(), RepositoryError> {
-        if self.transaction_started {
+        if self.tx_handle.is_some() {
             return Err(RepositoryError::Internal {
                 message: "Transaction already started".to_string(),
             });
         }
-        self.transaction_started = true;
+        // 本番の `self.tx = Some(Arc::new(Mutex::new(tx)))` に対応する。
+        // トランザクションごとに新しいハンドルを作ることで、
+        // 直前のトランザクションで配ったリポジトリの生存に引きずられない。
+        self.tx_handle = Some(Arc::new(()));
         Ok(())
     }
 
     async fn commit(&mut self) -> Result<(), RepositoryError> {
         self.commit_count += 1;
-        if !self.transaction_started {
-            return Err(RepositoryError::Internal {
+        // 本番は `self.tx.take()` を先に行うため、
+        // この先どの経路で失敗してもトランザクション状態は解除される
+        let handle = self
+            .tx_handle
+            .take()
+            .ok_or_else(|| RepositoryError::Internal {
                 message: "No transaction to commit".to_string(),
-            });
-        }
+            })?;
         // PgUnitOfWork の Arc::try_unwrap 失敗と同じ条件を再現する
-        if !transaction_is_free(&self.tx_handle) {
+        if !transaction_is_free(&handle) {
             return Err(RepositoryError::Internal {
                 message: "Transaction is still in use".to_string(),
             });
         }
-        self.transaction_started = false;
         Ok(())
     }
 
     async fn rollback(&mut self) -> Result<(), RepositoryError> {
         self.rollback_count += 1;
-        if !self.transaction_started {
-            return Err(RepositoryError::Internal {
+        // commit と同様、本番は `self.tx.take()` を先に行う。
+        // ROLLBACK の発行に失敗してもトランザクションは破棄済みなので、
+        // その後の commit() は "No transaction to commit" になる
+        let handle = self
+            .tx_handle
+            .take()
+            .ok_or_else(|| RepositoryError::Internal {
                 message: "No transaction to rollback".to_string(),
-            });
-        }
+            })?;
         // PgUnitOfWork の Arc::try_unwrap 失敗と同じ条件を再現する。
         // リポジトリの一時値が生存したまま rollback() を呼ぶと、
         // 本番では明示的な ROLLBACK が発行されない。
-        if !transaction_is_free(&self.tx_handle) {
+        if !transaction_is_free(&handle) {
             return Err(RepositoryError::Internal {
                 message: "Transaction is still in use".to_string(),
             });
         }
-        self.transaction_started = false;
         self.rollback_success_count += 1;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uuid::Uuid;
+
+    /// トランザクション外で取得したリポジトリは commit を妨げない
+    ///
+    /// 本番では `tx` が `None` のときリポジトリは pool を保持するため、
+    /// 読み取りのために取得したリポジトリを持ち続けていても
+    /// `commit()` の `Arc::try_unwrap` は失敗しない。
+    /// 以前のモックはハンドルを無条件に clone して渡していたため、
+    /// この読み取り経路まで「Transaction is still in use」で弾いており、
+    /// 本番より厳しい挙動になっていた。
+    #[tokio::test]
+    async fn test_commit_succeeds_while_repository_obtained_outside_transaction_is_alive() {
+        let mut uow = MockUnitOfWork::default();
+        // トランザクション開始前（読み取り目的）に取得したリポジトリを保持し続ける
+        let read_repo = uow.trial_repository();
+
+        uow.begin().await.unwrap();
+        uow.commit().await.unwrap();
+
+        // pool 相当のリポジトリなので commit 後も利用できる
+        assert!(read_repo
+            .find_by_id(&TrialId(Uuid::new_v4()))
+            .await
+            .unwrap()
+            .is_none());
+    }
+
+    /// rollback が失敗してもトランザクション状態は解除される
+    ///
+    /// 本番は `self.tx.take()` を先に行うため、ROLLBACK の発行に失敗しても
+    /// トランザクションは破棄され、後続の `commit()` は
+    /// 「No transaction to commit」で失敗する。
+    /// 以前のモックは失敗時にフラグを立てたままにしており、
+    /// ロールバック失敗という再現対象そのものが本番より緩くなっていた。
+    #[tokio::test]
+    async fn test_failed_rollback_clears_transaction_like_production() {
+        let mut uow = MockUnitOfWork::default();
+        uow.begin().await.unwrap();
+        // トランザクション中に取得したリポジトリを保持したまま rollback する
+        let repo = uow.trial_repository();
+
+        let rollback_error = uow.rollback().await.unwrap_err();
+        assert!(matches!(
+            rollback_error,
+            RepositoryError::Internal { message } if message == "Transaction is still in use"
+        ));
+        assert_eq!(uow.rollback_count(), 1);
+        assert_eq!(uow.rollback_success_count(), 0);
+
+        drop(repo);
+
+        // 本番ではこの時点でトランザクションは取り出し済みのため commit はできない
+        let commit_error = uow.commit().await.unwrap_err();
+        assert!(matches!(
+            commit_error,
+            RepositoryError::Internal { message } if message == "No transaction to commit"
+        ));
+    }
+
+    /// トランザクション中に取得したリポジトリが生存していると commit は失敗する
+    ///
+    /// 本番の `Arc::try_unwrap` 失敗に対応する、モックの本来の役割。
+    #[tokio::test]
+    async fn test_commit_fails_while_repository_obtained_in_transaction_is_alive() {
+        let mut uow = MockUnitOfWork::default();
+        uow.begin().await.unwrap();
+        let repo = uow.trial_repository();
+
+        let error = uow.commit().await.unwrap_err();
+
+        assert!(matches!(
+            error,
+            RepositoryError::Internal { message } if message == "Transaction is still in use"
+        ));
+        drop(repo);
     }
 }

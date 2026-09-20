@@ -15,11 +15,18 @@ use crate::ports::trial_repository::TrialRepository;
 /// 書き込み操作を行う場合は `begin()` でトランザクションを開始し、
 /// 成功時は `commit()`、失敗時は `rollback()` を呼び出す。
 ///
+/// 永続化は集約ごとの save ヘルパー（`save_project` / `save_trial`）経由で行う。
+///
 /// ```ignore
 /// uow.begin().await?;
-/// uow.project_repository().save(&project).await?;
+/// save_project(uow, &project).await?;
 /// uow.commit().await?;
 /// ```
+///
+/// `uow.project_repository().save(&project).await?` のようにリポジトリを直接呼ぶ形は禁止。
+/// リポジトリはトランザクションの `Arc` を clone して保持するため、一時値が生存したまま
+/// `rollback()` を呼ぶと `Arc::try_unwrap` が失敗し、明示的な `ROLLBACK` が発行されない。
+/// 理由と詳細は `.claude/rules/backend/use-case.md` を参照。
 ///
 /// 読み取り専用の場合は `begin()` を呼び出す必要はない。
 ///

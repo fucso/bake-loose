@@ -186,7 +186,7 @@ mod tests {
 
         let result = execute(&mut uow, input).await;
 
-        assert!(result.is_err());
+        assert!(matches!(result, Err(Error::Infrastructure(_))));
         // ロールバックが実際に発行され、コミットは呼ばれていないこと
         assert_eq!(uow.rollback_count(), 1);
         assert_eq!(
