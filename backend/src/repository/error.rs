@@ -10,8 +10,8 @@
 
 use crate::ports::error::RepositoryError;
 use crate::repository::naming_conventions::{
-    strip_prefixes, strip_suffixes, strip_table_prefix, strip_table_prefix_opt, FOREIGN_KEY_SUFFIX,
-    INDEX_PREFIXES, PRIMARY_KEY_SUFFIX, UNIQUE_SUFFIXES,
+    strip_index_prefix, strip_table_prefix, strip_table_prefix_opt, strip_unique_suffix,
+    FOREIGN_KEY_COLUMN_SUFFIX, FOREIGN_KEY_SUFFIX, PRIMARY_KEY_SUFFIX,
 };
 
 /// 一意制約違反の SQLSTATE
@@ -67,9 +67,9 @@ fn conflict_field(constraint: Option<&str>, entity: &str) -> String {
         return "id".to_string();
     }
 
-    let field = strip_prefixes(constraint, &INDEX_PREFIXES);
+    let field = strip_index_prefix(constraint);
     let field = strip_table_prefix(field, entity);
-    let field = strip_suffixes(field, &UNIQUE_SUFFIXES);
+    let field = strip_unique_suffix(field);
 
     if field.is_empty() {
         constraint.to_string()
@@ -98,7 +98,11 @@ fn foreign_key_violation(constraint: Option<&str>, entity: &str) -> RepositoryEr
         id: UNKNOWN.to_string(),
     };
 
-    let Some(name) = constraint.and_then(|c| c.strip_suffix(FOREIGN_KEY_SUFFIX)) else {
+    let Some(constraint) = constraint else {
+        return not_found(entity);
+    };
+
+    let Some(name) = constraint.strip_suffix(FOREIGN_KEY_SUFFIX) else {
         return not_found(entity);
     };
 
@@ -107,11 +111,11 @@ fn foreign_key_violation(constraint: Option<&str>, entity: &str) -> RepositoryEr
     let Some(name) = strip_table_prefix_opt(name, entity) else {
         return RepositoryError::StillReferenced {
             entity: entity.to_string(),
-            constraint: constraint.unwrap_or(UNKNOWN).to_string(),
+            constraint: constraint.to_string(),
         };
     };
 
-    let referenced = name.strip_suffix("_id").unwrap_or(name);
+    let referenced = name.strip_suffix(FOREIGN_KEY_COLUMN_SUFFIX).unwrap_or(name);
 
     if referenced.is_empty() {
         not_found(entity)
@@ -285,21 +289,6 @@ mod tests {
             RepositoryError::StillReferenced {
                 entity: "project".to_string(),
                 constraint: "trials_project_id_fkey".to_string(),
-            }
-        );
-    }
-
-    /// `StillReferenced` は `Conflict` とは別物であり、
-    /// 一意制約違反用の `Conflict.field`（カラム名相当）に制約名が混ざらない
-    #[test]
-    fn test_foreign_key_violation_from_referenced_side_is_not_conflict() {
-        let error = db_error(FOREIGN_KEY_VIOLATION, Some("trials_project_id_fkey"));
-
-        assert_ne!(
-            map_sqlx_error(error, "project"),
-            RepositoryError::Conflict {
-                entity: "project".to_string(),
-                field: "trials_project_id_fkey".to_string(),
             }
         );
     }
