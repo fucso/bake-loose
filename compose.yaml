@@ -41,12 +41,14 @@ services:
       target: development
     environment:
       VITE_API_URL: http://localhost:8080
+      VITE_GRAPHQL_ENDPOINT: http://localhost:8080/graphql
     volumes:
       - ./frontend:/app
       - /app/node_modules
       - ./.agents/worktrees:/worktrees
     ports:
       - "3000:3000"
+      - "6006:6006"
     depends_on:
       - backend
 
