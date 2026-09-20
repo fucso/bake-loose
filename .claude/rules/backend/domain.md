@@ -9,8 +9,26 @@ paths: backend/src/domain/**/*.rs
 ## 基本原則
 
 - **依存禁止**: 外部クレート（sqlx, axum 等）、I/O操作、永続化の詳細を知らない
-- **許可される依存**: Rust標準ライブラリ、serde（シリアライズのみ）
+- **許可される依存**: Rust標準ライブラリ、serde（シリアライズのみ）、uuid（ID の NewType 用）
 - **純粋関数**: 副作用を持たない純粋関数で構成
+
+### 例外: chrono は `domain/timezone.rs` に限り許可する
+
+日時はドメインの関心事だが Rust 標準ライブラリだけでは表現できないため、`chrono` の利用を
+**`backend/src/domain/timezone.rs` のみ** に限定して許可する。
+
+- `chrono::DateTime<FixedOffset>` / `Utc` を直接扱ってよいのは `timezone.rs` だけ
+- 他のドメインモジュール（models / actions / validators）は `timezone.rs` が公開する
+  `JstDateTime` を経由して日時を扱う
+- `timezone.rs` は chrono を包む腐敗防止層であり、ここ以外に chrono の型が漏れないようにする
+
+```rust
+// ✅ domain/models/step.rs
+use crate::domain::timezone::JstDateTime;
+
+// ❌ domain/models/step.rs
+use chrono::{DateTime, FixedOffset};
+```
 
 ## ファイル配置
 
