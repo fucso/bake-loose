@@ -1,8 +1,9 @@
-//! Trial 作成〜Step追加〜完了までの一連の GraphQL 操作を通しで検証する
+//! Trial 作成〜Step追加〜Parameter追加〜完了までの一連の GraphQL 操作を通しで検証する
 
 use sqlx::PgPool;
 
 use crate::graphql::schema::execute_graphql;
+use crate::graphql::trials::helpers::add_parameter;
 
 const PROJECT_ID: &str = "11111111-1111-1111-1111-111111111111";
 
@@ -40,7 +41,32 @@ async fn test_full_trial_lifecycle(pool: PgPool) {
     let updated = execute_graphql(pool.clone(), &update_step_query).await;
     assert_eq!(updated["updateStep"]["name"], "一次発酵");
 
-    // 4. Stepを完了する
+    // 4. StepにParameterを追加する
+    let parameter_added = add_parameter(
+        pool.clone(),
+        &trial_id,
+        &step_id,
+        r#"{ type: "key_value", key: "室温", value: { type: "quantity", amount: 28, unit: "℃" } }"#,
+    )
+    .await;
+    let parameter_id = parameter_added["addParameter"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert_eq!(
+        parameter_added["addParameter"]["parameterType"],
+        "KEY_VALUE"
+    );
+    assert_eq!(
+        parameter_added["addParameter"]["content"],
+        serde_json::json!({
+            "type": "key_value",
+            "key": "室温",
+            "value": { "type": "quantity", "amount": 28.0, "unit": "℃" }
+        })
+    );
+
+    // 5. Stepを完了する
     let complete_step_query = format!(
         r#"mutation {{
             completeStep(trialId: "{trial_id}", stepId: "{step_id}") {{ isCompleted }}
@@ -49,18 +75,22 @@ async fn test_full_trial_lifecycle(pool: PgPool) {
     let step_completed = execute_graphql(pool.clone(), &complete_step_query).await;
     assert_eq!(step_completed["completeStep"]["isCompleted"], true);
 
-    // 5. Trialを完了する
+    // 6. Trialを完了する
     let complete_trial_query =
         format!(r#"mutation {{ completeTrial(id: "{trial_id}") {{ status }} }}"#);
     let trial_completed = execute_graphql(pool.clone(), &complete_trial_query).await;
     assert_eq!(trial_completed["completeTrial"]["status"], "COMPLETED");
 
-    // 6. trial クエリで最終状態を確認する
+    // 7. trial クエリで最終状態を確認する
     let get_query = format!(
         r#"{{
             trial(id: "{trial_id}") {{
                 status
-                steps {{ name isCompleted }}
+                steps {{
+                    name
+                    isCompleted
+                    parameters {{ id parameterType content }}
+                }}
             }}
         }}"#
     );
@@ -68,10 +98,22 @@ async fn test_full_trial_lifecycle(pool: PgPool) {
     assert_eq!(final_state["trial"]["status"], "COMPLETED");
     assert_eq!(
         final_state["trial"]["steps"],
-        serde_json::json!([{ "name": "一次発酵", "isCompleted": true }])
+        serde_json::json!([{
+            "name": "一次発酵",
+            "isCompleted": true,
+            "parameters": [{
+                "id": parameter_id,
+                "parameterType": "KEY_VALUE",
+                "content": {
+                    "type": "key_value",
+                    "key": "室温",
+                    "value": { "type": "quantity", "amount": 28.0, "unit": "℃" }
+                }
+            }]
+        }])
     );
 
-    // 7. trialsByProject クエリでも取得できることを確認する
+    // 8. trialsByProject クエリでも取得できることを確認する
     let list_query = format!(r#"{{ trialsByProject(projectId: "{PROJECT_ID}") {{ id status }} }}"#);
     let list = execute_graphql(pool, &list_query).await;
     assert_eq!(
