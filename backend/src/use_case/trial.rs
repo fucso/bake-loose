@@ -17,6 +17,7 @@ pub mod update_trial;
 use crate::domain::models::trial::Trial;
 use crate::ports::trial_repository::TrialRepository;
 use crate::ports::{RepositoryError, UnitOfWork};
+use crate::use_case::rollback_on_error;
 
 /// 開始済みトランザクション内で Trial を保存し、失敗時はロールバックする
 ///
@@ -37,12 +38,5 @@ pub(crate) async fn save_trial<U: UnitOfWork>(
         repo.save(trial).await
     };
 
-    if let Err(error) = save_result {
-        if let Err(rollback_error) = uow.rollback().await {
-            log::error!("rollback failed: {:?}", rollback_error);
-        }
-        return Err(error);
-    }
-
-    Ok(())
+    rollback_on_error(uow, save_result).await
 }

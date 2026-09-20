@@ -66,7 +66,7 @@ impl From<RepositoryError> for Error {
             // 事前の重複チェックとの競合ウィンドウで DB が検出した名前の重複は、
             // ユーザーから見れば同じ「名前の重複」なので DuplicateName に寄せる
             RepositoryError::Conflict { ref entity, ref field } if field == "name" => {
-                log::warn!("Conflict: {}.{}", entity, field);
+                log::warn!("Conflict folded into DuplicateName: {}.{}", entity, field);
                 Error::DuplicateName
             }
             // 名前以外の一意制約違反も内部エラーではなく競合として扱う

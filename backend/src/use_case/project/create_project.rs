@@ -39,7 +39,7 @@ impl From<RepositoryError> for Error {
                 ref entity,
                 ref field,
             } if field == "name" => {
-                log::warn!("Conflict: {}.{}", entity, field);
+                log::warn!("Conflict folded into DuplicateName: {}.{}", entity, field);
                 Error::DuplicateName
             }
             // 名前以外の一意制約違反も並行操作との競合であり内部エラーではない。
