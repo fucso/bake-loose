@@ -14,11 +14,8 @@ use crate::graphql::trials::helpers::{
 )]
 async fn test_remove_parameter_removes_specified_parameter_only(pool: PgPool) {
     let seeded = add_step_with_parameters(pool.clone(), TRIAL_ID, "こね").await;
-    let step_id = seeded["updateStep"]["id"].as_str().unwrap().to_string();
-    let text_parameter_id = seeded["updateStep"]["parameters"][0]["id"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    let step_id = seeded["id"].as_str().unwrap().to_string();
+    let text_parameter_id = seeded["parameters"][0]["id"].as_str().unwrap().to_string();
 
     let rename_query = format!(
         r#"

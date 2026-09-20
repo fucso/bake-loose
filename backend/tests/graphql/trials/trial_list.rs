@@ -199,6 +199,15 @@ async fn test_returns_trials_with_steps_and_parameters(pool: PgPool) {
                                         "duration": { "value": 90.0, "unit": "minute" },
                                         "note": "一次発酵"
                                     }
+                                },
+                                {
+                                    "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2",
+                                    "parameterType": "TIME_MARKER",
+                                    "content": {
+                                        "type": "time_marker",
+                                        "at": { "value": 60.0, "unit": "minute" },
+                                        "note": "生地の膨らみを確認"
+                                    }
                                 }
                             ]
                         }

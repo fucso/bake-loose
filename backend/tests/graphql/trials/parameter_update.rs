@@ -12,11 +12,8 @@ use crate::graphql::trials::helpers::{add_step, add_step_with_parameters, TRIAL_
 )]
 async fn test_update_parameter_replaces_content_successfully(pool: PgPool) {
     let seeded = add_step_with_parameters(pool.clone(), TRIAL_ID, "こね").await;
-    let step_id = seeded["updateStep"]["id"].as_str().unwrap().to_string();
-    let parameter_id = seeded["updateStep"]["parameters"][0]["id"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    let step_id = seeded["id"].as_str().unwrap().to_string();
+    let parameter_id = seeded["parameters"][0]["id"].as_str().unwrap().to_string();
 
     let query = format!(
         r#"
@@ -80,11 +77,8 @@ async fn test_update_parameter_returns_not_found_for_missing_parameter(pool: PgP
 )]
 async fn test_update_parameter_returns_error_for_content_type_mismatch(pool: PgPool) {
     let seeded = add_step_with_parameters(pool.clone(), TRIAL_ID, "こね").await;
-    let step_id = seeded["updateStep"]["id"].as_str().unwrap().to_string();
-    let parameter_id = seeded["updateStep"]["parameters"][0]["id"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    let step_id = seeded["id"].as_str().unwrap().to_string();
+    let parameter_id = seeded["parameters"][0]["id"].as_str().unwrap().to_string();
 
     let query = format!(
         r#"

@@ -4,16 +4,17 @@ use serde_json::json;
 use sqlx::PgPool;
 
 use crate::graphql::schema::execute_graphql_with_errors;
-use crate::graphql::trials::helpers::{add_step_with_parameters, TRIAL_ID};
+use crate::graphql::trials::helpers::{
+    add_parameter, add_step, add_step_with_parameters, TRIAL_ID,
+};
 
 #[sqlx::test(
     migrations = "./migrations",
     fixtures("../../fixtures/projects.sql", "../../fixtures/trials.sql")
 )]
 async fn test_add_parameter_attaches_parameters_to_step(pool: PgPool) {
-    let data = add_step_with_parameters(pool, TRIAL_ID, "こね").await;
+    let step = add_step_with_parameters(pool, TRIAL_ID, "こね").await;
 
-    let step = &data["updateStep"];
     assert_eq!(step["name"], "こね");
 
     // id は自動採番のため検証対象から外し、種別と内容を検証する
@@ -39,6 +40,35 @@ async fn test_add_parameter_attaches_parameters_to_step(pool: PgPool) {
                 }
             }),
         ]
+    );
+}
+
+#[sqlx::test(
+    migrations = "./migrations",
+    fixtures("../../fixtures/projects.sql", "../../fixtures/trials.sql")
+)]
+async fn test_add_parameter_accepts_time_marker_content(pool: PgPool) {
+    let added = add_step(pool.clone(), TRIAL_ID, "焼成").await;
+    let step_id = added["addStep"]["id"].as_str().unwrap().to_string();
+
+    let data = add_parameter(
+        pool,
+        TRIAL_ID,
+        &step_id,
+        r#"{ type: "time_marker", at: { value: 30, unit: "minute" }, note: "温度を220度に下げる" }"#,
+    )
+    .await;
+
+    // id は自動採番のため検証対象から外し、種別と内容を検証する
+    let parameter = &data["addParameter"];
+    assert_eq!(parameter["parameterType"], "TIME_MARKER");
+    assert_eq!(
+        parameter["content"],
+        json!({
+            "type": "time_marker",
+            "at": { "value": 30.0, "unit": "minute" },
+            "note": "温度を220度に下げる"
+        })
     );
 }
 

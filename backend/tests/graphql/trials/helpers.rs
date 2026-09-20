@@ -41,6 +41,7 @@ pub async fn add_parameter(
         mutation {{
             addParameter(trialId: "{trial_id}", stepId: "{step_id}", content: {content_literal}) {{
                 id
+                parameterType
                 content
             }}
         }}
@@ -51,8 +52,8 @@ pub async fn add_parameter(
 
 /// `addStep` で Step を作成し、`addParameter` でパラメーターを2件（text, key_value）付与する
 ///
-/// 最後の `updateStep` は変更を行わず、付与後の Step の状態を取得するために呼び出している。
-/// そのため戻り値は `updateStep` のレスポンスとなる。
+/// 付与後の状態は `trial` クエリで取得し、追加した Step（`addStep` が返した id）の
+/// JSON をそのまま返す。
 pub async fn add_step_with_parameters(
     pool: PgPool,
     trial_id: &str,
@@ -78,16 +79,26 @@ pub async fn add_step_with_parameters(
 
     let query = format!(
         r#"
-        mutation {{
-            updateStep(trialId: "{trial_id}", stepId: "{step_id}", input: {{}}) {{
-                id
-                name
-                position
-                isCompleted
-                parameters {{ id parameterType content }}
+        {{
+            trial(id: "{trial_id}") {{
+                steps {{
+                    id
+                    name
+                    position
+                    isCompleted
+                    parameters {{ id parameterType content }}
+                }}
             }}
         }}
         "#
     );
-    execute_graphql(pool, &query).await
+    let data = execute_graphql(pool, &query).await;
+
+    data["trial"]["steps"]
+        .as_array()
+        .expect("trial の steps が取得できること")
+        .iter()
+        .find(|step| step["id"] == step_id.as_str())
+        .expect("追加した Step が取得できること")
+        .clone()
 }
