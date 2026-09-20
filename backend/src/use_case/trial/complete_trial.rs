@@ -50,7 +50,17 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
 
     // 4. 永続化
-    if let Err(e) = uow.trial_repository().save(&completed).await {
+    // NOTE: `if let Err(e) = uow.xxx_repository().save(..).await { .. }` と書いてはいけない。
+    // if let のスクルーティニー式で作られたリポジトリの一時値は if let 文の終わりまで生存する。
+    // リポジトリはトランザクションの Arc を clone して保持しているため、
+    // 本体で rollback() を呼ぶ時点でも参照が残り Arc::try_unwrap が失敗して
+    // 明示的な ROLLBACK が発行されなくなる。
+    // そのため save() の結果をブロック内でローカルに束縛し、一時値を drop させてから判定する。
+    let save_result = {
+        let repo = uow.trial_repository();
+        repo.save(&completed).await
+    };
+    if let Err(e) = save_result {
         let _ = uow.rollback().await;
         return Err(Error::Infrastructure(format!("{:?}", e)));
     }

@@ -49,7 +49,17 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
 
     // 4. 永続化
-    if let Err(e) = uow.trial_repository().save(&trial).await {
+    // NOTE: `if let Err(e) = uow.xxx_repository().save(..).await { .. }` と書いてはいけない。
+    // if let のスクルーティニー式で作られたリポジトリの一時値は if let 文の終わりまで生存する。
+    // リポジトリはトランザクションの Arc を clone して保持しているため、
+    // 本体で rollback() を呼ぶ時点でも参照が残り Arc::try_unwrap が失敗して
+    // 明示的な ROLLBACK が発行されなくなる。
+    // そのため save() の結果をブロック内でローカルに束縛し、一時値を drop させてから判定する。
+    let save_result = {
+        let repo = uow.trial_repository();
+        repo.save(&trial).await
+    };
+    if let Err(e) = save_result {
         let _ = uow.rollback().await;
         return Err(Error::Infrastructure(format!("{:?}", e)));
     }
@@ -115,6 +125,26 @@ mod tests {
         let trial = result.unwrap();
         assert_eq!(trial.name(), None);
         assert_eq!(trial.memo(), None);
+    }
+
+    #[tokio::test]
+    async fn test_execute_rolls_back_when_save_fails() {
+        let mut uow = MockUnitOfWork::default();
+        let project_id = seed_project(&mut uow).await;
+        // テストデータ投入後に永続化だけを失敗させる
+        uow.fail_save();
+        let input = Input {
+            project_id: project_id.0,
+            name: Some("焼成温度検証".to_string()),
+            memo: None,
+        };
+
+        let result = execute(&mut uow, input).await;
+
+        assert!(matches!(result, Err(Error::Infrastructure(_))));
+        // ロールバックが呼ばれ、コミットは呼ばれていないこと
+        assert_eq!(uow.rollback_count(), 1);
+        assert_eq!(uow.commit_count(), 0);
     }
 
     #[tokio::test]
