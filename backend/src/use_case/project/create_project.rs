@@ -5,6 +5,7 @@ use crate::domain::models::project::Project;
 use crate::ports::error::RepositoryError;
 use crate::ports::project_repository::ProjectRepository;
 use crate::ports::unit_of_work::UnitOfWork;
+use crate::use_case::project::save_project;
 
 /// ユースケースの入力
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -23,10 +24,19 @@ pub enum Error {
 impl From<RepositoryError> for Error {
     fn from(error: RepositoryError) -> Self {
         match error {
-            // projects の一意制約はプロジェクト名のみ（id は UPSERT で解決される）。
-            // 事前の重複チェックとの競合ウィンドウで DB 側が検出した重複も
+            // 事前の重複チェックとの競合ウィンドウで DB 側が検出した名前の重複は、
             // ユーザーから見れば同じ「名前の重複」なので DuplicateName に寄せる。
-            RepositoryError::Conflict { .. } => Error::DuplicateName,
+            // 将来 projects に別の一意制約（slug など）が追加されたときに
+            // 無関係な競合まで「名前が重複」と表示しないよう、違反フィールドで絞り込む。
+            // DB が検出した競合はここでユーザー向けの種別に畳まれ、制約の情報が失われる。
+            // 本番で競合が多発したときに追跡できるよう、畳む直前にログへ残す。
+            RepositoryError::Conflict {
+                ref entity,
+                ref field,
+            } if field == "name" => {
+                log::warn!("Conflict: {}.{}", entity, field);
+                Error::DuplicateName
+            }
             other => Error::Infrastructure(format!("{:?}", other)),
         }
     }
@@ -53,21 +63,8 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Project
         .await
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
 
-    // 4. 永続化
-    // NOTE: `if let Err(e) = uow.xxx_repository().save(..).await { .. }` と書いてはいけない。
-    // if let のスクルーティニー式で作られたリポジトリの一時値は if let 文の終わりまで生存する。
-    // リポジトリはトランザクションの Arc を clone して保持しているため、
-    // 本体で rollback() を呼ぶ時点でも参照が残り Arc::try_unwrap が失敗して
-    // 明示的な ROLLBACK が発行されなくなる。
-    // そのため save() の結果をブロック内でローカルに束縛し、一時値を drop させてから判定する。
-    let save_result = {
-        let repo = uow.project_repository();
-        repo.save(&project).await
-    };
-    if let Err(e) = save_result {
-        let _ = uow.rollback().await;
-        return Err(Error::from(e));
-    }
+    // 4. 永続化（失敗時のロールバックはヘルパー側で行う）
+    save_project(uow, &project).await?;
 
     // 5. コミット
     uow.commit()
@@ -156,6 +153,11 @@ mod tests {
         assert!(matches!(result, Err(Error::Infrastructure(_))));
         // ロールバックが呼ばれ、コミットは呼ばれていないこと
         assert_eq!(uow.rollback_count(), 1);
+        assert_eq!(
+            uow.rollback_success_count(),
+            1,
+            "ROLLBACK が実際に発行されていない"
+        );
         assert_eq!(uow.commit_count(), 0);
     }
 
@@ -176,7 +178,32 @@ mod tests {
         assert_eq!(result.unwrap_err(), Error::DuplicateName);
         // ロールバックが呼ばれ、コミットは呼ばれていないこと
         assert_eq!(uow.rollback_count(), 1);
+        assert_eq!(
+            uow.rollback_success_count(),
+            1,
+            "ROLLBACK が実際に発行されていない"
+        );
         assert_eq!(uow.commit_count(), 0);
+    }
+
+    /// name 以外の一意制約違反は DuplicateName に畳まず Infrastructure として扱う
+    ///
+    /// 将来 projects に別の一意制約が追加されたとき、
+    /// 無関係な競合まで「同じ名前のプロジェクトが既に存在します」と表示しないこと。
+    #[tokio::test]
+    async fn test_execute_does_not_map_non_name_conflict_to_duplicate_name() {
+        let mut uow = MockUnitOfWork::default();
+        uow.fail_save_with(RepositoryError::Conflict {
+            entity: "project".to_string(),
+            field: "slug".to_string(),
+        });
+        let input = Input {
+            name: "新規プロジェクト".to_string(),
+        };
+
+        let result = execute(&mut uow, input).await;
+
+        assert!(matches!(result, Err(Error::Infrastructure(_))));
     }
 
     #[tokio::test]

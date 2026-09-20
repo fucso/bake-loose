@@ -27,7 +27,11 @@ fn internal_error(e: &str) -> GraphQLError {
 ///
 /// 一意制約違反など、同じ対象への並行操作によって発生する競合。
 /// 内部エラーではなくリトライで解消し得るため、その旨をユーザーに伝える。
-fn conflict_error() -> GraphQLError {
+///
+/// ユーザーには詳細を見せないが、本番で競合が多発したときに
+/// 「どのエンティティのどの制約か」を追えるようログには残す。
+fn conflict_error(entity: &str, field: &str) -> GraphQLError {
+    log::warn!("Conflict: {}.{}", entity, field);
     GraphQLError::new("他の操作と競合しました。もう一度お試しください", "CONFLICT")
 }
 
@@ -63,7 +67,7 @@ impl UserFacingError for create_trial::Error {
                 format!("Trial名は{}文字以内で入力してください", max),
                 "VALIDATION_ERROR",
             ),
-            create_trial::Error::Conflict => conflict_error(),
+            create_trial::Error::Conflict { entity, field } => conflict_error(entity, field),
             create_trial::Error::Infrastructure(e) => internal_error(e),
         }
     }
@@ -91,7 +95,7 @@ impl UserFacingError for update_trial::Error {
                 format!("Trial名は{}文字以内で入力してください", max),
                 "VALIDATION_ERROR",
             ),
-            update_trial::Error::Conflict => conflict_error(),
+            update_trial::Error::Conflict { entity, field } => conflict_error(entity, field),
             update_trial::Error::Infrastructure(e) => internal_error(e),
         }
     }
@@ -110,7 +114,7 @@ impl UserFacingError for complete_trial::Error {
             complete_trial::Error::Domain(complete_trial_action::Error::TrialAlreadyCompleted) => {
                 GraphQLError::new("Trialは既に完了しています", "VALIDATION_ERROR")
             }
-            complete_trial::Error::Conflict => conflict_error(),
+            complete_trial::Error::Conflict { entity, field } => conflict_error(entity, field),
             complete_trial::Error::Infrastructure(e) => internal_error(e),
         }
     }
@@ -141,7 +145,7 @@ impl UserFacingError for add_step::Error {
                 format!("Step名は{}文字以内で入力してください", max),
                 "VALIDATION_ERROR",
             ),
-            add_step::Error::Conflict => conflict_error(),
+            add_step::Error::Conflict { entity, field } => conflict_error(entity, field),
             add_step::Error::Infrastructure(e) => internal_error(e),
         }
     }
@@ -173,7 +177,7 @@ impl UserFacingError for update_step::Error {
                 format!("Step名は{}文字以内で入力してください", max),
                 "VALIDATION_ERROR",
             ),
-            update_step::Error::Conflict => conflict_error(),
+            update_step::Error::Conflict { entity, field } => conflict_error(entity, field),
             update_step::Error::Infrastructure(e) => internal_error(e),
         }
     }
@@ -213,7 +217,7 @@ impl UserFacingError for add_parameter::Error {
             add_parameter::Error::Domain(add_parameter_action::Error::InvalidParameter(
                 add_parameter_action::ParameterValidationError::NonPositiveQuantityAmount,
             )) => GraphQLError::new("数値は0より大きい値を入力してください", "VALIDATION_ERROR"),
-            add_parameter::Error::Conflict => conflict_error(),
+            add_parameter::Error::Conflict { entity, field } => conflict_error(entity, field),
             add_parameter::Error::Infrastructure(e) => internal_error(e),
         }
     }
@@ -247,7 +251,7 @@ impl UserFacingError for remove_parameter::Error {
             remove_parameter::Error::Domain(remove_parameter_action::Error::ParameterNotFound) => {
                 parameter_not_found()
             }
-            remove_parameter::Error::Conflict => conflict_error(),
+            remove_parameter::Error::Conflict { entity, field } => conflict_error(entity, field),
             remove_parameter::Error::Infrastructure(e) => internal_error(e),
         }
     }
@@ -293,7 +297,7 @@ impl UserFacingError for update_parameter::Error {
             update_parameter::Error::Domain(update_parameter_action::Error::InvalidParameter(
                 update_parameter_action::ParameterValidationError::NonPositiveQuantityAmount,
             )) => GraphQLError::new("数値は0より大きい値を入力してください", "VALIDATION_ERROR"),
-            update_parameter::Error::Conflict => conflict_error(),
+            update_parameter::Error::Conflict { entity, field } => conflict_error(entity, field),
             update_parameter::Error::Infrastructure(e) => internal_error(e),
         }
     }
@@ -318,7 +322,7 @@ impl UserFacingError for complete_step::Error {
             complete_step::Error::Domain(complete_step_action::Error::StepAlreadyCompleted) => {
                 GraphQLError::new("Stepは既に完了しています", "VALIDATION_ERROR")
             }
-            complete_step::Error::Conflict => conflict_error(),
+            complete_step::Error::Conflict { entity, field } => conflict_error(entity, field),
             complete_step::Error::Infrastructure(e) => internal_error(e),
         }
     }
@@ -362,16 +366,48 @@ impl From<list_trials_by_project::Error> for async_graphql::Error {
 mod tests {
     use super::*;
 
+    fn conflict(entity: &str, field: &str) -> (String, String) {
+        (entity.to_string(), field.to_string())
+    }
+
     /// 競合エラーは CONFLICT コードでユーザーにリトライを促す
+    ///
+    /// 制約の詳細（entity / field）はユーザー向けメッセージには出さず、ログにのみ残す。
     #[test]
     fn test_conflict_maps_to_conflict_code() {
         let expected =
             GraphQLError::new("他の操作と競合しました。もう一度お試しください", "CONFLICT");
 
-        assert_eq!(add_step::Error::Conflict.to_user_facing(), expected);
-        assert_eq!(create_trial::Error::Conflict.to_user_facing(), expected);
-        assert_eq!(update_step::Error::Conflict.to_user_facing(), expected);
-        assert_eq!(add_parameter::Error::Conflict.to_user_facing(), expected);
+        let (entity, field) = conflict("step", "trial_id_position");
+
+        assert_eq!(
+            add_step::Error::Conflict {
+                entity: entity.clone(),
+                field: field.clone()
+            }
+            .to_user_facing(),
+            expected
+        );
+        assert_eq!(
+            create_trial::Error::Conflict {
+                entity: entity.clone(),
+                field: field.clone()
+            }
+            .to_user_facing(),
+            expected
+        );
+        assert_eq!(
+            update_step::Error::Conflict {
+                entity: entity.clone(),
+                field: field.clone()
+            }
+            .to_user_facing(),
+            expected
+        );
+        assert_eq!(
+            add_parameter::Error::Conflict { entity, field }.to_user_facing(),
+            expected
+        );
     }
 
     /// Infrastructure エラーは従来どおり INTERNAL_ERROR のまま

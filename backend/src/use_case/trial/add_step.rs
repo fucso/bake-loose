@@ -11,6 +11,8 @@ use crate::domain::timezone::JstDateTime;
 use crate::ports::trial_repository::TrialRepository;
 use crate::ports::{RepositoryError, UnitOfWork};
 
+use super::save_trial;
+
 /// ユースケースの入力
 pub struct Input {
     pub trial_id: Uuid,
@@ -24,7 +26,10 @@ pub enum Error {
     NotFound,
     Domain(add_step::Error),
     /// 一意制約違反など、並行操作との競合（リトライで解消し得る）
-    Conflict,
+    Conflict {
+        entity: String,
+        field: String,
+    },
     Infrastructure(String),
 }
 
@@ -32,7 +37,7 @@ impl From<RepositoryError> for Error {
     fn from(error: RepositoryError) -> Self {
         match error {
             // 一意制約違反は並行操作との競合であり、リトライで解消し得る
-            RepositoryError::Conflict { .. } => Error::Conflict,
+            RepositoryError::Conflict { entity, field } => Error::Conflict { entity, field },
             // 外部キー違反は参照先が並行して削除されたことを意味する
             RepositoryError::NotFound { .. } => Error::NotFound,
             other => Error::Infrastructure(format!("{:?}", other)),
@@ -62,21 +67,8 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
         .await
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
 
-    // 4. 永続化
-    // NOTE: `if let Err(e) = uow.xxx_repository().save(..).await { .. }` と書いてはいけない。
-    // if let のスクルーティニー式で作られたリポジトリの一時値は if let 文の終わりまで生存する。
-    // リポジトリはトランザクションの Arc を clone して保持しているため、
-    // 本体で rollback() を呼ぶ時点でも参照が残り Arc::try_unwrap が失敗して
-    // 明示的な ROLLBACK が発行されなくなる。
-    // そのため save() の結果をブロック内でローカルに束縛し、一時値を drop させてから判定する。
-    let save_result = {
-        let repo = uow.trial_repository();
-        repo.save(&trial).await
-    };
-    if let Err(e) = save_result {
-        let _ = uow.rollback().await;
-        return Err(Error::from(e));
-    }
+    // 4. 永続化（失敗時のロールバックはヘルパー側で行う）
+    save_trial(uow, &trial).await?;
 
     // 5. コミット
     uow.commit()
@@ -167,25 +159,42 @@ mod tests {
 
         let result = execute(&mut uow, input(trial_id.0, "こね")).await;
 
-        assert_eq!(result.unwrap_err(), Error::Conflict);
-        // ロールバックが呼ばれ、コミットは呼ばれていないこと
+        assert_eq!(
+            result.unwrap_err(),
+            Error::Conflict {
+                entity: "step".to_string(),
+                field: "trial_id_position".to_string(),
+            }
+        );
+        // ロールバックが実際に発行され、コミットは呼ばれていないこと
         assert_eq!(uow.rollback_count(), 1);
+        assert_eq!(
+            uow.rollback_success_count(),
+            1,
+            "ROLLBACK が実際に発行されていない"
+        );
         assert_eq!(uow.commit_count(), 0);
     }
 
     /// 一意制約違反以外の永続化エラーは従来どおり Infrastructure のまま
     #[tokio::test]
-    async fn test_execute_returns_infrastructure_error_when_save_fails() {
+    async fn test_execute_rolls_back_when_save_fails() {
         let mut uow = MockUnitOfWork::default();
         let trial = Trial::new(ProjectId::new(), None, None);
         let trial_id = trial.id().clone();
         uow.trial_repository().save(&trial).await.unwrap();
+        // テストデータ投入後に永続化だけを失敗させる
         uow.fail_save();
 
         let result = execute(&mut uow, input(trial_id.0, "こね")).await;
 
         assert!(matches!(result, Err(Error::Infrastructure(_))));
         assert_eq!(uow.rollback_count(), 1);
+        assert_eq!(
+            uow.rollback_success_count(),
+            1,
+            "ROLLBACK が実際に発行されていない"
+        );
         assert_eq!(uow.commit_count(), 0);
     }
 

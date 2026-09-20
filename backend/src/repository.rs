@@ -9,5 +9,4 @@ pub mod pg_unit_of_work;
 pub mod project_repo;
 pub mod trial_repo;
 
-pub use error::map_sqlx_error;
 pub use pg_unit_of_work::PgUnitOfWork;

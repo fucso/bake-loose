@@ -23,6 +23,23 @@ fn save_failure(failure: &SaveFailure) -> Option<RepositoryError> {
     failure.lock().expect("save failure lock poisoned").clone()
 }
 
+/// トランザクションハンドルの共有状態を模したマーカー
+///
+/// `PgUnitOfWork` はトランザクションを `Arc<Mutex<Transaction>>` で保持し、
+/// `xxx_repository()` のたびにその Arc を clone してリポジトリへ渡す。
+/// `commit()` / `rollback()` は `Arc::try_unwrap` でトランザクションを取り出すため、
+/// リポジトリが 1 つでも生存していると `Transaction is still in use` で失敗する
+/// （`repository/pg_unit_of_work.rs`）。
+///
+/// モックが無条件に成功していると「rollback が呼ばれるが失敗する」という
+/// 本番固有の不具合を再現できないため、同型のハンドルで同じ制約をモデル化する。
+type TxHandle = Arc<()>;
+
+/// ハンドルを掴んでいるリポジトリが残っていないかを検査する
+fn transaction_is_free(handle: &TxHandle) -> bool {
+    Arc::strong_count(handle) == 1
+}
+
 /// テスト用の MockProjectRepository
 ///
 /// MockUnitOfWork 内のデータを共有するため Arc<Mutex> を使用
@@ -31,13 +48,20 @@ pub struct MockProjectRepository {
     projects: Arc<Mutex<Vec<Project>>>,
     /// 設定されている場合 `save()` が必ずそのエラーで失敗する
     save_failure: SaveFailure,
+    /// トランザクションハンドル（生存している間は commit/rollback を失敗させる）
+    _tx_handle: TxHandle,
 }
 
 impl MockProjectRepository {
-    fn new(projects: Arc<Mutex<Vec<Project>>>, save_failure: SaveFailure) -> Self {
+    fn new(
+        projects: Arc<Mutex<Vec<Project>>>,
+        save_failure: SaveFailure,
+        tx_handle: TxHandle,
+    ) -> Self {
         Self {
             projects,
             save_failure,
+            _tx_handle: tx_handle,
         }
     }
 }
@@ -96,13 +120,16 @@ pub struct MockTrialRepository {
     trials: Arc<Mutex<Vec<Trial>>>,
     /// 設定されている場合 `save()` が必ずそのエラーで失敗する
     save_failure: SaveFailure,
+    /// トランザクションハンドル（生存している間は commit/rollback を失敗させる）
+    _tx_handle: TxHandle,
 }
 
 impl MockTrialRepository {
-    fn new(trials: Arc<Mutex<Vec<Trial>>>, save_failure: SaveFailure) -> Self {
+    fn new(trials: Arc<Mutex<Vec<Trial>>>, save_failure: SaveFailure, tx_handle: TxHandle) -> Self {
         Self {
             trials,
             save_failure,
+            _tx_handle: tx_handle,
         }
     }
 }
@@ -149,6 +176,10 @@ pub struct MockUnitOfWork {
     commit_count: usize,
     /// `rollback()` が呼ばれた回数
     rollback_count: usize,
+    /// `rollback()` が成功した回数
+    rollback_success_count: usize,
+    /// リポジトリへ clone して渡すトランザクションハンドル
+    tx_handle: TxHandle,
 }
 
 impl Default for MockUnitOfWork {
@@ -160,6 +191,8 @@ impl Default for MockUnitOfWork {
             save_failure: Arc::new(StdMutex::new(None)),
             commit_count: 0,
             rollback_count: 0,
+            rollback_success_count: 0,
+            tx_handle: Arc::new(()),
         }
     }
 }
@@ -195,6 +228,15 @@ impl MockUnitOfWork {
     pub fn rollback_count(&self) -> usize {
         self.rollback_count
     }
+
+    /// `rollback()` が成功した回数
+    ///
+    /// 「呼ばれた」だけでは不十分で、リポジトリの一時値が生存したまま
+    /// `rollback()` を呼ぶと本番では ROLLBACK が発行されない。
+    /// ロールバック経路のテストではこちらをアサートすること。
+    pub fn rollback_success_count(&self) -> usize {
+        self.rollback_success_count
+    }
 }
 
 #[async_trait::async_trait]
@@ -203,11 +245,19 @@ impl UnitOfWork for MockUnitOfWork {
     type TrialRepo = MockTrialRepository;
 
     fn project_repository(&mut self) -> Self::ProjectRepo {
-        MockProjectRepository::new(self.projects.clone(), self.save_failure.clone())
+        MockProjectRepository::new(
+            self.projects.clone(),
+            self.save_failure.clone(),
+            self.tx_handle.clone(),
+        )
     }
 
     fn trial_repository(&mut self) -> Self::TrialRepo {
-        MockTrialRepository::new(self.trials.clone(), self.save_failure.clone())
+        MockTrialRepository::new(
+            self.trials.clone(),
+            self.save_failure.clone(),
+            self.tx_handle.clone(),
+        )
     }
 
     async fn begin(&mut self) -> Result<(), RepositoryError> {
@@ -227,6 +277,12 @@ impl UnitOfWork for MockUnitOfWork {
                 message: "No transaction to commit".to_string(),
             });
         }
+        // PgUnitOfWork の Arc::try_unwrap 失敗と同じ条件を再現する
+        if !transaction_is_free(&self.tx_handle) {
+            return Err(RepositoryError::Internal {
+                message: "Transaction is still in use".to_string(),
+            });
+        }
         self.transaction_started = false;
         Ok(())
     }
@@ -238,7 +294,16 @@ impl UnitOfWork for MockUnitOfWork {
                 message: "No transaction to rollback".to_string(),
             });
         }
+        // PgUnitOfWork の Arc::try_unwrap 失敗と同じ条件を再現する。
+        // リポジトリの一時値が生存したまま rollback() を呼ぶと、
+        // 本番では明示的な ROLLBACK が発行されない。
+        if !transaction_is_free(&self.tx_handle) {
+            return Err(RepositoryError::Internal {
+                message: "Transaction is still in use".to_string(),
+            });
+        }
         self.transaction_started = false;
+        self.rollback_success_count += 1;
         Ok(())
     }
 }

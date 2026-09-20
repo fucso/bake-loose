@@ -39,12 +39,9 @@ pub fn map_sqlx_error(error: sqlx::Error, entity: &str) -> RepositoryError {
             entity: entity.to_string(),
             field: conflict_field(db_error.constraint(), entity),
         },
-        // 外部キー違反は参照先が存在しない（並行して削除された）ことを意味する
-        Some(FOREIGN_KEY_VIOLATION) => RepositoryError::NotFound {
-            entity: referenced_entity(db_error.constraint(), entity),
-            // 欠落している行の値は構造化された形で取得できないため特定しない
-            id: UNKNOWN.to_string(),
-        },
+        // 外部キー違反は「参照先が無い」か「まだ参照されている」のどちらかで、
+        // 制約名と呼び出し元のエンティティから向きを判別する
+        Some(FOREIGN_KEY_VIOLATION) => foreign_key_violation(db_error.constraint(), entity),
         _ => RepositoryError::Internal {
             message: error.to_string(),
         },
@@ -79,24 +76,44 @@ fn conflict_field(constraint: Option<&str>, entity: &str) -> String {
     }
 }
 
-/// 外部キー制約名から参照先のエンティティ名を導く
+/// 外部キー制約違反を、制約の向きに応じたエラーへ振り分ける
 ///
-/// 例: `trials_project_id_fkey` (entity: trial) -> `project`
-///     `steps_trial_id_fkey` (entity: step) -> `trial`
+/// PostgreSQL の 23503 は次の 2 方向のどちらでも上がる。
 ///
-/// 既知のパターンに当てはまらない場合は呼び出し元が渡した entity を返す。
-fn referenced_entity(constraint: Option<&str>, entity: &str) -> String {
-    let Some(name) = constraint.and_then(|c| c.strip_suffix("_fkey")) else {
-        return entity.to_string();
+/// - **参照する側** の INSERT/UPDATE: 参照先の行が存在しない
+///   → `NotFound`（例: `trials_project_id_fkey` を entity `trial` で踏む）
+/// - **参照される側** の DELETE/UPDATE: まだ他の行から参照されている
+///   → `Conflict`（例: `trials_project_id_fkey` を entity `project` で踏む。
+///   `trials.project_id` は `ON DELETE RESTRICT` のため `DELETE FROM projects` で発生する）
+///
+/// 制約名は参照する側のテーブル名で始まる（`trials_...`）ため、
+/// 呼び出し元のテーブル接頭辞と一致するかどうかで向きを判別する。
+/// 制約名が取得できない場合は向きを判別できないため、従来どおり `NotFound` に倒す。
+fn foreign_key_violation(constraint: Option<&str>, entity: &str) -> RepositoryError {
+    let not_found = |referenced: &str| RepositoryError::NotFound {
+        entity: referenced.to_string(),
+        // 欠落している行の値は構造化された形で取得できないため特定しない
+        id: UNKNOWN.to_string(),
     };
 
-    let name = strip_table_prefix(name, entity);
-    let name = name.strip_suffix("_id").unwrap_or(name);
+    let Some(name) = constraint.and_then(|c| c.strip_suffix("_fkey")) else {
+        return not_found(entity);
+    };
 
-    if name.is_empty() {
-        entity.to_string()
+    // 制約名が呼び出し元のテーブル接頭辞で始まらない = 自分が「参照される側」
+    let Some(name) = strip_table_prefix_opt(name, entity) else {
+        return RepositoryError::Conflict {
+            entity: entity.to_string(),
+            field: constraint.unwrap_or(UNKNOWN).to_string(),
+        };
+    };
+
+    let referenced = name.strip_suffix("_id").unwrap_or(name);
+
+    if referenced.is_empty() {
+        not_found(entity)
     } else {
-        name.to_string()
+        not_found(referenced)
     }
 }
 
@@ -117,11 +134,19 @@ fn strip_suffixes<'a>(name: &'a str, suffixes: &[&str]) -> &'a str {
 }
 
 /// テーブル名に相当する接頭辞（`steps_` / `step_`）を取り除く
-fn strip_table_prefix<'a>(name: &'a str, entity: &str) -> &'a str {
+///
+/// どちらの接頭辞にも一致しない場合は `None` を返す。
+fn strip_table_prefix_opt<'a>(name: &'a str, entity: &str) -> Option<&'a str> {
     [format!("{}s_", entity), format!("{}_", entity)]
         .iter()
         .find_map(|prefix| name.strip_prefix(prefix.as_str()))
-        .unwrap_or(name)
+}
+
+/// テーブル名に相当する接頭辞（`steps_` / `step_`）を取り除く
+///
+/// 一致しない場合は元の文字列をそのまま返す。
+fn strip_table_prefix<'a>(name: &'a str, entity: &str) -> &'a str {
+    strip_table_prefix_opt(name, entity).unwrap_or(name)
 }
 
 #[cfg(test)]
@@ -273,6 +298,46 @@ mod tests {
             RepositoryError::NotFound {
                 entity: "trial".to_string(),
                 id: "unknown".to_string(),
+            }
+        );
+    }
+
+    /// 参照される側（projects）の操作で 23503 が上がった場合は
+    /// 「まだ参照されている」競合であり、NotFound ではなく Conflict になる
+    #[test]
+    fn test_foreign_key_violation_from_referenced_side_maps_to_conflict() {
+        let error = db_error(FOREIGN_KEY_VIOLATION, Some("trials_project_id_fkey"));
+
+        assert_eq!(
+            map_sqlx_error(error, "project"),
+            RepositoryError::Conflict {
+                entity: "project".to_string(),
+                field: "trials_project_id_fkey".to_string(),
+            }
+        );
+    }
+
+    /// 向きの判定は制約名とエンティティの組み合わせだけで決まる
+    ///
+    /// 同じ `steps_trial_id_fkey` でも、entity が `step`（参照する側）なら NotFound、
+    /// `trial`（参照される側）なら Conflict になる。
+    #[test]
+    fn test_foreign_key_violation_direction_depends_on_calling_entity() {
+        let from_referencing_side = db_error(FOREIGN_KEY_VIOLATION, Some("steps_trial_id_fkey"));
+        assert_eq!(
+            map_sqlx_error(from_referencing_side, "step"),
+            RepositoryError::NotFound {
+                entity: "trial".to_string(),
+                id: "unknown".to_string(),
+            }
+        );
+
+        let from_referenced_side = db_error(FOREIGN_KEY_VIOLATION, Some("steps_trial_id_fkey"));
+        assert_eq!(
+            map_sqlx_error(from_referenced_side, "trial"),
+            RepositoryError::Conflict {
+                entity: "trial".to_string(),
+                field: "steps_trial_id_fkey".to_string(),
             }
         );
     }
