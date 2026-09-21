@@ -1,11 +1,7 @@
 //! Step のステータス検証
 
+use crate::domain::errors::trial_error::Error;
 use crate::domain::models::step::Step;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Error {
-    StepAlreadyCompleted,
-}
 
 pub fn require_in_progress(step: &Step) -> Result<(), Error> {
     if step.is_completed() {

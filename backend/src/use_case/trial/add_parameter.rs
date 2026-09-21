@@ -196,9 +196,7 @@ mod tests {
 
         assert_eq!(
             result,
-            Err(Error::Domain(add_parameter::Error::InvalidParameter(
-                add_parameter::ParameterValidationError::EmptyQuantityUnit
-            )))
+            Err(Error::Domain(add_parameter::Error::EmptyQuantityUnit))
         );
     }
 

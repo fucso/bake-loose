@@ -3,29 +3,17 @@ use crate::domain::models::trial::Trial;
 use crate::domain::timezone::JstDateTime;
 use crate::domain::validators::trial::{step_name_validator, trial_status_validator};
 
-pub use step_name_validator::Error as StepNameError;
+pub use crate::domain::errors::trial_error::Error;
 
 pub struct Command {
     pub name: String,
     pub started_at: Option<JstDateTime>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Error {
-    TrialAlreadyCompleted,
-    InvalidStepName(StepNameError),
-}
-
-impl From<trial_status_validator::Error> for Error {
-    fn from(_: trial_status_validator::Error) -> Self {
-        Error::TrialAlreadyCompleted
-    }
-}
-
 /// バリデーション
 pub fn validate(state: &Trial, command: &Command) -> Result<(), Error> {
     trial_status_validator::require_in_progress(state)?;
-    step_name_validator::validate(&command.name).map_err(Error::InvalidStepName)?;
+    step_name_validator::validate(&command.name)?;
     Ok(())
 }
 
@@ -119,10 +107,7 @@ mod tests {
     fn test_run_err_when_step_name_is_empty() {
         let trial = Trial::new(ProjectId::new(), None, None);
 
-        assert_eq!(
-            run(trial, command("")),
-            Err(Error::InvalidStepName(StepNameError::EmptyName))
-        );
+        assert_eq!(run(trial, command("")), Err(Error::EmptyStepName));
     }
 
     #[test]
@@ -132,10 +117,10 @@ mod tests {
 
         assert_eq!(
             run(trial, command(&too_long)),
-            Err(Error::InvalidStepName(StepNameError::NameTooLong {
+            Err(Error::StepNameTooLong {
                 max: 100,
                 actual: 101,
-            }))
+            })
         );
     }
 }

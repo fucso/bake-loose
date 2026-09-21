@@ -7,7 +7,7 @@ use crate::domain::validators::trial::{
     step_existence_validator, step_name_validator, step_status_validator, trial_status_validator,
 };
 
-pub use step_name_validator::Error as StepNameValidationError;
+pub use crate::domain::errors::trial_error::Error;
 
 /// 指定したフィールドのみを部分更新する（`None` は未指定＝変更なし）
 pub struct Command {
@@ -15,32 +15,6 @@ pub struct Command {
     pub name: Option<String>,
     /// None: 変更なし / Some(None): クリア / Some(Some(t)): t に設定
     pub started_at: Option<Option<JstDateTime>>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Error {
-    TrialAlreadyCompleted,
-    StepNotFound,
-    StepAlreadyCompleted,
-    InvalidStepName(StepNameValidationError),
-}
-
-impl From<trial_status_validator::Error> for Error {
-    fn from(_: trial_status_validator::Error) -> Self {
-        Error::TrialAlreadyCompleted
-    }
-}
-
-impl From<step_existence_validator::Error> for Error {
-    fn from(_: step_existence_validator::Error) -> Self {
-        Error::StepNotFound
-    }
-}
-
-impl From<step_status_validator::Error> for Error {
-    fn from(_: step_status_validator::Error) -> Self {
-        Error::StepAlreadyCompleted
-    }
 }
 
 /// バリデーション
@@ -53,7 +27,7 @@ pub fn validate(state: &Trial, command: &Command) -> Result<(), Error> {
     step_status_validator::require_in_progress(step)?;
 
     if let Some(name) = &command.name {
-        step_name_validator::validate(name).map_err(Error::InvalidStepName)?;
+        step_name_validator::validate(name)?;
     }
     Ok(())
 }
@@ -201,6 +175,6 @@ mod tests {
         };
 
         let result = run(trial, command);
-        assert!(matches!(result, Err(Error::InvalidStepName(_))));
+        assert_eq!(result, Err(Error::EmptyStepName));
     }
 }

@@ -11,46 +11,12 @@ use crate::domain::validators::trial::{
     step_status_validator, trial_status_validator,
 };
 
-pub use parameter_validator::Error as ParameterValidationError;
+pub use crate::domain::errors::trial_error::Error;
 
 pub struct Command {
     pub step_id: StepId,
     pub parameter_id: ParameterId,
     pub content: ParameterContent,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Error {
-    TrialAlreadyCompleted,
-    StepNotFound,
-    StepAlreadyCompleted,
-    ParameterNotFound,
-    ParameterContentTypeMismatch,
-    InvalidParameter(ParameterValidationError),
-}
-
-impl From<trial_status_validator::Error> for Error {
-    fn from(_: trial_status_validator::Error) -> Self {
-        Error::TrialAlreadyCompleted
-    }
-}
-
-impl From<step_existence_validator::Error> for Error {
-    fn from(_: step_existence_validator::Error) -> Self {
-        Error::StepNotFound
-    }
-}
-
-impl From<step_status_validator::Error> for Error {
-    fn from(_: step_status_validator::Error) -> Self {
-        Error::StepAlreadyCompleted
-    }
-}
-
-impl From<parameter_variant_validator::Error> for Error {
-    fn from(_: parameter_variant_validator::Error) -> Self {
-        Error::ParameterContentTypeMismatch
-    }
 }
 
 /// バリデーション
@@ -66,7 +32,7 @@ pub fn validate(state: &Trial, command: &Command) -> Result<(), Error> {
         .parameter(&command.parameter_id)
         .ok_or(Error::ParameterNotFound)?;
     parameter_variant_validator::require_same_variant(parameter.content(), &command.content)?;
-    parameter_validator::validate(&command.content).map_err(Error::InvalidParameter)?;
+    parameter_validator::validate(&command.content)?;
     Ok(())
 }
 
@@ -355,11 +321,6 @@ mod tests {
             },
         };
 
-        assert_eq!(
-            run(trial, command),
-            Err(Error::InvalidParameter(
-                ParameterValidationError::EmptyQuantityUnit
-            ))
-        );
+        assert_eq!(run(trial, command), Err(Error::EmptyQuantityUnit));
     }
 }

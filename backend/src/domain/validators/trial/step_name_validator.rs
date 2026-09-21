@@ -1,20 +1,16 @@
 //! Step の名前検証
 
-const MAX_NAME_LENGTH: usize = 100;
+use crate::domain::errors::trial_error::Error;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Error {
-    EmptyName,
-    NameTooLong { max: usize, actual: usize },
-}
+const MAX_NAME_LENGTH: usize = 100;
 
 /// Step 名が空文字でなく上限文字数以内であることを検証する
 pub fn validate(name: &str) -> Result<(), Error> {
     if name.trim().is_empty() {
-        return Err(Error::EmptyName);
+        return Err(Error::EmptyStepName);
     }
     if name.chars().count() > MAX_NAME_LENGTH {
-        return Err(Error::NameTooLong {
+        return Err(Error::StepNameTooLong {
             max: MAX_NAME_LENGTH,
             actual: name.chars().count(),
         });
@@ -31,11 +27,11 @@ mod tests {
         let cases = vec![
             ("こね".to_string(), Ok(())),
             ("a".repeat(MAX_NAME_LENGTH), Ok(())),
-            ("".to_string(), Err(Error::EmptyName)),
-            ("   ".to_string(), Err(Error::EmptyName)),
+            ("".to_string(), Err(Error::EmptyStepName)),
+            ("   ".to_string(), Err(Error::EmptyStepName)),
             (
                 "a".repeat(MAX_NAME_LENGTH + 1),
-                Err(Error::NameTooLong {
+                Err(Error::StepNameTooLong {
                     max: MAX_NAME_LENGTH,
                     actual: MAX_NAME_LENGTH + 1,
                 }),

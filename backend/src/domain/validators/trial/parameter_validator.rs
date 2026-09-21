@@ -1,13 +1,7 @@
 //! Parameter の内容検証
 
+use crate::domain::errors::trial_error::Error;
 use crate::domain::models::parameter::{DurationValue, ParameterContent, ParameterValue};
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Error {
-    NegativeDurationValue,
-    EmptyQuantityUnit,
-    NonPositiveQuantityAmount,
-}
 
 /// - Duration/TimeMarker の DurationValue は非負であること
 /// - KeyValue の Quantity は unit が空文字でないこと、amount が正の値であること

@@ -2,23 +2,12 @@ use crate::domain::models::project::ProjectId;
 use crate::domain::models::trial::Trial;
 use crate::domain::validators::trial::trial_name_validator;
 
-pub use trial_name_validator::Error as TrialNameError;
+pub use crate::domain::errors::trial_error::Error;
 
 pub struct Command {
     pub project_id: ProjectId,
     pub name: Option<String>,
     pub memo: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Error {
-    InvalidTrialName(TrialNameError),
-}
-
-impl From<trial_name_validator::Error> for Error {
-    fn from(e: trial_name_validator::Error) -> Self {
-        Error::InvalidTrialName(e)
-    }
 }
 
 pub fn validate(command: &Command) -> Result<(), Error> {
@@ -95,10 +84,7 @@ mod tests {
             memo: None,
         };
 
-        assert_eq!(
-            run(command),
-            Err(Error::InvalidTrialName(TrialNameError::EmptyName))
-        );
+        assert_eq!(run(command), Err(Error::EmptyTrialName));
     }
 
     #[test]
@@ -111,10 +97,10 @@ mod tests {
 
         assert_eq!(
             run(command),
-            Err(Error::InvalidTrialName(TrialNameError::NameTooLong {
+            Err(Error::TrialNameTooLong {
                 max: 100,
                 actual: 101,
-            }))
+            })
         );
     }
 }

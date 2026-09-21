@@ -1,11 +1,7 @@
 //! ParameterContent のバリアント一致検証
 
+use crate::domain::errors::trial_error::Error;
 use crate::domain::models::parameter::{ParameterContent, ParameterValue};
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Error {
-    VariantMismatch,
-}
 
 /// 同じ ParameterValue バリアント（Text/Quantity）かどうかを判定する（内部の値は問わない）
 fn same_value_variant(a: &ParameterValue, b: &ParameterValue) -> bool {
@@ -42,7 +38,7 @@ pub fn require_same_variant(
     if same_variant(existing, new) {
         Ok(())
     } else {
-        Err(Error::VariantMismatch)
+        Err(Error::ParameterContentTypeMismatch)
     }
 }
 
@@ -105,7 +101,10 @@ mod tests {
             },
         };
 
-        assert_eq!(require_same_variant(&a, &b), Err(Error::VariantMismatch));
+        assert_eq!(
+            require_same_variant(&a, &b),
+            Err(Error::ParameterContentTypeMismatch)
+        );
     }
 
     #[test]
@@ -130,7 +129,10 @@ mod tests {
             note: "一次発酵".to_string(),
         };
 
-        assert_eq!(require_same_variant(&a, &b), Err(Error::VariantMismatch));
+        assert_eq!(
+            require_same_variant(&a, &b),
+            Err(Error::ParameterContentTypeMismatch)
+        );
     }
 
     #[test]
@@ -144,6 +146,9 @@ mod tests {
             note: "焼成開始から".to_string(),
         };
 
-        assert_eq!(require_same_variant(&a, &b), Err(Error::VariantMismatch));
+        assert_eq!(
+            require_same_variant(&a, &b),
+            Err(Error::ParameterContentTypeMismatch)
+        );
     }
 }

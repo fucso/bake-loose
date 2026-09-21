@@ -39,10 +39,13 @@ backend/src/domain/
 │   ├── project/
 │   ├── trial/
 │   └── ...
-└── validators/      # ドメインオブジェクト別のバリデーター
-    ├── project/
-    ├── trial/
-    └── ...
+├── validators/      # ドメインオブジェクト別のバリデーター
+│   ├── project/
+│   ├── trial/
+│   └── ...
+└── errors/          # ドメイン単位のエラーを一元管理
+    ├── trial_error.rs
+    └── ...          # 新規ドメインを追加する際は {domain}_error.rs を追加する
 ```
 
 ## モデル定義
@@ -106,24 +109,42 @@ let step = Step::new(trial_id, ...);  // trial_id がまだ存在しない
 let trial = Trial::new(...);
 ```
 
-## バリデーター定義
+## ドメインエラーの一元管理
 
-ドメイン的に意味のあるバリデーションロジックは `validators/` に切り出す。ドメインオブジェクト単位でサブディレクトリを作り、条件の種類ごとにファイルを分ける。
+**ドメインエラーはドメイン単位で `domain/errors/{domain}_error.rs` に一元管理する。**
+Validator はこの domain error を直接返し、Action は `validator::func()?` の形でそのまま
+伝播させる。Action 個別の `impl From<validator::Error> for Error` によるマッピングは行わない。
 
-**切り出す基準**: ドメインモデルの状態に関わるチェック（ステータス、存在確認など）が対象。入力値の形式チェック（文字数、空文字など）はアクション固有の関心事であり、バリデーターとして切り出さないこともある。
-
-**設計思想**:
-- バリデーターは「条件チェックのロジックとそのエラー型」を所有する
-- アクションの Error enum は「このアクションが返しうるエラーの集約」であり、アクションの責務
-- 外部（use case、presentation）はアクションの Error のみを意識し、バリデーターの存在を知らない
+**なぜ一元管理するのか**: 同じドメインレイヤーで発生するエラーを Action ごとに個別の Error 型へ
+都度マッピングするのは冗長であり、Action を追加するたびに同じ形の `impl From` が積み重なる。
+1つのドメインに対して1つの Error 型を持たせることで、この変換コードを撤廃できる。
 
 ```rust
-// src/domain/validators/trial/trial_status_validator.rs
+// src/domain/errors/trial_error.rs
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
     TrialAlreadyCompleted,
+    StepNotFound,
+    StepAlreadyCompleted,
+    ParameterNotFound,
+    ParameterContentTypeMismatch,
+    EmptyStepName,
+    StepNameTooLong { max: usize, actual: usize },
+    EmptyTrialName,
+    TrialNameTooLong { max: usize, actual: usize },
+    NegativeDurationValue,
+    EmptyQuantityUnit,
+    NonPositiveQuantityAmount,
 }
+```
+
+**Validator は domain error を直接返す**（バリデーター固有の Error 型は定義しない）:
+
+```rust
+// src/domain/validators/trial/trial_status_validator.rs
+
+use crate::domain::errors::trial_error::Error;
 
 pub fn require_in_progress(trial: &Trial) -> Result<(), Error> {
     if trial.status() == &TrialStatus::Completed {
@@ -133,61 +154,45 @@ pub fn require_in_progress(trial: &Trial) -> Result<(), Error> {
 }
 ```
 
-**アクションからの使用パターン**:
-
-バリデーターが1つだけの場合、アクションの Error を `pub use` で再エクスポートする:
+**Action は `pub use` で domain error を再エクスポートし、そのまま `?` で伝播させる**
+（Validator が複数あっても Action 固有の Error 型は定義しない・`.map_err` によるマッピングも行わない）:
 
 ```rust
-// ✅ 単一バリデーター: pub use で Error を再エクスポート
-pub use trial_status_validator::Error;
+// src/domain/actions/trial/add_parameter.rs
 
-pub fn validate(state: &Trial) -> Result<(), Error> {
+pub use crate::domain::errors::trial_error::Error;
+
+pub fn validate(state: &Trial, command: &Command) -> Result<(), Error> {
     trial_status_validator::require_in_progress(state)?;
+    step_existence_validator::require_exists(state, &command.step_id)?;
+    let step = state
+        .step(&command.step_id)
+        .expect("step existence already validated");
+    step_status_validator::require_in_progress(step)?;
+    parameter_validator::validate(&command.content)?;
     Ok(())
 }
 ```
 
-複数バリデーターを組み合わせる場合、アクションが独自の Error enum を定義して集約し、`.map_err` でマッピングする:
+Validator に無い判定（例: `ParameterNotFound`）は、Action の `validate()` 内で domain error を
+直接構築して返してよい:
 
 ```rust
-// ✅ 複数バリデーター: アクション固有の Error に集約
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Error {
-    TrialAlreadyCompleted,
-    StepNotFound,
-    StepAlreadyCompleted,
-}
-
-pub fn validate(state: &Trial, command: &Command) -> Result<(), Error> {
-    trial_status_validator::require_in_progress(state)
-        .map_err(|_| Error::TrialAlreadyCompleted)?;
-    step_existence_validator::require_exists(state, &command.step_id)
-        .map_err(|_| Error::StepNotFound)?;
-    let step = state
-        .steps()
-        .iter()
-        .find(|step| step.id() == &command.step_id)
-        .expect("step existence already validated");
-    step_status_validator::require_in_progress(step)
-        .map_err(|_| Error::StepAlreadyCompleted)?;
-    Ok(())
-}
+// ✅ Validator を経由しない判定も同じ domain error を返す
+let parameter = step
+    .parameter(&command.parameter_id)
+    .ok_or(Error::ParameterNotFound)?;
 ```
 
 **Validator が実態（モデル参照）を返さない**: Validator は判定結果とエラーのみを返し（`Result<(), Error>`）、
 モデルの実態が必要な場合はアクションの `validate()` 内で `state` から取得する。
 Validator が実態まで返すと、Validator の責務が「条件チェック」を超えて「データ取得」まで広がってしまう。
 
-アクション Error のネストした型（`InvalidParameter` の reason 等）も同様に `pub use` で参照する:
-
-```rust
-// ✅ ネストした Error 型も pub use で参照
-pub use parameter_validator::Error as ParameterValidationError;
-
-pub enum Error {
-    InvalidParameter { parameter_index: usize, reason: ParameterValidationError },
-}
-```
+**presentation 層でのフォールバック**: Action の Error は同じドメイン内の全 Action で共有される
+ため、型としては特定の Action が実際には返し得ない variant も存在する（`match` の網羅性チェック上）。
+GraphQL エラー変換では、実際に発生しうる variant を明示的にハンドリングした上で、残りは
+内部エラーへ倒すフォールバックの `match` アームを用意する（実例は `presentation/graphql/error/trial.rs`
+の `unexpected_domain_error`）。
 
 **テスト方針**:
 - バリデーター側: 条件ごとの詳細なテスト（境界値、各パターン）
@@ -195,7 +200,9 @@ pub enum Error {
 
 ## アクション定義
 
-validate / execute 分離パターンを採用:
+validate / execute 分離パターンを採用する。以下は validate/execute/run の分離構造を示す例であり、
+`Error` は本来「ドメインエラーの一元管理」節の通り `domain/errors/{domain}_error.rs` から
+`pub use` するもの（Action がその場で独自定義するものではない）:
 
 ```rust
 // src/domain/actions/project/update_project_name.rs
@@ -334,4 +341,6 @@ pub fn execute(mut state: Project, command: Command) -> Project {
 - [ ] アクションは単一責務（密接な関係のエンティティのみ同時操作）
 - [ ] 他のアクションと同じロジックを重複実装していない
 - [ ] ドメインモデルの状態に関わる共通バリデーションは `validators/` に切り出している
-- [ ] バリデーターの Error 型をアクション外部に直接露出していない（アクションの Error に集約）
+- [ ] ドメインエラーは `domain/errors/{domain}_error.rs` に一元管理されている
+- [ ] Validator は `domain/errors/{domain}_error.rs` の Error を直接返している（バリデーター固有の Error 型を定義していない）
+- [ ] Action は Validator の Error を `impl From` で個別マッピングせず、`pub use` での再エクスポート + `?` によるそのままの伝播になっている
