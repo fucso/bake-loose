@@ -108,3 +108,670 @@ insights:
       - pr: 55
         comment_url: "https://github.com/fucso/bake-loose/pull/55#discussion_r3729773631"
         summary: "urql モックファイルを frontend/test/mocks/urql.ts に配置するよう指摘"
+
+  - id: "insight-005"
+    category: "design"
+    severity: "INFO"
+    title: "マイグレーションへの複数指摘は1つの新規ファイルにまとめて対応する"
+    guideline: |
+      既存の適用済みマイグレーションに対する複数の指摘（列制約の追加・変更など）が同時に出た場合、
+      指摘ごとに複数の新規マイグレーションファイルを作ることは避け、1つの新規マイグレーションファイルに
+      まとめて全ての指摘を反映する。既存の適用済みマイグレーションファイル自体は編集しない。
+    anti_pattern: |
+      同じレビューラウンドで出た複数のマイグレーション指摘に対して、指摘ごとに個別の
+      新規マイグレーションファイルを分けて作成する。
+    good_pattern: |
+      同じレビューラウンドで出た複数のマイグレーション指摘を1つの新規マイグレーションファイル
+      （例: alter_steps_position_and_trials_project_fk_constraints.sql）にまとめて反映する。
+    scope:
+      - "backend/migrations/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-09-21"
+    added_from_pr: 42
+    evidence:
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#issuecomment-5306403180"
+        summary: "直前のレビューであったマイグレーションへの指摘は新しいマイグレーションファイルを1つ追加して両方とも対応してほしいという指摘"
+
+  - id: "insight-006"
+    category: "design"
+    severity: "INFO"
+    title: "ドメイン上の想定件数に対して過剰なサイズの整数型を使わない"
+    guideline: |
+      フィールドが取り得る値の範囲がドメイン上明確に小さいと想定される場合（例: 1 Trialあたりの
+      Stepはせいぜい数十〜100程度）、i32のような過剰に大きい整数型をデフォルトで採用せず、
+      想定される値の範囲に見合った適切なサイズの型を検討する。
+    anti_pattern: |
+      ステップの位置(position)のように現実的な上限が小さいフィールドに、根拠なく i32 を使用する。
+    good_pattern: |
+      フィールドの想定範囲を踏まえ、i16 や u8 など範囲に見合った型を選択する（あるいは選定理由を明記する）。
+    scope:
+      - "backend/src/domain/models/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-09-21"
+    added_from_pr: 42
+    evidence:
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3699019299"
+        summary: "ステップはせいぜい100程度を想定しているので i32 は過剰という指摘"
+
+  - id: "insight-007"
+    category: "design"
+    severity: "WARNING"
+    title: "日時関連の実装は日本語圏利用を前提としJSTに統一する"
+    guideline: |
+      このプロダクトは日本語圏での利用を想定しているため、日時（タイムゾーン）関連の実装は
+      UTCなど他のタイムゾーンではなくJSTに統一する。
+    anti_pattern: |
+      日時をUTCやシステムのデフォルトタイムゾーンのまま扱い、JSTへの統一を行わない。
+    good_pattern: |
+      日時を扱うドメインモデル・アクションはJST（Asia/Tokyo, +09:00）に統一して扱う。
+    scope:
+      - "backend/src/domain/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-09-21"
+    added_from_pr: 42
+    evidence:
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3699021968"
+        summary: "日本語圏での利用を想定しているのでタイムゾーンはJSTに統一してほしいという指摘"
+
+  - id: "insight-008"
+    category: "design"
+    severity: "WARNING"
+    title: "外部ライブラリの日時型は専用ラッパー型でカプセル化し利用箇所を限定する"
+    guideline: |
+      chrono の DateTime<FixedOffset> のような外部ライブラリの型をコードベース全体に直接
+      露出させず、その型をラップした専用のドメインモデル（例: timezone.rs のJST用モデル）を用意し、
+      その型を経由してのみ日時を扱えるようにする。ラップ元の型（DateTime<FixedOffset>等）を扱う
+      関数はラッパーの実装モジュール内に限定する。
+    anti_pattern: |
+      DateTime<FixedOffset> を返す関数を用意し、呼び出し側の各所で DateTime<FixedOffset> を
+      直接扱わせる。
+    good_pattern: |
+      timezone.rs にDateTime<FixedOffset>をラップした専用モデル型とそれを操作する関数のみを定義し、
+      timezone.rs 以外のコードは DateTime<FixedOffset> を直接扱わずラッパー型のみを利用する。
+    scope:
+      - "backend/src/domain/models/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-09-21"
+    added_from_pr: 42
+    evidence:
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3700665492"
+        summary: "DateTime<FixedOffset>を直接利用しなくていい構成にし、timezone.rs以外から利用しないようにしたいという指摘"
+
+  - id: "insight-009"
+    category: "design"
+    severity: "WARNING"
+    title: "Validatorは判定結果とdomain errorのみを返し、Actionはそのまま伝播する"
+    guideline: |
+      Validatorはエンティティの実体ではなく判定結果（成否）とdomain errorのみを返す。
+      実体（モデル）の取得が必要な場合はValidator内ではなくAction側のバリデーションステップで行う。
+      Actionは、特別な意味を付与する場合を除き、Validatorが返したdomain errorを
+      `validator::func()?` の形でそのまま呼び出し元に伝播させる（呼び出し側で作り直さない）。
+      同一の判定ロジック（型の一致判定など）が複数箇所に実装される場合はValidatorとして外だしする。
+      domain layerで発生し得るエラーは `backend/src/domain/errors/{domain}_error.rs` に
+      一元管理し、Validatorはこのdomain errorを返す。
+    anti_pattern: |
+      Validatorがエンティティの実体まで返す。Actionがdomain errorを別のエラー型に手動で
+      マッピングし直す（横流しで済む場合）。同じ型一致判定ロジックが複数のActionに
+      個別に実装される。
+    good_pattern: |
+      Validatorは判定結果とdomain error（`domain/errors/{domain}_error.rs` で定義）のみを返し、
+      必要な実体取得はAction側のバリデーションステップで行う。Actionは
+      `trial_status_validator::require_in_progress(state)?;` のようにdomain errorを
+      そのまま伝播する。
+    scope:
+      - "backend/src/domain/actions/**"
+      - "backend/src/domain/validators/**"
+      - "backend/src/domain/errors/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-09-21"
+    added_from_pr: 42
+    evidence:
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3730084534"
+        summary: "特別な意味を付与する場合以外はvalidatorが出したエラーを横流しするようにという指摘"
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3754380800"
+        summary: "domain error領域を新設し、Validatorはdomain errorを返しActionはそのまま返す設計ルールを導入し全domain actionへ適用するissueを立ててほしいという指摘"
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3754454233"
+        summary: "Validatorが実体まで返すのは違和感があり、判定結果とエラーのみを返すべきという指摘"
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3755263484"
+        summary: "same_variantメソッドと判定ロジックをvalidatorとして外だししてほしいという指摘"
+
+  - id: "insight-010"
+    category: "design"
+    severity: "WARNING"
+    title: "複数の責務を持つdomain actionは責務ごとに分割し、他actionの責務と重複させない"
+    guideline: |
+      1つのdomain actionが複数の責務（例: 更新+パラメーター追加+パラメーター削除）を持つ場合は、
+      責務ごとに別々のactionへ分割する（例: update_step, add_parameter, remove_parameter）。
+      分割にあたっては、既に別のactionでカバーされている処理をスコープに含めず重複させない。
+      domain actionを分割した場合はuse_case・presentation層も同様に分割する。
+    anti_pattern: |
+      1つのactionが更新・追加・削除など複数の責務を持ったまま実装される。
+      add_step のスコープに、別途 add_parameter action が担うパラメーター設定処理まで含める。
+    good_pattern: |
+      update_step, add_parameter, remove_parameter のように責務ごとにactionを分割し、
+      対応するuse_case・presentation層も同様に分割する。add_step のスコープはパラメーター
+      未設定のstep追加までに限定する。
+    scope:
+      - "backend/src/domain/actions/**"
+      - "backend/src/use_case/**"
+      - "backend/src/presentation/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-09-21"
+    added_from_pr: 42
+    evidence:
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3730221471"
+        summary: "actionが複雑になっているのでupdate_step, add_parameter, remove_parameterに分割してほしいという指摘"
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3754418546"
+        summary: "add_parameter actionが別に存在するのでadd_stepのスコープはパラメーター未設定のstep追加まででよいという指摘"
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3791113202"
+        summary: "use_caseもdomain actionに合わせてstep更新・parameter追加・parameter削除の3つに分割し、presentation層も同様にという指摘"
+
+  - id: "insight-011"
+    category: "design"
+    severity: "INFO"
+    title: "重複するルックアップ・検証ロジックはモデル・共通メソッドとして共通化する"
+    guideline: |
+      複数箇所で同じロジックが重複実装される場合は、共通のメソッドとして共通化する。
+      例えば、Trialからidを指定してStepを取得する処理は `Trial::step(&self, id: &StepId) -> Option<&Step>`
+      のようにモデルのメソッドとして実装し、Stepからparameterを取得する処理も同様にする。
+      is_nan や範囲チェック（x <= 0.0 等）のような検証ロジックが複数箇所に重複する場合も
+      共有メソッドとしてまとめる。
+    anti_pattern: |
+      idからのStep/Parameter取得処理や、is_nan・範囲チェックのような検証ロジックを
+      複数のaction/validatorに個別に重複実装する。
+    good_pattern: |
+      Trial::step() / Step::parameter() のようなモデルのアクセサメソッド、あるいは
+      共通の検証ヘルパーメソッドとして一箇所にまとめ、各actionはそれを呼び出す。
+    scope:
+      - "backend/src/domain/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-09-21"
+    added_from_pr: 42
+    evidence:
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3755172153"
+        summary: "trialからidのstepを取得する処理をTrialモデルのメソッドとして共通化し、stepからparameterを取得する処理も同様にという指摘"
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r4038960465"
+        summary: "is_nanとx<=0.0のチェックが複数箇所で重複しているのでメソッドとしてまとめてほしいという指摘"
+
+  - id: "insight-012"
+    category: "design"
+    severity: "CRITICAL"
+    title: "presentation層からdomain層への直接参照を行わない"
+    guideline: |
+      presentation層はdomain層を一切参照しない。use_caseの引数としてdomainのcommand struct
+      を利用すると、それを構築するためにpresentation層がdomain層に依存してしまう原因になるため、
+      domain action command の作成やそれに向けた値の加工はuse_case層が担当する。
+      presentation層からuse_case層への値の受け渡しはフラットなインデックス引数で行う
+      （配列やオブジェクト形式が前提のparameter等を無理にフラット化する必要はない）。
+    anti_pattern: |
+      presentation層のリゾルバーがdomain層のcommand structを直接importして構築し、
+      use_caseにそのまま渡す。
+    good_pattern: |
+      presentation層はuse_caseにフラットな引数（あるいは自然にオブジェクトである入力はその形）を渡し、
+      domainのcommand構築や値の加工はuse_case層の内部で行う。
+    scope:
+      - "backend/src/presentation/**"
+      - "backend/src/use_case/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-09-21"
+    added_from_pr: 42
+    evidence:
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3776372572"
+        summary: "presentationレイヤーからdomainレイヤーへの参照は一切行わず、use_caseの引数はフラットなインデックス引数で渡すべきという指摘"
+
+  - id: "insight-013"
+    category: "style"
+    severity: "INFO"
+    title: "エラー変換の実装ファイルはモデル（ドメイン）ごとに分割する"
+    guideline: |
+      presentation層のエラー変換など、1つのファイルに全モデルのエラーハンドリングを
+      まとめて実装するとファイルが肥大化するため、モデルごとにファイルを分割する。
+    anti_pattern: |
+      `presentation/graphql/error.rs` のような1ファイルに全モデルのエラー変換ロジックを詰め込む。
+    good_pattern: |
+      backend/src/presentation/graphql/error/ 配下に common.rs, project.rs, trial.rs のように
+      モデルごとにファイルを分割する。
+    scope:
+      - "backend/src/presentation/graphql/error/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-09-21"
+    added_from_pr: 42
+    evidence:
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3776453948"
+        summary: "1つのファイルで全エラーを管理するのが辛くなってきているのでモデルごとに分割してほしいという指摘"
+
+  - id: "insight-014"
+    category: "design"
+    severity: "INFO"
+    title: "presentation層で重複する共通処理はcommon.rsに集約し、メッセージも統一する"
+    guideline: |
+      UUIDのパース処理のような、複数のpresentation層リゾルバー（trial query, project presentation等）
+      で共通して必要になる処理は `presentation/common.rs` のような共通モジュールに実装し、
+      重複実装を避ける。エラーメッセージも一律の文言に統一する（例: "Invalid UUID format"）。
+    anti_pattern: |
+      同じUUIDパース処理を各mutation/queryのリゾルバーに個別に実装し、エラーメッセージの
+      文言も箇所ごとにばらつく。
+    good_pattern: |
+      `presentation/common.rs` に共通処理を実装し、全リゾルバーがそこを呼び出す。
+      エラーメッセージは "Invalid UUID format" のように統一する。
+    scope:
+      - "backend/src/presentation/graphql/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-09-21"
+    added_from_pr: 42
+    evidence:
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3791149039"
+        summary: "trial queryやproject presentationでも共通している処理をpresentation/common.rsに切り出し、メッセージも統一してほしいという指摘"
+
+  - id: "insight-015"
+    category: "performance"
+    severity: "WARNING"
+    title: "書き込みを伴わない読み取りはトランザクション開始前に実行し保持時間を最小化する"
+    guideline: |
+      書き込みユースケースでは、トランザクションの保持時間を最小化するため、処理順序を
+      「データ取得（書き込みを伴わない読み取り） → ドメインアクション実行 → トランザクション開始
+      → save → コミット」に統一する。トランザクション開始 → データ取得 → アクション実行 → save
+      → コミット、のように実際には書き込みを行わない取得までトランザクション内で行わない。
+    anti_pattern: |
+      書き込みを伴わないfind_by_idなどの取得処理をトランザクション開始後に実行し、
+      不要にトランザクションを長く保持する。
+    good_pattern: |
+      データ取得 → ドメインアクション実行 → トランザクション開始 → save → コミット、
+      の順で実装し、全ての書き込みユースケースでこの順序に統一する。
+    scope:
+      - "backend/src/use_case/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-09-21"
+    added_from_pr: 42
+    evidence:
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3791102504"
+        summary: "書き込みの発生しないtrialの取得はトランザクションオープン前に実行してほしいという指摘"
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3791339645"
+        summary: "書き込みの発生しないtrialの取得はトランザクションのオープン前に実行し、すべてのユースケースで同様の対応をという指摘"
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r4056949341"
+        summary: "実際に書き込むのはsaveのみなのでトランザクションの処理順序をデータ取得→アクション実行→トランザクション開始→save→コミットに統一してほしいという指摘"
+
+  - id: "insight-016"
+    category: "design"
+    severity: "INFO"
+    title: "opaqueなJSONコンテンツを返すGraphQLオブジェクトには種別を示すフィールドも公開する"
+    guideline: |
+      GraphQLオブジェクトが `content` のようなJSONスカラーとして不透明な内容を返す場合、
+      フロントエンドがそのオブジェクト形式から種別（parameter typeなど）を推測する負荷を避けるため、
+      種別を示す明示的なフィールドもGraphQLオブジェクトのフィールドとして公開する。
+    anti_pattern: |
+      parameter typeをcontentのJSON形式からフロントエンドに推測させる。
+    good_pattern: |
+      content フィールドに加えて parameter type を独立したフィールドとしてGraphQLオブジェクトに公開する。
+    scope:
+      - "backend/src/presentation/graphql/types/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-09-21"
+    added_from_pr: 42
+    evidence:
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r4039096364"
+        summary: "contentのオブジェクト形式からparameter typeを特定するのは負荷が大きいのでフィールドとして返してほしいという指摘"
+
+  - id: "insight-017"
+    category: "style"
+    severity: "INFO"
+    title: "find_by_id後のエラーハンドリングの記載パターンをファイル間で統一する"
+    guideline: |
+      use_case内でリポジトリの find_by_id を呼んだ後、結果を変数にセットして後続処理を行う
+      実装パターンは、プロジェクト内の他のuse_caseファイルと記載方法を統一する。
+    anti_pattern: |
+      find_by_id後のエラーハンドリング・結果の取り出し方がuse_caseファイルごとに異なる書き方になる。
+    good_pattern: |
+      既存の統一された実装パターンに合わせて find_by_id 後の処理を記述する。
+    scope:
+      - "backend/src/use_case/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-09-21"
+    added_from_pr: 42
+    evidence:
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r4039274349"
+        summary: "find_by_id後のエラーハンドリングの記載方法がファイルごとにブレがあるので統一してほしいという指摘"
+
+  - id: "insight-018"
+    category: "style"
+    severity: "INFO"
+    title: "スキーマ命名規則のprefix/suffixは曖昧な言葉でなくコード上の定数として明文化する"
+    guideline: |
+      DBスキーマ（テーブル名・制約名等）で使用するprefix/suffixは「よく使われる」といった曖昧な
+      定義に頼らず、プロジェクトのルールとして明文化する。Rustアプリケーション側では
+      `backend/src/repository/naming_conventions.rs` に定数として定義する。
+    anti_pattern: |
+      制約名などのprefix/suffixを「よく使われる形式」という曖昧な認識のみに依存してコード内に
+      ハードコードする。
+    good_pattern: |
+      `backend/src/repository/naming_conventions.rs` にprefix/suffixを定数として定義し、
+      それを参照する。
+    scope:
+      - "backend/src/repository/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-09-21"
+    added_from_pr: 42
+    evidence:
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r4057146201"
+        summary: "よく使われるという曖昧な定義でなくスキーマ命名ルールとしてprefix/suffixを定めたい、rust側はnaming_conventions.rsに定数化してほしいという指摘"
+
+  - id: "insight-019"
+    category: "style"
+    severity: "WARNING"
+    title: "コードコメントは自明・文脈依存の内容を避け、恒久的な知見はrulesに記載する"
+    guideline: |
+      enum名やフィールド名から内容が推測可能な場合や、変数名を単に日本語訳して情報を付け加えた
+      だけのコメントは記載しない。「presentation層は〜」のような以前のレビュー・実装文脈に依存する
+      コメント（後から見返すと文脈が失われて誤解を招く）や、「（書き込みを伴わないためトランザクション
+      開始前に行う）」のような実装判断の経緯を説明するだけのコメントも記載しない。フローを説明する
+      コメント（例: 「// 1. Trial取得」）を記載する場合は、他のuse_caseファイルの既存コメントの
+      書き方と統一する。今後同じ間違いが想定されるなど、恒久的に残すべき知見がある場合はコードコメント
+      ではなく `.claude/rules/` に記載する。
+    anti_pattern: |
+      コードから自明な内容や、過去のレビュー指摘・実装変更の経緯に依存した内容をコードコメントとして
+      残す。ファイルによってフロー説明コメントの書き方がばらつく。
+    good_pattern: |
+      自明な内容や文脈依存のコメントは書かない。フロー説明コメントは既存ファイルの書き方に統一する。
+      恒久的な知見は `.claude/rules/` に記載する。
+    scope:
+      - "backend/src/**/*.rs"
+    status: active
+    frequency: 1
+    last_seen: "2026-09-21"
+    added_from_pr: 42
+    evidence:
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3791083522"
+        summary: "文脈依存で意味が変わってしまうコメントや自明なコメントは不要なので他ファイルでも見直してほしいという指摘"
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3791334297"
+        summary: "前回のレビュー指摘に依存したコメントになっているので削除してほしいという指摘"
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3791340784"
+        summary: "書き込みを伴わないためトランザクション開始前に行う、というコメントは不要という指摘"
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3791341953"
+        summary: "フローを説明するコメントは他のユースケースに合わせて記載してほしいという指摘"
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r4057084336"
+        summary: "このコメントは記載せず、知見を残す必要があるならrulesに記載してほしいという指摘"
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r4057239519"
+        summary: "enum名・フィールド名から推測可能なコメントは不要で、他にも変数名の日本語訳的なコメントがあれば削除してほしいという指摘"
+
+  - id: "insight-020"
+    category: "style"
+    severity: "WARNING"
+    title: "rulesドキュメントには実装依存の状態情報を書かず普遍的なルールのみ記載する"
+    guideline: |
+      `.claude/rules/` 配下のドキュメントには、実装によって変化しうる状態（現在のファイル名・
+      現在の実装の詳細など）に当たる情報を書かない。rulesにはコードの実装状況に依存しない
+      普遍的なルールのみを記載する。
+    anti_pattern: |
+      現在の実装の具体的な状態（今後変わりうる情報）をrulesドキュメントに書いてしまい、
+      実装が変わった際にrulesが実態と食い違う。
+    good_pattern: |
+      rulesドキュメントには実装の変化に影響されない普遍的なルール・方針のみを記載する。
+    scope:
+      - ".claude/rules/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-09-21"
+    added_from_pr: 42
+    evidence:
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r4057231128"
+        summary: "rulesに実装によって変化する状態にあたる情報を書かず、普遍的なルールのみを記載してほしいという指摘"
+
+  - id: "insight-021"
+    category: "testing"
+    severity: "INFO"
+    title: "実質的に何も検証していない、または過度に緻密なテストは書かない"
+    guideline: |
+      テストは実際に意味のある検証になっているか確認する。例えば元々パラメーター0件のstepに対して
+      removeを実行するテストでは、removeが実際に動作したかどうかの判断がつかない
+      （0件のままなのか動作していないのか区別できない）。このようなテストは、パラメーター追加→
+      対象外のパラメーターをremove→件数変化なしを確認→対象のパラメーターをremove→件数減少を確認、
+      のように意味のある検証になるよう見直す。検証として意味を持たないテストケースは削除し、
+      過度に緻密すぎるテストケースも不要であれば削除する。
+    anti_pattern: |
+      初期状態が0件のコレクションに対してremoveを実行し、結果が0件のままであることのみを確認する
+      （removeが実際に動作したのか判断できない）テストを書く。あるいは実質的な意味を持たない
+      過度に細かいテストケースを追加する。
+    good_pattern: |
+      1. 対象Aを追加 → 2. 対象外(None)をremove → 3. 件数=1であることを確認（remove不発を確認）
+      → 4. 対象Aをremove → 5. 件数=0であることを確認、のように実際の動作差分を検証できる
+      テストにする。
+    scope:
+      - "backend/src/domain/**/*.rs"
+      - "backend/tests/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-09-21"
+    added_from_pr: 42
+    evidence:
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3699066039"
+        summary: "0件のstepへのremoveでは動作判断がつかないため意味のあるテストケースに修正してほしいという指摘"
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3699081356"
+        summary: "テストとして意味がないので削除でいいという指摘"
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3755204212"
+        summary: "これらのテストは緻密すぎるので不要という指摘"
+
+  - id: "insight-022"
+    category: "testing"
+    severity: "INFO"
+    title: "処理しないことの検証は専用テストを作らず基本ケースに含める"
+    guideline: |
+      「処理されないこと」（例: パラメーターが設定されないこと）を確認する検証は、
+      基本的に一番ベーシックなケースをテストする既存のテストケースの中に含めて一緒に確認する。
+      そのためだけの別のテストケースを新設しない。
+    anti_pattern: |
+      「〜されないこと」を確認するためだけの専用テストケースを、基本ケースのテストとは別に追加する。
+    good_pattern: |
+      一番ベーシックなケースをテストする既存のテスト（例: test_run_appends_step_with_position_zero_for_first_step）
+      内に、処理されないことの確認も含める。
+    scope:
+      - "backend/tests/**"
+      - "backend/src/domain/actions/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-09-21"
+    added_from_pr: 42
+    evidence:
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3755199824"
+        summary: "処理しないことのチェックは一番ベーシックなケースの中で一緒にチェックしてほしいという指摘"
+
+  - id: "insight-023"
+    category: "testing"
+    severity: "INFO"
+    title: "同じparameter contextの種類・value typeのテストはまとめる"
+    guideline: |
+      パラメーターのテストにおいて、同じparameter contextの種類、value typeのものは
+      個別のテストケースに分散させず1つのテストにまとめる。
+    anti_pattern: |
+      同じparameter context種類・value typeの組み合わせに対するテストが複数のテストケースに
+      分散している。
+    good_pattern: |
+      同じparameter context種類・value typeのケースは1つのテスト関数にまとめて検証する。
+    scope:
+      - "backend/src/domain/validators/trial/parameter_validator.rs"
+      - "backend/tests/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-09-21"
+    added_from_pr: 42
+    evidence:
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3730151508"
+        summary: "同じparameter contextの種類、value typeのものはパラメーターテストにまとめてほしいという指摘"
+
+  - id: "insight-024"
+    category: "style"
+    severity: "INFO"
+    title: "パラメータ化テストの入力/期待値変数の命名をinput_/after_で統一する"
+    guideline: |
+      パラメータ化テストの引数（テストケースのフィールド）は、入力値を `input_{field}`、
+      実行後の期待値を `after_{field}` の形式で命名する。
+    anti_pattern: |
+      パラメータ化テストの入力・期待値のフィールド名がテストケースごとに命名規則がばらつく。
+    good_pattern: |
+      `input_name`, `input_memo`, `after_name`, `after_memo` のようにinput_/after_プレフィックスで
+      統一する。
+    scope:
+      - "backend/tests/**"
+      - "backend/src/**/*.rs"
+    status: active
+    frequency: 1
+    last_seen: "2026-09-21"
+    added_from_pr: 42
+    evidence:
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3730173518"
+        summary: "[input_name, input_memo, after_name, after_memo]のパラメーター命名にしてほしいという指摘"
+
+  - id: "insight-025"
+    category: "testing"
+    severity: "INFO"
+    title: "階層データのGraphQL取得テストは部分取得と完全取得の両パターンを用意する"
+    guideline: |
+      Trial→Step→Parameterのような階層構造を持つデータのGraphQL取得（get/list）をテストする際は、
+      step, parameterのデータを用意した上で、(a) stepまで取得せず親データのみ取得するパターンと
+      (b) step, parameterまで取得するパターン、の両方をテストする。
+    anti_pattern: |
+      階層データを用意しても、深い階層まで含めて取得するパターンのみをテストし、
+      浅い階層（親のみ）で取得するケースを検証しない。
+    good_pattern: |
+      step, parameterのデータを用意した上で、stepを取得しないクエリと、step・parameterまで
+      取得するクエリの両方についてテストする。
+    scope:
+      - "backend/tests/graphql/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-09-21"
+    added_from_pr: 42
+    evidence:
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r4039323444"
+        summary: "step, parameterのデータを用意した上でstepを取得しないパターン、取得するパターンをテストしてほしいという指摘（get）"
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r4039341850"
+        summary: "step, parameterのデータを用意した上でstepを取得しないパターン、取得するパターンをテストしてほしいという指摘（list）"
+
+  - id: "insight-026"
+    category: "testing"
+    severity: "INFO"
+    title: "GraphQL mutationのテストファイルはmutationごとに分割し命名規則で衝突を避ける"
+    guideline: |
+      GraphQL mutationのテストは、mutationごとにファイルを分ける。ファイル名は既存の
+      リソース種別のテストファイルと名前が衝突しないよう `{resource}_{action}`
+      （例: trial_complete, step_update）の形式にする。
+    anti_pattern: |
+      複数のmutationのテストを1つのファイルにまとめて実装する。あるいは既存のリソース単位の
+      テストファイルと名前が衝突するファイル名を付ける。
+    good_pattern: |
+      trial_complete.rs, step_update.rs のようにmutationごとにファイルを分割し、
+      `{resource}_{action}` の命名規則で既存ファイルとの衝突を避ける。
+    scope:
+      - "backend/tests/graphql/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-09-21"
+    added_from_pr: 42
+    evidence:
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r4039354031"
+        summary: "mutationごとにファイルを分け、trialのテストファイルと名前が衝突しないよう命名してほしいという指摘"
+
+  - id: "insight-027"
+    category: "testing"
+    severity: "WARNING"
+    title: "時刻検証のために実装へテスト専用の時刻注入を追加しない"
+    guideline: |
+      現在時刻を検証するテスト（例: completed_atがrun実行時の現在時刻に設定されること）のために、
+      Clock traitの導入や `run_with_clock` / execute への clock 引数追加など、テストのためだけの
+      実装変更を本体コードに加えない。代わりに、テスト実行前後でタイムスタンプを取得し、
+      検証対象の値がその前後の範囲内（before < 対象 < after）にあることを確認する形でテストする。
+    anti_pattern: |
+      現在時刻をテストで厳密に検証するために、Clock traitの実装やrun_with_clock、
+      clock引数の追加など、本体の実装コードにテスト専用の仕組みを追加する。
+    good_pattern: |
+      テスト実行前後でタイムスタンプを取得し、`before < completed_at && completed_at < after` の
+      ように範囲内であることを検証する。本体コード（run/execute）はテストのための変更を含めない。
+    scope:
+      - "backend/src/domain/actions/**"
+      - "backend/tests/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-09-21"
+    added_from_pr: 42
+    evidence:
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3754410610"
+        summary: "現在時刻をモックできるようにClock traitを導入し、completed_atの検証条件を変更してほしいという指摘"
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3755251971"
+        summary: "テストのためだけの実装（run_with_clock等）を元に戻し、run前後のタイムスタンプ範囲で検証する形に変更してほしいという指摘（Clockの導入を撤回）"
+
+  - id: "insight-028"
+    category: "testing"
+    severity: "INFO"
+    title: "型・バリアントの組み合わせ判定ロジックは全パターンを網羅する"
+    guideline: |
+      値の型（バリアント）同士の一致・不一致を判定するロジック（例: ParameterValueのバリアント
+      mismatch判定）を実装する際は、判定対象となる全てのバリアントの組み合わせを網羅する。
+      一部のバリアントの組み合わせのみ実装し、他の組み合わせが判定漏れにならないようにする。
+    anti_pattern: |
+      値の一致・不一致を判定するロジックで、一部のバリアントの組み合わせ（例: Quantity と Text）が
+      mismatch判定から漏れる。
+    good_pattern: |
+      判定対象の全バリアントの組み合わせを網羅的にテスト・実装し、漏れなくmismatch/match判定を行う。
+    scope:
+      - "backend/src/domain/validators/**"
+    status: active
+    frequency: 1
+    last_seen: "2026-09-21"
+    added_from_pr: 42
+    evidence:
+      - pr: 42
+        comment_url: "https://github.com/fucso/bake-loose/pull/42#discussion_r3775968223"
+        summary: "ParameterValue::QuantityとParameterValue::Textもmismatchになるよう網羅してほしいという指摘"
