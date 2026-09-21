@@ -12,6 +12,7 @@ use crate::ports::UnitOfWork;
 
 use super::executor::PgExecutor;
 use super::project_repo::PgProjectRepository;
+use super::trial_repo::PgTrialRepository;
 
 /// PostgreSQL 用の UnitOfWork 実装
 ///
@@ -25,12 +26,10 @@ pub struct PgUnitOfWork {
 }
 
 impl PgUnitOfWork {
-    /// 新しい PgUnitOfWork を作成する
     pub fn new(pool: PgPool) -> Self {
         Self { pool, tx: None }
     }
 
-    /// 現在の Executor を取得する
     fn executor(&self) -> PgExecutor {
         match &self.tx {
             Some(tx) => PgExecutor::from_transaction(tx.clone()),
@@ -42,9 +41,14 @@ impl PgUnitOfWork {
 #[async_trait]
 impl UnitOfWork for PgUnitOfWork {
     type ProjectRepo = PgProjectRepository;
+    type TrialRepo = PgTrialRepository;
 
     fn project_repository(&mut self) -> Self::ProjectRepo {
         PgProjectRepository::new(self.executor())
+    }
+
+    fn trial_repository(&mut self) -> Self::TrialRepo {
+        PgTrialRepository::new(self.executor())
     }
 
     async fn begin(&mut self) -> Result<(), RepositoryError> {
@@ -71,7 +75,6 @@ impl UnitOfWork for PgUnitOfWork {
             message: "No transaction to commit".to_string(),
         })?;
 
-        // Arc から Transaction を取り出す
         // この時点で他にこの Arc を参照しているリポジトリはないはず
         let tx = Arc::try_unwrap(tx_arc)
             .map_err(|_| RepositoryError::Internal {
@@ -89,7 +92,6 @@ impl UnitOfWork for PgUnitOfWork {
             message: "No transaction to rollback".to_string(),
         })?;
 
-        // Arc から Transaction を取り出す
         let tx = Arc::try_unwrap(tx_arc)
             .map_err(|_| RepositoryError::Internal {
                 message: "Transaction is still in use".to_string(),

@@ -9,8 +9,26 @@ paths: backend/src/domain/**/*.rs
 ## 基本原則
 
 - **依存禁止**: 外部クレート（sqlx, axum 等）、I/O操作、永続化の詳細を知らない
-- **許可される依存**: Rust標準ライブラリ、serde（シリアライズのみ）
+- **許可される依存**: Rust標準ライブラリ、serde（シリアライズのみ）、uuid（ID の NewType 用）
 - **純粋関数**: 副作用を持たない純粋関数で構成
+
+### 例外: chrono は `domain/timezone.rs` に限り許可する
+
+日時はドメインの関心事だが Rust 標準ライブラリだけでは表現できないため、`chrono` の利用を
+**`backend/src/domain/timezone.rs` のみ** に限定して許可する。
+
+- `chrono::DateTime<FixedOffset>` / `Utc` を直接扱ってよいのは `timezone.rs` だけ
+- 他のドメインモジュール（models / actions / validators）は `timezone.rs` が公開する
+  `JstDateTime` を経由して日時を扱う
+- `timezone.rs` は chrono を包む腐敗防止層であり、ここ以外に chrono の型が漏れないようにする
+
+```rust
+// ✅ domain/models/step.rs
+use crate::domain::timezone::JstDateTime;
+
+// ❌ domain/models/step.rs
+use chrono::{DateTime, FixedOffset};
+```
 
 ## ファイル配置
 
@@ -143,13 +161,22 @@ pub enum Error {
 pub fn validate(state: &Trial, command: &Command) -> Result<(), Error> {
     trial_status_validator::require_in_progress(state)
         .map_err(|_| Error::TrialAlreadyCompleted)?;
-    let step = step_existence_validator::require_exists(state, &command.step_id)
+    step_existence_validator::require_exists(state, &command.step_id)
         .map_err(|_| Error::StepNotFound)?;
+    let step = state
+        .steps()
+        .iter()
+        .find(|step| step.id() == &command.step_id)
+        .expect("step existence already validated");
     step_status_validator::require_in_progress(step)
         .map_err(|_| Error::StepAlreadyCompleted)?;
     Ok(())
 }
 ```
+
+**Validator が実態（モデル参照）を返さない**: Validator は判定結果とエラーのみを返し（`Result<(), Error>`）、
+モデルの実態が必要な場合はアクションの `validate()` 内で `state` から取得する。
+Validator が実態まで返すと、Validator の責務が「条件チェック」を超えて「データ取得」まで広がってしまう。
 
 アクション Error のネストした型（`InvalidParameter` の reason 等）も同様に `pub use` で参照する:
 

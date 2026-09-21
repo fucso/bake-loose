@@ -54,7 +54,10 @@ pub trait ProjectRepository: Send + Sync {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RepositoryError {
     NotFound { entity: String, id: String },
+    /// 一意性制約違反（field はカラム名相当）
     Conflict { entity: String, field: String },
+    /// 他の行から参照されているため削除・更新できない（constraint は外部キー制約名）
+    StillReferenced { entity: String, constraint: String },
     Connection,
     Internal { message: String },
 }

@@ -2,9 +2,12 @@
 //!
 //! ports層で定義されたトレイトのPostgreSQL実装を提供する。
 
+pub mod error;
 pub mod executor;
 pub mod models;
+pub mod naming_conventions;
 pub mod pg_unit_of_work;
 pub mod project_repo;
+pub mod trial_repo;
 
 pub use pg_unit_of_work::PgUnitOfWork;

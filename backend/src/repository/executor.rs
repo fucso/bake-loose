@@ -14,24 +14,19 @@ use tokio::sync::Mutex;
 /// リポジトリがどちらの場合も同じインターフェースで操作できるようにする。
 #[derive(Clone)]
 pub enum PgExecutor {
-    /// pool を直接使用（読み取り専用、またはトランザクション不要な場合）
     Pool(PgPool),
-    /// トランザクションを使用（書き込み操作）
     Transaction(Arc<Mutex<Transaction<'static, Postgres>>>),
 }
 
 impl PgExecutor {
-    /// pool から PgExecutor を作成
     pub fn from_pool(pool: PgPool) -> Self {
         Self::Pool(pool)
     }
 
-    /// トランザクションから PgExecutor を作成
     pub fn from_transaction(tx: Arc<Mutex<Transaction<'static, Postgres>>>) -> Self {
         Self::Transaction(tx)
     }
 
-    /// 単一行を取得する（存在しない場合は None）
     pub async fn fetch_optional<'q, T>(
         &self,
         query: sqlx::query::QueryAs<'q, Postgres, T, sqlx::postgres::PgArguments>,
@@ -48,7 +43,6 @@ impl PgExecutor {
         }
     }
 
-    /// 複数行を取得する
     pub async fn fetch_all<'q, T>(
         &self,
         query: sqlx::query::QueryAs<'q, Postgres, T, sqlx::postgres::PgArguments>,
@@ -65,7 +59,6 @@ impl PgExecutor {
         }
     }
 
-    /// スカラー値を取得する
     pub async fn fetch_one_scalar<'q, T>(
         &self,
         query: sqlx::query::QueryScalar<'q, Postgres, T, sqlx::postgres::PgArguments>,
@@ -83,7 +76,6 @@ impl PgExecutor {
         }
     }
 
-    /// クエリを実行する（INSERT/UPDATE/DELETE）
     pub async fn execute<'q>(
         &self,
         query: sqlx::query::Query<'q, Postgres, sqlx::postgres::PgArguments>,

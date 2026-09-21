@@ -43,14 +43,37 @@ backend/src/use_case/
 // src/use_case/project/create_project.rs
 
 use crate::domain::actions::project::create_project;
+use crate::ports::error::RepositoryError;
 use crate::ports::project_repository::ProjectRepository;
 use crate::ports::unit_of_work::UnitOfWork;
+use crate::use_case::project::save_project;
 
 #[derive(Debug)]
 pub enum Error {
     Domain(create_project::Error),
     DuplicateName,
+    /// 一意制約違反など、並行操作との競合（リトライで解消し得る）
+    Conflict { entity: String, field: String },
     Infrastructure(String),
+}
+
+// save ヘルパーは `RepositoryError` を返すため、
+// `save_project(uow, &project).await?` の `?` はこの From 実装に依存する。
+// 書き込みユースケースには必ず用意すること。
+impl From<RepositoryError> for Error {
+    fn from(error: RepositoryError) -> Self {
+        match error {
+            // 事前の重複チェックとの競合ウィンドウで DB が検出した名前の重複は、
+            // ユーザーから見れば同じ「名前の重複」なので DuplicateName に寄せる
+            RepositoryError::Conflict { ref entity, ref field } if field == "name" => {
+                log::warn!("Conflict folded into DuplicateName: {}.{}", entity, field);
+                Error::DuplicateName
+            }
+            // 名前以外の一意制約違反も内部エラーではなく競合として扱う
+            RepositoryError::Conflict { entity, field } => Error::Conflict { entity, field },
+            other => Error::Infrastructure(format!("{:?}", other)),
+        }
+    }
 }
 
 pub struct Input {
@@ -58,32 +81,22 @@ pub struct Input {
 }
 
 pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Project, Error> {
-    // 1. トランザクション開始（書き込み操作を行うため）
-    uow.begin().await
-        .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
-
-    // 2. DB問い合わせが必要な検証（先に行う）
+    // 1. DB問い合わせが必要な検証（先に行う）
     if uow.project_repository().exists_by_name(&input.name).await
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))? {
-        let _ = uow.rollback().await;
         return Err(Error::DuplicateName);
     }
 
-    // 3. ドメインアクション実行
+    // 2. ドメインアクション実行
     let command = create_project::Command { name: input.name };
-    let project = match create_project::run(command) {
-        Ok(p) => p,
-        Err(e) => {
-            let _ = uow.rollback().await;
-            return Err(Error::Domain(e));
-        }
-    };
+    let project = create_project::run(command).map_err(Error::Domain)?;
 
-    // 4. 永続化
-    if let Err(e) = uow.project_repository().save(&project).await {
-        let _ = uow.rollback().await;
-        return Err(Error::Infrastructure(format!("{:?}", e)));
-    }
+    // 3. トランザクション開始（書き込み直前に開始する）
+    uow.begin().await
+        .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
+
+    // 4. 永続化（失敗時のロールバックはヘルパー側で行う）
+    save_project(uow, &project).await?;
 
     // 5. コミット
     uow.commit().await
@@ -92,6 +105,70 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Project
     Ok(project)
 }
 ```
+
+**トランザクションの保持は最小限にする**。実際に書き込むのは `save()` のみであるため、
+`begin()` はデータ取得とドメインアクションが成功した後、`save()` の直前で呼び出す。
+読み取りとドメインアクションは書き込みを伴わないためトランザクション内で実行する必要はない。
+
+`begin()` より前のエラーパスではトランザクションが開始されていないため `rollback()` は呼ばない。
+`rollback()` が必要なのは `begin()` 以降（`save()` 失敗時）のみ。
+
+**永続化は必ず集約ごとの save ヘルパー経由で行う**。
+
+| 集約 | ヘルパー | 定義場所 |
+|------|----------|----------|
+| Project | `save_project(uow, &project)` | `use_case/project.rs` |
+| Trial | `save_trial(uow, &trial)` | `use_case/trial.rs` |
+
+ヘルパーは「リポジトリの生存範囲をブロックで閉じ、失敗時に `rollback()` を呼び、
+その失敗をログに残す」までを内包する。ユースケース側に書き込み手順を展開しないこと。
+
+ヘルパーは `RepositoryError` を返すため、`save_xxx(uow, &aggregate).await?` の `?` は
+ユースケースの `impl From<RepositoryError> for Error` を経由する。この From 実装が無いと
+コンパイルが通らないため、書き込みユースケースには必ず定義する。
+外部キーを持つ集約（Trial など）では `RepositoryError::NotFound`（外部キー違反）を
+`ReferenceNotFound { entity }` に、参照先が一意に定まる場合は `ProjectNotFound` のような
+具体的な種別に振り分ける（実例は `use_case/trial/add_parameter.rs`、`use_case/trial/create_trial.rs`）。
+
+```rust
+// ❌ リポジトリの一時値が if let 文の終わりまで生存し、rollback() が必ず失敗する
+if let Err(e) = uow.project_repository().save(&project).await {
+    let _ = uow.rollback().await;  // Arc::try_unwrap が失敗し ROLLBACK が発行されない
+    return Err(Error::Infrastructure(format!("{:?}", e)));
+}
+
+// ❌ ヘルパーの中身を各ユースケースに展開する（10 箇所それぞれが元の不具合に戻り得る）
+let save_result = {
+    let repo = uow.project_repository();
+    repo.save(&project).await
+};
+if let Err(e) = save_result { ... }
+
+// ✅ ヘルパー経由。危険な形を書く余地が無い
+save_project(uow, &project).await?;
+```
+
+**なぜヘルパーに閉じ込めるのか**:
+`xxx_repository()` が返すリポジトリはトランザクションの `Arc` を clone して保持する。
+edition 2021 では `if let` のスクルーティニー式で作られた一時値は `if let` 文全体の終わりまで
+生存するため、本体で `rollback()` を呼ぶ時点でも参照が残る。その結果
+`PgUnitOfWork::rollback()` の `Arc::try_unwrap` が失敗し、明示的な `ROLLBACK` が発行されない
+（sqlx の `Transaction: Drop` による暗黙のロールバックに依存する状態になる）。
+この罠はコンパイルエラーにもならず、注意書きコメントでは必ず drift するため、
+「書けないようにする」方向で解決する。
+
+**ロールバック経路のテスト**:
+`MockUnitOfWork` は上記の `Arc::try_unwrap` 制約を再現しており、
+リポジトリが生存したまま `rollback()` を呼ぶと `Transaction is still in use` で失敗する。
+そのためテストでは「呼ばれたこと」ではなく **成功したこと** をアサートする。
+
+```rust
+assert_eq!(uow.rollback_count(), 1);
+assert_eq!(uow.rollback_success_count(), 1, "ROLLBACK が実際に発行されていない");
+assert_eq!(uow.commit_count(), 0);
+```
+
+書き込みユースケースには必ず `save()` 失敗経路のテストを用意する（代表数件では不足）。
 
 **読み取り専用のユースケース** では `begin()` は不要:
 
@@ -132,7 +209,20 @@ pub async fn execute(repo: &impl ProjectRepository, input: Input) -> Result<...>
 uow.project_repository().save(&project).await?;
 uow.commit().await?;  // トランザクションが開始されていない！
 
-// ✅ ドメインアクションに委譲、UnitOfWork経由、DB検証を先に、begin() で開始
+// ❌ 読み取り・ドメインアクションをトランザクション内で実行（無駄に保持している）
+uow.begin().await?;
+let trial = uow.trial_repository().find_by_id(&trial_id).await?;
+let trial = add_step::run(trial, command)?;
+uow.trial_repository().save(&trial).await?;
+uow.commit().await?;
+
+// ❌ begin() 前のエラーパスで rollback() を呼ぶ（トランザクションが存在しない）
+let Some(trial) = uow.trial_repository().find_by_id(&trial_id).await? else {
+    let _ = uow.rollback().await;
+    return Err(Error::NotFound);
+};
+
+// ✅ ドメインアクションに委譲、UnitOfWork経由、DB検証を先に、save() 直前に begin()
 pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<...> { ... }
 ```
 
@@ -143,5 +233,9 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<...> { 
 - [ ] UnitOfWork経由で永続化
 - [ ] DB検証はドメインアクション実行前
 - [ ] 書き込み操作では`begin()`でトランザクション開始
+- [ ] `begin()`はデータ取得・ドメインアクションの後、`save()`の直前で呼んでいる（保持は最小限）
 - [ ] 成功後に`commit()`を呼んでいる
-- [ ] エラー時は`rollback()`を呼んでいる
+- [ ] `begin()`以降のエラー時のみ`rollback()`を呼んでいる（`begin()`前は呼ばない）
+- [ ] 永続化を`save_project` / `save_trial`ヘルパー経由で行っている（`save()`を直接呼び出していない）
+- [ ] `save()`失敗経路のテストがあり、`rollback_success_count()`（呼ばれた回数ではなく成功回数）をアサートしている
+- [ ] `RepositoryError::Conflict`を畳み込むときは`entity` / `field`をログに残すか、`field`で分岐している（黙って捨てない）

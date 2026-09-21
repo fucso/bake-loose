@@ -1,7 +1,6 @@
-//! GraphQL サブモジュール
-//!
 //! GraphQL スキーマ・型・リゾルバーを提供する.
 
+pub mod common;
 pub mod context;
 pub mod error;
 pub mod mutation;

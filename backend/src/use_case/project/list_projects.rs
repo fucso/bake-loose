@@ -11,9 +11,6 @@ pub enum Error {
     Infrastructure(String),
 }
 
-/// プロジェクト一覧を取得する
-///
-/// 読み取り専用のためトランザクションは不要。
 pub async fn execute<U: UnitOfWork>(uow: &mut U) -> Result<Vec<Project>, Error> {
     uow.project_repository()
         .find_all(ProjectSort::default())

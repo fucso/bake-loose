@@ -3,12 +3,10 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// プロジェクトID
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ProjectId(pub Uuid);
 
 impl ProjectId {
-    /// 新しいプロジェクトIDを生成する
     pub fn new() -> Self {
         Self(Uuid::new_v4())
     }
@@ -36,7 +34,6 @@ impl Project {
         }
     }
 
-    /// 生データからプロジェクトを構築する
     pub fn from_raw(id: ProjectId, name: String) -> Self {
         Self { id, name }
     }
