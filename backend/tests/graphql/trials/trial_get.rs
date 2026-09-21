@@ -97,6 +97,59 @@ async fn test_returns_trial_without_steps_when_steps_not_requested(pool: PgPool)
         "../../fixtures/steps.sql"
     )
 )]
+async fn test_returns_trial_with_steps_but_without_parameters_when_parameters_not_requested(
+    pool: PgPool,
+) {
+    // Parameter が存在していても、steps 配下で問い合わせていない parameters は
+    // 返らないことを検証する（WithSteps スコープ）
+    let data = execute_graphql(
+        pool,
+        r#"{
+            trial(id: "33333333-3333-3333-3333-333333333333") {
+                id
+                steps {
+                    id
+                    name
+                    position
+                    isCompleted
+                }
+            }
+        }"#,
+    )
+    .await;
+
+    assert_eq!(
+        data,
+        json!({
+            "trial": {
+                "id": "33333333-3333-3333-3333-333333333333",
+                "steps": [
+                    {
+                        "id": "77777777-7777-7777-7777-777777777777",
+                        "name": "こね",
+                        "position": 0,
+                        "isCompleted": true
+                    },
+                    {
+                        "id": "88888888-8888-8888-8888-888888888888",
+                        "name": "一次発酵",
+                        "position": 1,
+                        "isCompleted": false
+                    }
+                ]
+            }
+        })
+    );
+}
+
+#[sqlx::test(
+    migrations = "./migrations",
+    fixtures(
+        "../../fixtures/projects.sql",
+        "../../fixtures/trials.sql",
+        "../../fixtures/steps.sql"
+    )
+)]
 async fn test_returns_trial_with_steps_and_parameters(pool: PgPool) {
     let data = execute_graphql(
         pool,

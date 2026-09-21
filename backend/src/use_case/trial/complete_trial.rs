@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::domain::actions::trial::complete_trial;
 use crate::domain::models::trial::{Trial, TrialId};
 use crate::domain::timezone::JstDateTime;
-use crate::ports::trial_repository::TrialRepository;
+use crate::ports::trial_repository::{TrialRepository, TrialScope};
 use crate::ports::{RepositoryError, UnitOfWork};
 
 use super::save_trial;
@@ -43,8 +43,13 @@ impl From<RepositoryError> for Error {
 
 pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, Error> {
     // 1. Trial を取得
+    // status/completed_at のみを変更するため Step/Parameter は不要（TrialOnly）
     let trial_id = TrialId(input.trial_id);
-    let trial = match uow.trial_repository().find_by_id(&trial_id).await {
+    let trial = match uow
+        .trial_repository()
+        .find_by_id(&trial_id, TrialScope::TrialOnly)
+        .await
+    {
         Ok(Some(trial)) => trial,
         Ok(None) => return Err(Error::NotFound),
         Err(e) => return Err(Error::Infrastructure(format!("{:?}", e))),
@@ -62,7 +67,7 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
 
     // 4. 永続化（失敗時のロールバックはヘルパー側で行う）
-    save_trial(uow, &completed).await?;
+    save_trial(uow, &completed, TrialScope::TrialOnly).await?;
 
     // 5. コミット
     uow.commit()
@@ -88,7 +93,10 @@ mod tests {
         let mut uow = MockUnitOfWork::default();
         let trial = in_progress_trial();
         let trial_id = trial.id().clone();
-        uow.trial_repository().save(&trial).await.unwrap();
+        uow.trial_repository()
+            .save(&trial, TrialScope::Full)
+            .await
+            .unwrap();
 
         let input = Input {
             trial_id: trial_id.0,
@@ -104,7 +112,7 @@ mod tests {
 
         let saved = uow
             .trial_repository()
-            .find_by_id(&trial_id)
+            .find_by_id(&trial_id, TrialScope::Full)
             .await
             .unwrap()
             .unwrap();
@@ -116,7 +124,10 @@ mod tests {
         let mut uow = MockUnitOfWork::default();
         let trial = in_progress_trial();
         let trial_id = trial.id().clone();
-        uow.trial_repository().save(&trial).await.unwrap();
+        uow.trial_repository()
+            .save(&trial, TrialScope::Full)
+            .await
+            .unwrap();
 
         let completed_at = JstDateTime::now().into_fixed_offset();
         let input = Input {
@@ -153,7 +164,10 @@ mod tests {
         let mut trial = in_progress_trial();
         trial.complete(None);
         let trial_id = trial.id().clone();
-        uow.trial_repository().save(&trial).await.unwrap();
+        uow.trial_repository()
+            .save(&trial, TrialScope::Full)
+            .await
+            .unwrap();
 
         let input = Input {
             trial_id: trial_id.0,
@@ -173,7 +187,10 @@ mod tests {
         let mut uow = MockUnitOfWork::default();
         let trial = in_progress_trial();
         let trial_id = trial.id().clone();
-        uow.trial_repository().save(&trial).await.unwrap();
+        uow.trial_repository()
+            .save(&trial, TrialScope::Full)
+            .await
+            .unwrap();
         // テストデータ投入後に永続化だけを失敗させる
         uow.fail_save();
 

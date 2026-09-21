@@ -7,7 +7,7 @@ use crate::domain::actions::trial::complete_step;
 use crate::domain::models::step::StepId;
 use crate::domain::models::trial::{Trial, TrialId};
 use crate::domain::timezone::JstDateTime;
-use crate::ports::trial_repository::TrialRepository;
+use crate::ports::trial_repository::{TrialRepository, TrialScope};
 use crate::ports::{RepositoryError, UnitOfWork};
 
 use super::save_trial;
@@ -42,8 +42,13 @@ impl From<RepositoryError> for Error {
 
 pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, Error> {
     // 1. Trial取得
+    // Step の completed_at のみを変更するため Parameter は不要（WithSteps）
     let trial_id = TrialId(input.trial_id);
-    let trial = match uow.trial_repository().find_by_id(&trial_id).await {
+    let trial = match uow
+        .trial_repository()
+        .find_by_id(&trial_id, TrialScope::WithSteps)
+        .await
+    {
         Ok(Some(trial)) => trial,
         Ok(None) => return Err(Error::NotFound),
         Err(e) => return Err(Error::Infrastructure(format!("{:?}", e))),
@@ -62,7 +67,8 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
 
     // 4. 永続化（失敗時のロールバックはヘルパー側で行う）
-    save_trial(uow, &trial).await?;
+    // WithSteps: Parameterには一切アクセスしないため既存Parameterは消失しない
+    save_trial(uow, &trial, TrialScope::WithSteps).await?;
 
     // 5. コミット
     uow.commit()
@@ -84,7 +90,10 @@ mod tests {
         let step = Step::new(trial.id().clone(), "こね".to_string(), 0, None);
         let step_id = step.id().clone();
         trial.add_step(step);
-        uow.trial_repository().save(&trial).await.unwrap();
+        uow.trial_repository()
+            .save(&trial, TrialScope::Full)
+            .await
+            .unwrap();
         (trial, step_id)
     }
 
@@ -112,7 +121,7 @@ mod tests {
 
         let saved_trial = uow
             .trial_repository()
-            .find_by_id(trial.id())
+            .find_by_id(trial.id(), TrialScope::Full)
             .await
             .unwrap()
             .unwrap();
@@ -122,6 +131,54 @@ mod tests {
             .find(|s| s.id() == &step_id)
             .unwrap();
         assert!(saved_step.is_completed());
+    }
+
+    /// WithSteps で find/save しても、完了対象 Step に紐づく既存の Parameter が
+    /// 消えないことを確認する回帰テスト
+    #[tokio::test]
+    async fn test_execute_with_with_steps_scope_does_not_lose_existing_parameters() {
+        use crate::domain::models::parameter::{Parameter, ParameterContent};
+
+        let mut uow = MockUnitOfWork::default();
+        let (mut trial, step_id) = seed_trial_with_step(&mut uow).await;
+        trial
+            .steps_mut()
+            .iter_mut()
+            .find(|s| s.id() == &step_id)
+            .unwrap()
+            .add_parameter(Parameter::new(
+                step_id.clone(),
+                ParameterContent::Text {
+                    value: "打ち粉を追加".to_string(),
+                },
+            ));
+        uow.trial_repository()
+            .save(&trial, TrialScope::Full)
+            .await
+            .unwrap();
+
+        let input = Input {
+            trial_id: trial.id().0,
+            step_id: step_id.0,
+            completed_at: None,
+        };
+
+        let result = execute(&mut uow, input).await;
+        assert!(result.is_ok());
+
+        let saved_trial = uow
+            .trial_repository()
+            .find_by_id(trial.id(), TrialScope::Full)
+            .await
+            .unwrap()
+            .unwrap();
+        let saved_step = saved_trial
+            .steps()
+            .iter()
+            .find(|s| s.id() == &step_id)
+            .unwrap();
+        assert!(saved_step.is_completed());
+        assert_eq!(saved_step.parameters().len(), 1);
     }
 
     #[tokio::test]
@@ -187,7 +244,10 @@ mod tests {
         let mut uow = MockUnitOfWork::default();
         let (mut trial, step_id) = seed_trial_with_step(&mut uow).await;
         trial.complete(None);
-        uow.trial_repository().save(&trial).await.unwrap();
+        uow.trial_repository()
+            .save(&trial, TrialScope::Full)
+            .await
+            .unwrap();
 
         let input = Input {
             trial_id: trial.id().0,
