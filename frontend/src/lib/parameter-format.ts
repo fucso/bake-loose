@@ -1,4 +1,10 @@
-import type { DurationUnit, DurationValue, Parameter, ParameterValue } from "@/lib/trial"
+import type {
+  DurationUnit,
+  DurationValue,
+  Parameter,
+  ParameterType,
+  ParameterValue,
+} from "@/lib/trial"
 
 /** 表示用に整形した Parameter */
 type FormattedParameter = {
@@ -15,9 +21,18 @@ const DURATION_UNIT_LABELS: Record<DurationUnit, string> = {
   second: "秒",
 }
 
-/** ラベル（note）が空の場合に種別名で代替するためのフォールバック */
-const DURATION_FALLBACK_LABEL = "経過時間"
-const TIME_MARKER_FALLBACK_LABEL = "時間マーカー"
+/**
+ * 種別の表示名。
+ *
+ * 入力時の種別選択と、ラベル（note）が空の場合の代替ラベルの両方で使う。
+ * 同じ種別が入力画面と一覧表示で違う呼び名にならないよう、定義をここに集約する。
+ */
+const PARAMETER_TYPE_LABELS: Record<ParameterType, string> = {
+  KEY_VALUE: "項目と値",
+  DURATION: "経過時間",
+  TIME_MARKER: "時間マーカー",
+  TEXT: "自由記述",
+}
 
 const formatDurationValue = (duration: DurationValue): string =>
   `${duration.value}${DURATION_UNIT_LABELS[duration.unit]}`
@@ -60,12 +75,12 @@ const formatParameter = (parameter: Parameter): FormattedParameter => {
       }
     case "DURATION":
       return {
-        label: toLabel(parameter.content.note, DURATION_FALLBACK_LABEL),
+        label: toLabel(parameter.content.note, PARAMETER_TYPE_LABELS.DURATION),
         value: formatDurationValue(parameter.content.duration),
       }
     case "TIME_MARKER":
       return {
-        label: toLabel(parameter.content.note, TIME_MARKER_FALLBACK_LABEL),
+        label: toLabel(parameter.content.note, PARAMETER_TYPE_LABELS.TIME_MARKER),
         value: `${formatDurationValue(parameter.content.at)}時点`,
       }
     case "TEXT":
@@ -75,5 +90,5 @@ const formatParameter = (parameter: Parameter): FormattedParameter => {
   }
 }
 
-export { formatParameter }
+export { DURATION_UNIT_LABELS, formatParameter, PARAMETER_TYPE_LABELS }
 export type { FormattedParameter }

@@ -1,8 +1,10 @@
 import { render, screen } from '@testing-library/react'
+import { Provider } from 'urql'
 import { describe, expect, it } from 'vitest'
 
 import { StepTimeline } from './StepTimeline'
-import type { Step } from '@/lib/trial'
+import { createMockClient } from '../../../test/mocks/urql'
+import type { Step, TrialStatus } from '@/lib/trial'
 
 const buildStep = (overrides: Partial<Step> & Pick<Step, 'id' | 'position'>): Step => ({
   name: `工程${overrides.position}`,
@@ -13,9 +15,21 @@ const buildStep = (overrides: Partial<Step> & Pick<Step, 'id' | 'position'>): St
   ...overrides,
 })
 
+const renderTimeline = (steps: Step[], trialStatus: TrialStatus) =>
+  render(
+    <Provider value={createMockClient({})}>
+      <StepTimeline
+        trialId="trial-1"
+        steps={steps}
+        trialStatus={trialStatus}
+        onChanged={() => {}}
+      />
+    </Provider>,
+  )
+
 describe('StepTimeline', () => {
   it('工程が無い場合は空状態を表示する', () => {
-    render(<StepTimeline steps={[]} trialStatus="IN_PROGRESS" />)
+    renderTimeline([], 'IN_PROGRESS')
 
     expect(screen.getByText('まだ工程が記録されていません')).toBeInTheDocument()
   })
@@ -26,7 +40,7 @@ describe('StepTimeline', () => {
       buildStep({ id: 'a', position: 0, name: 'こね' }),
     ]
 
-    render(<StepTimeline steps={steps} trialStatus="IN_PROGRESS" />)
+    renderTimeline(steps, 'IN_PROGRESS')
 
     const items = screen.getAllByRole('listitem')
     expect(items[0]).toHaveTextContent('こね')
@@ -40,7 +54,7 @@ describe('StepTimeline', () => {
       buildStep({ id: 'c', position: 2, name: '焼成' }),
     ]
 
-    render(<StepTimeline steps={steps} trialStatus="IN_PROGRESS" />)
+    renderTimeline(steps, 'IN_PROGRESS')
 
     const items = screen.getAllByRole('listitem')
     expect(items[1]).toHaveAttribute('aria-current', 'step')
@@ -69,7 +83,7 @@ describe('StepTimeline', () => {
       }),
     ]
 
-    render(<StepTimeline steps={steps} trialStatus="IN_PROGRESS" />)
+    renderTimeline(steps, 'IN_PROGRESS')
 
     expect(screen.getByText('完了済みメモ')).not.toBeVisible()
     expect(screen.getByText('記録中メモ')).toBeVisible()
@@ -87,9 +101,29 @@ describe('StepTimeline', () => {
       }),
     ]
 
-    render(<StepTimeline steps={steps} trialStatus="COMPLETED" />)
+    renderTimeline(steps, 'COMPLETED')
 
-    expect(screen.getByRole('listitem')).not.toHaveAttribute('aria-current')
+    expect(screen.getAllByRole('listitem')[0]).not.toHaveAttribute('aria-current')
     expect(screen.getByText('メモ')).not.toBeVisible()
+  })
+
+  it('未完了の工程にだけパラメーターの記録操作を出す', () => {
+    const steps = [
+      buildStep({ id: 'a', position: 0, name: 'こね', isCompleted: true }),
+      buildStep({ id: 'b', position: 1, name: '一次発酵' }),
+    ]
+
+    renderTimeline(steps, 'IN_PROGRESS')
+
+    // 完了済みの工程は畳まれているため、操作 UI の有無は件数で確かめる
+    expect(screen.getAllByRole('button', { name: 'パラメーター追加' })).toHaveLength(1)
+  })
+
+  it('完了済みTrialではパラメーターの記録操作を出さない', () => {
+    const steps = [buildStep({ id: 'a', position: 0, name: 'こね' })]
+
+    renderTimeline(steps, 'COMPLETED')
+
+    expect(screen.queryByRole('button', { name: 'パラメーター追加' })).not.toBeInTheDocument()
   })
 })

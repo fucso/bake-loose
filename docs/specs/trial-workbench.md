@@ -1,6 +1,6 @@
 # Spec: Trial 詳細（記録ワークベンチ）
 
-> Feature Issue: #83
+> Feature Issue: #83, #85
 
 ## 概要
 
@@ -30,9 +30,36 @@ Trial 自体の編集・完了を行う画面。Trial 機能の中心となる�
 |------|-----------------|
 | name / memo の編集 | `updateTrial(id, input: UpdateTrialInput)` |
 | Trial の完了 | `completeTrial(id)` |
+| Parameter の追加 | `addParameter(trialId, stepId, content)` |
+| Parameter の編集 | `updateParameter(trialId, stepId, parameterId, content)` |
+| Parameter の削除 | `removeParameter(trialId, stepId, parameterId)` |
 
-Step・Parameter の記録操作（追加・編集・完了）は本画面のスコープ外で、
-このワークベンチの骨格の上に別途実装する。本仕様の時点では読み取り専用。
+Step 自体の記録操作（追加・編集・完了）は本画面のスコープ外で、
+このワークベンチの骨格の上に別途実装する。
+
+### Parameter の記録
+
+Step カードの中で、配下の Parameter を追加・編集・削除できる。
+
+- **追加**: Step カード内の「パラメーター追加」からボトムシートを開き、
+  種別を選んでから種別ごとのフォームを入力する。
+
+  | 種別 | 表示名 | 入力項目 |
+  |------|--------|---------|
+  | `KEY_VALUE` | 項目と値 | 項目名（必須）＋ 値の種類（数値 / 文字列）。数値なら数量（必須・0 より大きい）＋ 単位（必須）、文字列なら値（必須） |
+  | `DURATION` | 経過時間 | 内容（必須）＋ 時間（必須・0 以上）＋ 単位（日 / 時間 / 分 / 秒） |
+  | `TIME_MARKER` | 時間マーカー | 内容（必須）＋ 経過時点（必須・0 以上）＋ 単位（日 / 時間 / 分 / 秒） |
+  | `TEXT` | 自由記述 | 内容（必須） |
+
+- **編集**: 既存 Parameter の末端の値だけを変更できる。種別は変更できず、
+  `KEY_VALUE` の値の種類（数値 / 文字列）も変更できない。
+- **削除**: 対象の行で削除を確認してから実行する。
+
+記録操作は **Trial が記録中（`IN_PROGRESS`）かつ Step が未完了** の場合にだけ表示する。
+バックエンドが完了済みの Trial・Step へのパラメーター操作を拒否するため、
+実行できない操作は UI に出さない。
+
+各操作の成功後は Trial を再取得し、タイムラインの表示に反映する。
 
 ### 状態表示
 
@@ -78,6 +105,67 @@ Step・Parameter の記録操作（追加・編集・完了）は本画面のス
 
 この情報設計は、後続で実装する Step 記録・Parameter 記録の UI 配置の前提になる。
 新しい記録操作を追加する場合も「記録中の工程が常に展開・可視である」状態を崩さないこと。
+
+#### 4. 記録操作の置き場所
+
+Parameter の記録操作は、対象の Step カードの中に置く。記録は「どの工程の話か」と
+不可分であり、別画面や画面外のボタンに出すと対象の取り違えが起きるため。
+
+入力フォームは画面下端から開くボトムシート（`DialogSheetPopup`）に集約する。
+調理中は片手での操作になるため、入力要素を親指の届く範囲に寄せる。
+入力項目が増えてもシート内でスクロールさせ、画面全体を覆わないようにする。
+
+一覧の各行には編集・削除をアイコンボタンで並べ、行の高さを増やさない。
+削除は取り消せないため、同じ行で確認してから実行する。
+別ダイアログを重ねると記録中の工程が見えなくなるため、確認は行内で完結させる。
+
+### Parameter の記録操作
+
+#### 操作を出す条件
+
+バックエンドは `addParameter` / `updateParameter` / `removeParameter` のいずれについても
+「Trial が記録中」かつ「Step が未完了」であることを要求する
+（`backend/src/domain/actions/trial/*_parameter.rs`）。
+この条件を満たす Step にだけ記録操作を表示し、満たさない Step は読み取り専用にする。
+実行すれば必ず失敗する操作を出さないことで、記録中の誤操作とエラー表示を防ぐ。
+
+#### 種別の不変性
+
+`updateParameter` は `ParameterContent` のバリアント変更を拒否し、
+`KEY_VALUE` については内部の値の種類（`text` / `quantity`）まで一致を要求する
+（`backend/src/domain/validators/trial/parameter_variant_validator.rs`）。
+
+このため編集フォームでは種別選択を出さず、`KEY_VALUE` の値の種類も固定する。
+種別を変えたい場合は削除して追加し直す。
+
+同じ理由で、フロントが知らない種別の Parameter は編集させない。
+`content` は JSON スカラーのため未知の種別が先に届きうるが、入力フォームに写せないまま保存すると
+種別一致検証で弾かれる。削除は `content` を伴わないため、未知の種別でも行える。
+
+#### 入力の検証
+
+送信前に、バックエンドのドメインバリデーションと同じ条件をフロントでも適用する
+（数量は 0 より大きい / 時間量は 0 以上 / 数量の単位は空でない）。
+調理中の記録でサーバーとの往復後に弾かれると入力し直しになるため、入力時点で気付けるようにする。
+
+加えて、バックエンドが要求しない項目のうち以下をフロント側の必須項目とする。
+
+| 項目 | 必須にする理由 |
+|------|---------------|
+| `KEY_VALUE` の `key` | 一覧表示のラベルになり、空だと値だけが並んで意味が読み取れないため |
+| `KEY_VALUE` の値（text） | 値のない記録は記録として成立しないため |
+| `DURATION` / `TIME_MARKER` の `note` | 一覧表示のラベルになり、空だと種別名しか手掛かりが残らないため |
+| `TEXT` の値 | 同上 |
+
+数値項目は入力途中の文字列（`"1."` など）をそのまま保持できるよう、
+フォーム状態では string で持ち、送信時にまとめて数値へ変換・検証する。
+
+#### 操作結果の反映
+
+追加・編集・削除の成功後は Trial を再取得する。パラメーターの増減は Step カードの
+サマリー（パラメーター件数）にも影響し、部分的な差し替えでは画面内の整合が取れないため。
+再取得中も内容を表示したままにする方針（上記「開閉状態の同期」）により、
+記録を続けたまま結果が反映される。
 
 ### データ取得
 
@@ -156,9 +244,45 @@ mutation UpdateTrial($id: ID!, $input: UpdateTrialInput!) {
 mutation CompleteTrial($id: ID!) {
   completeTrial(id: $id) { id status completedAt }
 }
+
+mutation AddParameter($trialId: ID!, $stepId: ID!, $content: JSON!) {
+  addParameter(trialId: $trialId, stepId: $stepId, content: $content) {
+    id
+    parameterType
+    content
+  }
+}
+
+# 末端の値のみ更新できる。種別（KeyValue の値の種類を含む）は変更できない
+mutation UpdateParameter($trialId: ID!, $stepId: ID!, $parameterId: ID!, $content: JSON!) {
+  updateParameter(
+    trialId: $trialId
+    stepId: $stepId
+    parameterId: $parameterId
+    content: $content
+  ) {
+    id
+    parameterType
+    content
+  }
+}
+
+mutation RemoveParameter($trialId: ID!, $stepId: ID!, $parameterId: ID!) {
+  removeParameter(trialId: $trialId, stepId: $stepId, parameterId: $parameterId) { id }
+}
 ```
 
 `content` の JSON 構造は `backend/src/domain/models/parameter.rs` の定義に従う。
+
+| 種別 | `content` の構造 |
+|------|-----------------|
+| `KEY_VALUE`（数値） | `{ "type": "key_value", "key": "強力粉", "value": { "type": "quantity", "amount": 300, "unit": "g" } }` |
+| `KEY_VALUE`（文字列） | `{ "type": "key_value", "key": "発酵場所", "value": { "type": "text", "value": "冷蔵庫" } }` |
+| `DURATION` | `{ "type": "duration", "duration": { "value": 90, "unit": "minute" }, "note": "一次発酵" }` |
+| `TIME_MARKER` | `{ "type": "time_marker", "at": { "value": 30, "unit": "minute" }, "note": "焼成開始から" }` |
+| `TEXT` | `{ "type": "text", "value": "打ち粉を追加" }` |
+
+`unit`（`DurationUnit`）は `day` / `hour` / `minute` / `second`。
 
 ## 意思決定記録
 
@@ -175,3 +299,12 @@ mutation CompleteTrial($id: ID!) {
 | 「← 戻る」の遷移先 | 取得した Trial の `projectId` を使い、未取得時のみ URL の `:id` にフォールバックする | URL の `:id` が実際の所属プロジェクトと食い違っていても正しい一覧へ戻せるため | #83 |
 | 未知の Parameter 種別 | 画面を落とさず `content` をそのまま文字列化して表示する | `content` は JSON スカラーのため、バックエンドの種別追加がフロントの型より先に届きうるため | #83 |
 | Trial と Step の状態ラベル | 語彙を分ける（Trial: 記録中 / 完了、Step: 未着手 / 進行中 / 完了） | 同じ画面に両方の状態が並ぶため、どちらを指すか区別できるようにする | #83 |
+| Parameter 記録操作の置き場所 | 対象の Step カード内に配置し、入力はボトムシートに集約する | 記録は対象工程と不可分であり、モバイルでの片手操作を前提に入力要素を画面下端へ寄せるため | #85 |
+| 記録操作を出す条件 | Trial が記録中かつ Step が未完了の場合にだけ表示する | バックエンドが完了済みの Trial・Step へのパラメーター操作を拒否するため、必ず失敗する操作を出さない | #85 |
+| 編集時の種別変更 | 種別も `KEY_VALUE` の値の種類も固定する（変えたい場合は削除して追加し直す） | `updateParameter` が `ParameterContent` のバリアント変更を拒否するため | #85 |
+| 未知の種別の扱い | 編集操作を出さず、削除だけ行えるようにする | 入力フォームに写せない種別を保存すると種別一致検証で弾かれる。削除は `content` を伴わないため種別によらず安全 | #85 |
+| 入力値の検証 | バックエンドのドメインバリデーションと同じ条件を送信前にフロントでも適用する | 調理中にサーバーとの往復後で弾かれると入力し直しになるため | #85 |
+| ラベルになる項目の必須化 | `key` / `note` / 各値をフロント側で必須にする（バックエンドは空を許容する） | 一覧では「ラベル + 値」に正規化して表示するため、空だと何の記録か読み取れなくなるため | #85 |
+| 数値入力の保持 | フォーム状態では string で保持し、送信時にまとめて数値へ変換・検証する | 入力途中の文字列を数値に丸めると、入力しながら値が書き換わって記録を妨げるため | #85 |
+| 記録操作後の反映 | 部分更新ではなく Trial を再取得する | パラメーターの増減は工程カードのサマリー（件数）にも影響し、部分的な差し替えでは画面内の整合が取れないため | #85 |
+| 削除の確認 | 別ダイアログではなく対象の行内で確認する | 取り消せない操作であり、かつ確認のために記録中の工程が隠れることを避けるため | #85 |

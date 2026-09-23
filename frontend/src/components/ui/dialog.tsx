@@ -42,6 +42,34 @@ const DialogPopup = ({
   )
 }
 
+/**
+ * 画面下端から開くボトムシート型のポップアップ。
+ *
+ * モバイルで片手操作する入力フォーム向けに、親指の届く下端に寄せて表示する。
+ * 入力項目が増えても画面を覆い尽くさないよう高さを制限し、内側でスクロールさせる。
+ */
+const DialogSheetPopup = ({
+  className,
+  children,
+  ...props
+}: ComponentProps<typeof DialogPrimitive.Popup>) => {
+  return (
+    <DialogPrimitive.Portal data-slot="dialog-portal">
+      <DialogBackdrop />
+      <DialogPrimitive.Popup
+        data-slot="dialog-sheet-popup"
+        className={cn(
+          "fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[85dvh] w-full max-w-md flex-col gap-4 overflow-y-auto rounded-t-xl border border-border bg-popover p-4 text-popover-foreground shadow-lg outline-none transition-transform data-[ending-style]:translate-y-full data-[starting-style]:translate-y-full",
+          className
+        )}
+        {...props}
+      >
+        {children}
+      </DialogPrimitive.Popup>
+    </DialogPrimitive.Portal>
+  )
+}
+
 const DialogTitle = ({ className, ...props }: ComponentProps<typeof DialogPrimitive.Title>) => {
   return (
     <DialogPrimitive.Title
@@ -56,4 +84,4 @@ const DialogClose = ({ className, ...props }: ComponentProps<typeof DialogPrimit
   return <DialogPrimitive.Close data-slot="dialog-close" className={className} {...props} />
 }
 
-export { Dialog, DialogBackdrop, DialogPopup, DialogTitle, DialogClose }
+export { Dialog, DialogBackdrop, DialogPopup, DialogSheetPopup, DialogTitle, DialogClose }

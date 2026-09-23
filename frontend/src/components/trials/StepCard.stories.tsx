@@ -1,6 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
+import { fn } from 'storybook/test'
+import { Provider } from 'urql'
 
 import { StepCard } from './StepCard'
+import { createMockClient } from '../../../test/mocks/urql'
 import type { Step } from '@/lib/trial'
 
 const step: Step = {
@@ -46,10 +49,20 @@ const meta = {
   },
   tags: ['autodocs'],
   args: {
+    trialId: 'trial-1',
     step,
     isCurrent: true,
     defaultExpanded: true,
+    editable: true,
+    onChanged: fn(),
   },
+  decorators: [
+    (Story) => (
+      <Provider value={createMockClient({})}>
+        <Story />
+      </Provider>
+    ),
+  ],
 } satisfies Meta<typeof StepCard>
 
 export default meta
@@ -59,12 +72,21 @@ type Story = StoryObj<typeof meta>
 /** 記録中の工程。パラメーターを展開した状態で表示する */
 export const Current: Story = {}
 
-/** 完了済みの工程。一覧性を優先して畳んだ状態で表示する */
+/** 完了済みの工程。一覧性を優先して畳んだ状態で表示し、記録操作は出さない */
 export const CompletedCollapsed: Story = {
   args: {
     step: { ...step, isCompleted: true, completedAt: '2026-01-01T11:00:00+09:00' },
     isCurrent: false,
     defaultExpanded: false,
+    editable: false,
+  },
+}
+
+/** 記録できない工程（完了済みTrialなど）。パラメーターは読み取り専用で並ぶ */
+export const ReadOnly: Story = {
+  args: {
+    isCurrent: false,
+    editable: false,
   },
 }
 
