@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::domain::actions::trial::add_step;
 use crate::domain::models::trial::{Trial, TrialId};
 use crate::domain::timezone::JstDateTime;
-use crate::ports::trial_repository::TrialRepository;
+use crate::ports::trial_repository::{TrialRepository, TrialScope};
 use crate::ports::{RepositoryError, UnitOfWork};
 
 use super::save_trial;
@@ -42,8 +42,17 @@ impl From<RepositoryError> for Error {
 
 pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, Error> {
     // 1. Trial取得
+    // 新しい Step の position は既存 Step 数から採番するため Step 一覧は必要だが、
+    // Parameter は不要（WithSteps）。
+    // presentation 層が戻り値として返すのは追加直後の Step（Parameter は元から空）のため
+    // return_scope は受け取らない。既存の集約を返すユースケースでは return_scope が必須
+    // （.claude/rules/backend/repository.md「write ユースケースの戻り値スコープ」参照）
     let trial_id = TrialId(input.trial_id);
-    let trial = match uow.trial_repository().find_by_id(&trial_id).await {
+    let trial = match uow
+        .trial_repository()
+        .find_by_id(&trial_id, TrialScope::WithSteps)
+        .await
+    {
         Ok(Some(trial)) => trial,
         Ok(None) => return Err(Error::NotFound),
         Err(e) => return Err(Error::Infrastructure(format!("{:?}", e))),
@@ -62,7 +71,8 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
 
     // 4. 永続化（失敗時のロールバックはヘルパー側で行う）
-    save_trial(uow, &trial).await?;
+    // WithSteps: Parameterには一切アクセスしないため既存Parameterは消失しない
+    save_trial(uow, &trial, TrialScope::WithSteps).await?;
 
     // 5. コミット
     uow.commit()
@@ -93,7 +103,10 @@ mod tests {
         let mut uow = MockUnitOfWork::default();
         let trial = Trial::new(ProjectId::new(), None, None);
         let trial_id = trial.id().clone();
-        uow.trial_repository().save(&trial).await.unwrap();
+        uow.trial_repository()
+            .save(&trial, TrialScope::Full)
+            .await
+            .unwrap();
 
         let result = execute(&mut uow, input(trial_id.0, "こね")).await;
 
@@ -104,11 +117,53 @@ mod tests {
 
         let saved = uow
             .trial_repository()
-            .find_by_id(&trial_id)
+            .find_by_id(&trial_id, TrialScope::Full)
             .await
             .unwrap()
             .unwrap();
         assert_eq!(saved.steps().len(), 1);
+    }
+
+    /// WithSteps で find/save しても、既存 Step に紐づく Parameter が
+    /// 消えないことを確認する回帰テスト
+    #[tokio::test]
+    async fn test_execute_with_with_steps_scope_does_not_lose_existing_parameters() {
+        use crate::domain::models::parameter::{Parameter, ParameterContent};
+        use crate::domain::models::step::Step;
+
+        let mut uow = MockUnitOfWork::default();
+        let mut trial = Trial::new(ProjectId::new(), None, None);
+        let mut existing_step = Step::new(trial.id().clone(), "こね".to_string(), 0, None);
+        existing_step.add_parameter(Parameter::new(
+            existing_step.id().clone(),
+            ParameterContent::Text {
+                value: "打ち粉を追加".to_string(),
+            },
+        ));
+        let existing_step_id = existing_step.id().clone();
+        trial.add_step(existing_step);
+        let trial_id = trial.id().clone();
+        uow.trial_repository()
+            .save(&trial, TrialScope::Full)
+            .await
+            .unwrap();
+
+        let result = execute(&mut uow, input(trial_id.0, "一次発酵")).await;
+        assert!(result.is_ok());
+
+        let saved = uow
+            .trial_repository()
+            .find_by_id(&trial_id, TrialScope::Full)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(saved.steps().len(), 2);
+        let existing = saved
+            .steps()
+            .iter()
+            .find(|s| s.id() == &existing_step_id)
+            .unwrap();
+        assert_eq!(existing.parameters().len(), 1);
     }
 
     #[tokio::test]
@@ -127,7 +182,10 @@ mod tests {
         let mut trial = Trial::new(ProjectId::new(), None, None);
         trial.complete(None);
         let trial_id = trial.id().clone();
-        uow.trial_repository().save(&trial).await.unwrap();
+        uow.trial_repository()
+            .save(&trial, TrialScope::Full)
+            .await
+            .unwrap();
 
         let result = execute(&mut uow, input(trial_id.0, "こね")).await;
 
@@ -144,7 +202,10 @@ mod tests {
         let mut uow = MockUnitOfWork::default();
         let trial = Trial::new(ProjectId::new(), None, None);
         let trial_id = trial.id().clone();
-        uow.trial_repository().save(&trial).await.unwrap();
+        uow.trial_repository()
+            .save(&trial, TrialScope::Full)
+            .await
+            .unwrap();
         // テストデータ投入後に永続化だけを一意制約違反で失敗させる
         uow.fail_save_with(RepositoryError::Conflict {
             entity: "step".to_string(),
@@ -175,7 +236,10 @@ mod tests {
         let mut uow = MockUnitOfWork::default();
         let trial = Trial::new(ProjectId::new(), None, None);
         let trial_id = trial.id().clone();
-        uow.trial_repository().save(&trial).await.unwrap();
+        uow.trial_repository()
+            .save(&trial, TrialScope::Full)
+            .await
+            .unwrap();
         // テストデータ投入後に永続化だけを失敗させる
         uow.fail_save();
 
@@ -196,7 +260,10 @@ mod tests {
         let mut uow = MockUnitOfWork::default();
         let trial = Trial::new(ProjectId::new(), None, None);
         let trial_id = trial.id().clone();
-        uow.trial_repository().save(&trial).await.unwrap();
+        uow.trial_repository()
+            .save(&trial, TrialScope::Full)
+            .await
+            .unwrap();
 
         let result = execute(&mut uow, input(trial_id.0, "")).await;
 

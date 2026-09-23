@@ -10,7 +10,7 @@ use crate::domain::models::project::ProjectId;
 use crate::domain::models::step::Step;
 use crate::domain::models::trial::{Trial, TrialId};
 use crate::ports::error::RepositoryError;
-use crate::ports::trial_repository::TrialRepository;
+use crate::ports::trial_repository::{TrialRepository, TrialScope};
 
 use super::error::map_sqlx_error;
 use super::executor::PgExecutor;
@@ -29,73 +29,15 @@ impl PgTrialRepository {
     pub fn new(executor: PgExecutor) -> Self {
         Self { executor }
     }
-
-    /// 指定した Trial ID 群に紐づく Step を Parameter込みで取得する
-    ///
-    /// Step・Parameter をそれぞれ一括取得してから Rust 側で組み立てることで、
-    /// Trial 件数・Step 件数に対する N+1 クエリを避ける。
-    async fn fetch_steps_by_trial_ids(
-        &self,
-        trial_ids: &[Uuid],
-    ) -> Result<HashMap<Uuid, Vec<Step>>, RepositoryError> {
-        if trial_ids.is_empty() {
-            return Ok(HashMap::new());
-        }
-
-        let step_rows = self
-            .executor
-            .fetch_all(
-                sqlx::query_as::<_, StepRow>(
-                    "SELECT * FROM steps WHERE trial_id = ANY($1) ORDER BY trial_id, position",
-                )
-                .bind(trial_ids),
-            )
-            .await
-            .map_err(|e| map_sqlx_error(e, "step"))?;
-
-        let step_ids: Vec<Uuid> = step_rows.iter().map(|row| row.id).collect();
-
-        let mut parameters_by_step: HashMap<Uuid, Vec<Parameter>> = HashMap::new();
-        if !step_ids.is_empty() {
-            let parameter_rows = self
-                .executor
-                .fetch_all(
-                    sqlx::query_as::<_, ParameterRow>(
-                        // Parameter には順序を表すカラムがないため、登録順（created_at）で
-                        // 決定的に整列する。同一トランザクションで投入され created_at が
-                        // 同値になる場合に備えて id を tie-break に用いる。
-                        "SELECT * FROM parameters WHERE step_id = ANY($1) ORDER BY step_id, created_at, id",
-                    )
-                    .bind(&step_ids),
-                )
-                .await
-                .map_err(|e| map_sqlx_error(e, "parameter"))?;
-
-            for row in parameter_rows {
-                parameters_by_step
-                    .entry(row.step_id)
-                    .or_default()
-                    .push(row.into());
-            }
-        }
-
-        let mut steps_by_trial: HashMap<Uuid, Vec<Step>> = HashMap::new();
-        for row in step_rows {
-            let trial_id = row.trial_id;
-            let parameters = parameters_by_step.remove(&row.id).unwrap_or_default();
-            steps_by_trial
-                .entry(trial_id)
-                .or_default()
-                .push(row.into_domain(parameters));
-        }
-
-        Ok(steps_by_trial)
-    }
 }
 
 #[async_trait]
 impl TrialRepository for PgTrialRepository {
-    async fn find_by_id(&self, id: &TrialId) -> Result<Option<Trial>, RepositoryError> {
+    async fn find_by_id(
+        &self,
+        id: &TrialId,
+        scope: TrialScope,
+    ) -> Result<Option<Trial>, RepositoryError> {
         let query = sqlx::query_as::<_, TrialRow>("SELECT * FROM trials WHERE id = $1").bind(id.0);
 
         let trial_row = self
@@ -108,8 +50,14 @@ impl TrialRepository for PgTrialRepository {
             return Ok(None);
         };
 
-        let mut steps_by_trial = self.fetch_steps_by_trial_ids(&[trial_row.id]).await?;
-        let steps = steps_by_trial.remove(&trial_row.id).unwrap_or_default();
+        let steps = if scope < TrialScope::WithSteps {
+            Vec::new()
+        } else {
+            self.fetch_steps_by_trial_ids(&[trial_row.id], scope)
+                .await?
+                .remove(&trial_row.id)
+                .unwrap_or_default()
+        };
 
         Ok(Some(trial_row.into_domain(steps)?))
     }
@@ -117,6 +65,7 @@ impl TrialRepository for PgTrialRepository {
     async fn find_all_by_project(
         &self,
         project_id: &ProjectId,
+        scope: TrialScope,
     ) -> Result<Vec<Trial>, RepositoryError> {
         // created_at が同時刻になり得るため id もキーに加えて順序を決定的にする
         let query = sqlx::query_as::<_, TrialRow>(
@@ -130,8 +79,12 @@ impl TrialRepository for PgTrialRepository {
             .await
             .map_err(|e| map_sqlx_error(e, "trial"))?;
 
-        let trial_ids: Vec<Uuid> = trial_rows.iter().map(|row| row.id).collect();
-        let mut steps_by_trial = self.fetch_steps_by_trial_ids(&trial_ids).await?;
+        let mut steps_by_trial = if scope < TrialScope::WithSteps {
+            HashMap::new()
+        } else {
+            let trial_ids: Vec<Uuid> = trial_rows.iter().map(|row| row.id).collect();
+            self.fetch_steps_by_trial_ids(&trial_ids, scope).await?
+        };
 
         trial_rows
             .into_iter()
@@ -142,7 +95,7 @@ impl TrialRepository for PgTrialRepository {
             .collect()
     }
 
-    async fn save(&self, trial: &Trial) -> Result<(), RepositoryError> {
+    async fn save(&self, trial: &Trial, scope: TrialScope) -> Result<(), RepositoryError> {
         let status = TrialRow::status_column(trial.status());
 
         self.executor
@@ -168,6 +121,10 @@ impl TrialRepository for PgTrialRepository {
             )
             .await
             .map_err(|e| map_sqlx_error(e, "trial"))?;
+
+        if scope < TrialScope::WithSteps {
+            return Ok(());
+        }
 
         // aggregate から取り除かれた Step を削除する（cascade で Parameter も削除される）
         let step_ids: Vec<Uuid> = trial.steps().iter().map(|step| step.id().0).collect();
@@ -205,6 +162,10 @@ impl TrialRepository for PgTrialRepository {
                 )
                 .await
                 .map_err(|e| map_sqlx_error(e, "step"))?;
+
+            if scope < TrialScope::Full {
+                continue;
+            }
 
             // aggregate から取り除かれた Parameter を削除する
             let parameter_ids: Vec<Uuid> =
@@ -244,6 +205,105 @@ impl TrialRepository for PgTrialRepository {
     }
 }
 
+impl PgTrialRepository {
+    /// 指定した Trial ID 群に紐づく Step を取得する
+    ///
+    /// Parameter を併せて取得するのは `Full` のときのみ。
+    /// Step を取得しない scope での呼び出しは呼び出し側で弾くこと。
+    ///
+    /// Step・Parameter をそれぞれ一括取得してから Rust 側で組み立てることで、
+    /// Trial 件数・Step 件数に対する N+1 クエリを避ける。
+    async fn fetch_steps_by_trial_ids(
+        &self,
+        trial_ids: &[Uuid],
+        scope: TrialScope,
+    ) -> Result<HashMap<Uuid, Vec<Step>>, RepositoryError> {
+        // 呼び出し側での scope 判定漏れを検知する。
+        // `TrialOnly` で到達すると steps テーブルへ SELECT が飛び、
+        // 「scope が満たさないレイヤーにクエリを発行しない」という不変条件が壊れる
+        debug_assert!(
+            scope >= TrialScope::WithSteps,
+            "fetch_steps_by_trial_ids must not be called with a scope that excludes steps: {scope:?}"
+        );
+
+        let step_rows = self.fetch_step_rows(trial_ids).await?;
+
+        let mut parameters_by_step = if scope < TrialScope::Full {
+            HashMap::new()
+        } else {
+            let step_ids: Vec<Uuid> = step_rows.iter().map(|row| row.id).collect();
+            self.fetch_parameters_by_step_ids(&step_ids).await?
+        };
+
+        let mut steps_by_trial: HashMap<Uuid, Vec<Step>> = HashMap::new();
+        for row in step_rows {
+            let trial_id = row.trial_id;
+            let parameters = parameters_by_step.remove(&row.id).unwrap_or_default();
+            steps_by_trial
+                .entry(trial_id)
+                .or_default()
+                .push(row.into_domain(parameters));
+        }
+
+        Ok(steps_by_trial)
+    }
+
+    /// 指定した Trial ID 群に紐づく StepRow を取得する（trial_id, position 順）
+    ///
+    /// `trial_ids` が空の場合は steps テーブルへのクエリを発行しない。
+    async fn fetch_step_rows(&self, trial_ids: &[Uuid]) -> Result<Vec<StepRow>, RepositoryError> {
+        if trial_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        self.executor
+            .fetch_all(
+                sqlx::query_as::<_, StepRow>(
+                    "SELECT * FROM steps WHERE trial_id = ANY($1) ORDER BY trial_id, position",
+                )
+                .bind(trial_ids),
+            )
+            .await
+            .map_err(|e| map_sqlx_error(e, "step"))
+    }
+
+    /// 指定した Step ID 群に紐づく Parameter を step_id ごとにまとめて取得する
+    ///
+    /// `step_ids` が空の場合は parameters テーブルへのクエリを発行しない。
+    async fn fetch_parameters_by_step_ids(
+        &self,
+        step_ids: &[Uuid],
+    ) -> Result<HashMap<Uuid, Vec<Parameter>>, RepositoryError> {
+        if step_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let parameter_rows = self
+            .executor
+            .fetch_all(
+                sqlx::query_as::<_, ParameterRow>(
+                    // Parameter には順序を表すカラムがないため、登録順（created_at）で
+                    // 決定的に整列する。同一トランザクションで投入され created_at が
+                    // 同値になる場合に備えて id を tie-break に用いる。
+                    "SELECT * FROM parameters WHERE step_id = ANY($1) ORDER BY step_id, created_at, id",
+                )
+                .bind(step_ids),
+            )
+            .await
+            .map_err(|e| map_sqlx_error(e, "parameter"))?;
+
+        let mut parameters_by_step: HashMap<Uuid, Vec<Parameter>> = HashMap::new();
+        for row in parameter_rows {
+            parameters_by_step
+                .entry(row.step_id)
+                .or_default()
+                .push(row.into());
+        }
+
+        Ok(parameters_by_step)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -273,7 +333,7 @@ mod tests {
     async fn test_find_by_id_returns_none_when_not_exists(pool: PgPool) {
         let repo = PgTrialRepository::new(PgExecutor::from_pool(pool));
 
-        let result = repo.find_by_id(&TrialId::new()).await;
+        let result = repo.find_by_id(&TrialId::new(), TrialScope::Full).await;
 
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -300,10 +360,14 @@ mod tests {
         ));
         trial.add_step(step);
 
-        let result = repo.save(&trial).await;
+        let result = repo.save(&trial, TrialScope::Full).await;
         assert!(result.is_ok());
 
-        let found = repo.find_by_id(trial.id()).await.unwrap().unwrap();
+        let found = repo
+            .find_by_id(trial.id(), TrialScope::Full)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(found.id(), trial.id());
         assert_eq!(found.project_id(), &project_id);
         assert_eq!(found.name(), Some("焼成温度検証"));
@@ -328,13 +392,17 @@ mod tests {
         insert_test_project(&pool, project_id.0).await;
 
         let mut trial = Trial::new(project_id, Some("更新前".to_string()), None);
-        repo.save(&trial).await.unwrap();
+        repo.save(&trial, TrialScope::Full).await.unwrap();
 
         trial.set_name(Some("更新後".to_string()));
         trial.complete(None);
-        repo.save(&trial).await.unwrap();
+        repo.save(&trial, TrialScope::Full).await.unwrap();
 
-        let found = repo.find_by_id(trial.id()).await.unwrap().unwrap();
+        let found = repo
+            .find_by_id(trial.id(), TrialScope::Full)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(found.name(), Some("更新後"));
         assert_eq!(found.status(), &TrialStatus::Completed);
         // DB は マイクロ秒精度のため、ナノ秒まで含む厳密一致ではなくマイクロ秒単位で比較する
@@ -362,11 +430,13 @@ mod tests {
         let trial2 = Trial::new(project_id.clone(), Some("試行2".to_string()), None);
         let other_trial = Trial::new(other_project_id, Some("別プロジェクト".to_string()), None);
 
-        repo.save(&trial1).await.unwrap();
-        repo.save(&trial2).await.unwrap();
-        repo.save(&other_trial).await.unwrap();
+        repo.save(&trial1, TrialScope::Full).await.unwrap();
+        repo.save(&trial2, TrialScope::Full).await.unwrap();
+        repo.save(&other_trial, TrialScope::Full).await.unwrap();
 
-        let result = repo.find_all_by_project(&project_id).await;
+        let result = repo
+            .find_all_by_project(&project_id, TrialScope::Full)
+            .await;
         assert!(result.is_ok());
         let trials = result.unwrap();
         assert_eq!(trials.len(), 2);
@@ -384,15 +454,23 @@ mod tests {
         let step = Step::new(trial.id().clone(), "こね".to_string(), 0, None);
         let step_id = step.id().clone();
         trial.add_step(step);
-        repo.save(&trial).await.unwrap();
+        repo.save(&trial, TrialScope::Full).await.unwrap();
 
-        let found = repo.find_by_id(trial.id()).await.unwrap().unwrap();
+        let found = repo
+            .find_by_id(trial.id(), TrialScope::Full)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(found.steps().len(), 1);
 
         trial.steps_mut().retain(|s| s.id() != &step_id);
-        repo.save(&trial).await.unwrap();
+        repo.save(&trial, TrialScope::Full).await.unwrap();
 
-        let found_after = repo.find_by_id(trial.id()).await.unwrap().unwrap();
+        let found_after = repo
+            .find_by_id(trial.id(), TrialScope::Full)
+            .await
+            .unwrap()
+            .unwrap();
         assert!(found_after.steps().is_empty());
     }
 
@@ -415,9 +493,13 @@ mod tests {
         step.add_parameter(parameter);
         let step_id = step.id().clone();
         trial.add_step(step);
-        repo.save(&trial).await.unwrap();
+        repo.save(&trial, TrialScope::Full).await.unwrap();
 
-        let found = repo.find_by_id(trial.id()).await.unwrap().unwrap();
+        let found = repo
+            .find_by_id(trial.id(), TrialScope::Full)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(found.steps()[0].parameters().len(), 1);
 
         let step_mut = trial
@@ -426,9 +508,322 @@ mod tests {
             .find(|s| s.id() == &step_id)
             .unwrap();
         step_mut.remove_parameter(&parameter_id);
-        repo.save(&trial).await.unwrap();
+        repo.save(&trial, TrialScope::Full).await.unwrap();
 
-        let found_after = repo.find_by_id(trial.id()).await.unwrap().unwrap();
+        let found_after = repo
+            .find_by_id(trial.id(), TrialScope::Full)
+            .await
+            .unwrap()
+            .unwrap();
         assert!(found_after.steps()[0].parameters().is_empty());
+    }
+
+    /// Trial+Step+Parameter を Full で投入したうえで `TrialOnly` で find すると
+    /// steps テーブル・parameters テーブルへのアクセスが発生せず、
+    /// 返される Trial の steps が常に空になることを確認する
+    /// （空になっている＝取得していないことの間接的な証跡）。
+    #[sqlx::test(migrations = "./migrations")]
+    async fn test_find_by_id_with_trial_only_scope_does_not_fetch_steps(pool: PgPool) {
+        let repo = PgTrialRepository::new(PgExecutor::from_pool(pool.clone()));
+
+        let project_id = ProjectId::new();
+        insert_test_project(&pool, project_id.0).await;
+
+        let mut trial = Trial::new(project_id, Some("焼成温度検証".to_string()), None);
+        let mut step = Step::new(trial.id().clone(), "こね".to_string(), 0, None);
+        step.add_parameter(Parameter::new(
+            step.id().clone(),
+            ParameterContent::Text {
+                value: "打ち粉を追加".to_string(),
+            },
+        ));
+        trial.add_step(step);
+        repo.save(&trial, TrialScope::Full).await.unwrap();
+
+        let found = repo
+            .find_by_id(trial.id(), TrialScope::TrialOnly)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(found.name(), Some("焼成温度検証"));
+        assert!(found.steps().is_empty());
+    }
+
+    /// `WithSteps` で find すると Step は取得されるが、既存の Parameter があっても
+    /// 各 Step の parameters は空で返ることを確認する（Parameter を取得していない証跡）。
+    #[sqlx::test(migrations = "./migrations")]
+    async fn test_find_by_id_with_with_steps_scope_fetches_steps_without_parameters(pool: PgPool) {
+        let repo = PgTrialRepository::new(PgExecutor::from_pool(pool.clone()));
+
+        let project_id = ProjectId::new();
+        insert_test_project(&pool, project_id.0).await;
+
+        let mut trial = Trial::new(project_id, None, None);
+        let mut step = Step::new(trial.id().clone(), "こね".to_string(), 0, None);
+        step.add_parameter(Parameter::new(
+            step.id().clone(),
+            ParameterContent::Text {
+                value: "打ち粉を追加".to_string(),
+            },
+        ));
+        trial.add_step(step);
+        repo.save(&trial, TrialScope::Full).await.unwrap();
+
+        let found = repo
+            .find_by_id(trial.id(), TrialScope::WithSteps)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(found.steps().len(), 1);
+        assert_eq!(found.steps()[0].name(), "こね");
+        assert!(found.steps()[0].parameters().is_empty());
+    }
+
+    /// find_all_by_project も TrialOnly では steps を取得しない
+    #[sqlx::test(migrations = "./migrations")]
+    async fn test_find_all_by_project_with_trial_only_scope_does_not_fetch_steps(pool: PgPool) {
+        let repo = PgTrialRepository::new(PgExecutor::from_pool(pool.clone()));
+
+        let project_id = ProjectId::new();
+        insert_test_project(&pool, project_id.0).await;
+
+        let mut trial = Trial::new(project_id.clone(), None, None);
+        trial.add_step(Step::new(trial.id().clone(), "こね".to_string(), 0, None));
+        repo.save(&trial, TrialScope::Full).await.unwrap();
+
+        let trials = repo
+            .find_all_by_project(&project_id, TrialScope::TrialOnly)
+            .await
+            .unwrap();
+
+        assert_eq!(trials.len(), 1);
+        assert!(trials[0].steps().is_empty());
+    }
+
+    /// `test_save_removes_steps_not_in_aggregate` と対になる非破壊ケース。
+    /// `TrialOnly` で取得した（steps が空の）Trial の name だけ変更して `TrialOnly` で
+    /// save しても、既存の Step/Parameter が削除されないことを確認する。
+    #[sqlx::test(migrations = "./migrations")]
+    async fn test_save_with_trial_only_scope_preserves_existing_steps_and_parameters(pool: PgPool) {
+        let repo = PgTrialRepository::new(PgExecutor::from_pool(pool.clone()));
+
+        let project_id = ProjectId::new();
+        insert_test_project(&pool, project_id.0).await;
+
+        let mut trial = Trial::new(project_id, Some("更新前".to_string()), None);
+        let mut step = Step::new(trial.id().clone(), "こね".to_string(), 0, None);
+        step.add_parameter(Parameter::new(
+            step.id().clone(),
+            ParameterContent::Text {
+                value: "打ち粉を追加".to_string(),
+            },
+        ));
+        trial.add_step(step);
+        repo.save(&trial, TrialScope::Full).await.unwrap();
+
+        // update_trial ユースケース同様、TrialOnly で find した（steps が空の）Trial を編集する
+        let mut trial_only_view = repo
+            .find_by_id(trial.id(), TrialScope::TrialOnly)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(trial_only_view.steps().is_empty());
+        trial_only_view.set_name(Some("更新後".to_string()));
+
+        repo.save(&trial_only_view, TrialScope::TrialOnly)
+            .await
+            .unwrap();
+
+        let found = repo
+            .find_by_id(trial.id(), TrialScope::Full)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(found.name(), Some("更新後"));
+        assert_eq!(found.steps().len(), 1);
+        assert_eq!(found.steps()[0].parameters().len(), 1);
+    }
+
+    /// `WithSteps` で取得した（parameters が空の）Trial の Step 名だけ変更して
+    /// `WithSteps` で save しても、既存の Parameter が削除されないことを確認する。
+    #[sqlx::test(migrations = "./migrations")]
+    async fn test_save_with_with_steps_scope_preserves_existing_parameters(pool: PgPool) {
+        let repo = PgTrialRepository::new(PgExecutor::from_pool(pool.clone()));
+
+        let project_id = ProjectId::new();
+        insert_test_project(&pool, project_id.0).await;
+
+        let mut trial = Trial::new(project_id, None, None);
+        let mut step = Step::new(trial.id().clone(), "こね".to_string(), 0, None);
+        let step_id = step.id().clone();
+        step.add_parameter(Parameter::new(
+            step_id.clone(),
+            ParameterContent::Text {
+                value: "打ち粉を追加".to_string(),
+            },
+        ));
+        trial.add_step(step);
+        repo.save(&trial, TrialScope::Full).await.unwrap();
+
+        // update_step ユースケース同様、WithSteps で find した（parameters が空の）Trial を編集する
+        let mut with_steps_view = repo
+            .find_by_id(trial.id(), TrialScope::WithSteps)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(with_steps_view.steps()[0].parameters().is_empty());
+        with_steps_view
+            .steps_mut()
+            .iter_mut()
+            .find(|s| s.id() == &step_id)
+            .unwrap()
+            .set_name("発酵".to_string());
+
+        repo.save(&with_steps_view, TrialScope::WithSteps)
+            .await
+            .unwrap();
+
+        let found = repo
+            .find_by_id(trial.id(), TrialScope::Full)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(found.steps()[0].name(), "発酵");
+        assert_eq!(found.steps()[0].parameters().len(), 1);
+        assert_eq!(
+            found.steps()[0].parameters()[0].content(),
+            &ParameterContent::Text {
+                value: "打ち粉を追加".to_string(),
+            }
+        );
+    }
+
+    /// 未保存の Trial を `WithSteps` で save すると Step は INSERT されるが
+    /// Parameter は INSERT されないことを確認する。
+    ///
+    /// モック側の `test_save_with_with_steps_scope_does_not_insert_parameters_for_new_trial`
+    /// と対になるケース。既存行の更新パスだけでなく新規挿入パスでも
+    /// 「scope が満たさないレイヤーへ INSERT を発行しない」ことを保証する。
+    #[sqlx::test(migrations = "./migrations")]
+    async fn test_save_with_with_steps_scope_does_not_insert_parameters_for_new_trial(
+        pool: PgPool,
+    ) {
+        let repo = PgTrialRepository::new(PgExecutor::from_pool(pool.clone()));
+
+        let project_id = ProjectId::new();
+        insert_test_project(&pool, project_id.0).await;
+
+        let mut trial = Trial::new(project_id, None, None);
+        let mut step = Step::new(trial.id().clone(), "こね".to_string(), 0, None);
+        let step_id = step.id().clone();
+        step.add_parameter(Parameter::new(
+            step_id.clone(),
+            ParameterContent::Text {
+                value: "打ち粉を追加".to_string(),
+            },
+        ));
+        trial.add_step(step);
+
+        repo.save(&trial, TrialScope::WithSteps).await.unwrap();
+
+        let found = repo
+            .find_by_id(trial.id(), TrialScope::Full)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(found.steps().len(), 1);
+        assert_eq!(found.steps()[0].id(), &step_id);
+        assert!(found.steps()[0].parameters().is_empty());
+
+        // parameters テーブルへ INSERT が飛んでいないことを直接確認する
+        let parameter_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM parameters")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(parameter_count, 0);
+    }
+
+    /// `test_save_removes_steps_not_in_aggregate` の `WithSteps` 版。
+    /// aggregate から取り除いた Step は `WithSteps` でも Step 本体と、
+    /// 外部キーの ON DELETE CASCADE によりその Parameter ごと削除される。
+    /// 残した Step の Parameter は scope 外のため保持される。
+    #[sqlx::test(migrations = "./migrations")]
+    async fn test_save_with_with_steps_scope_removes_steps_not_in_aggregate(pool: PgPool) {
+        let repo = PgTrialRepository::new(PgExecutor::from_pool(pool.clone()));
+
+        let project_id = ProjectId::new();
+        insert_test_project(&pool, project_id.0).await;
+
+        let mut trial = Trial::new(project_id, None, None);
+
+        let mut kept_step = Step::new(trial.id().clone(), "こね".to_string(), 0, None);
+        let kept_step_id = kept_step.id().clone();
+        kept_step.add_parameter(Parameter::new(
+            kept_step_id.clone(),
+            ParameterContent::Text {
+                value: "打ち粉を追加".to_string(),
+            },
+        ));
+        trial.add_step(kept_step);
+
+        let mut removed_step = Step::new(trial.id().clone(), "発酵".to_string(), 1, None);
+        let removed_step_id = removed_step.id().clone();
+        let removed_parameter = Parameter::new(
+            removed_step_id.clone(),
+            ParameterContent::Text {
+                value: "室温で60分".to_string(),
+            },
+        );
+        let removed_parameter_id = removed_parameter.id().clone();
+        removed_step.add_parameter(removed_parameter);
+        trial.add_step(removed_step);
+
+        repo.save(&trial, TrialScope::Full).await.unwrap();
+
+        // delete_step ユースケース同様、WithSteps で find した（parameters が空の）Trial から Step を取り除く
+        let mut with_steps_view = repo
+            .find_by_id(trial.id(), TrialScope::WithSteps)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(with_steps_view.steps().len(), 2);
+        assert!(with_steps_view
+            .steps()
+            .iter()
+            .all(|s| s.parameters().is_empty()));
+        with_steps_view
+            .steps_mut()
+            .retain(|s| s.id() != &removed_step_id);
+
+        repo.save(&with_steps_view, TrialScope::WithSteps)
+            .await
+            .unwrap();
+
+        let found = repo
+            .find_by_id(trial.id(), TrialScope::Full)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(found.steps().len(), 1);
+        assert_eq!(found.steps()[0].id(), &kept_step_id);
+        // 残した Step の Parameter は scope 外のため削除されない
+        assert_eq!(found.steps()[0].parameters().len(), 1);
+        assert_eq!(
+            found.steps()[0].parameters()[0].content(),
+            &ParameterContent::Text {
+                value: "打ち粉を追加".to_string(),
+            }
+        );
+
+        // 取り除いた Step の Parameter が cascade で削除されていることを直接確認する
+        let removed_parameter_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM parameters WHERE id = $1")
+                .bind(removed_parameter_id.0)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(removed_parameter_count, 0);
     }
 }

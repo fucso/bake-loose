@@ -8,8 +8,62 @@ use tokio::sync::Mutex;
 use crate::domain::models::project::{Project, ProjectId};
 use crate::domain::models::trial::{Trial, TrialId};
 use crate::ports::project_repository::ProjectRepository;
-use crate::ports::trial_repository::TrialRepository;
+use crate::ports::trial_repository::{TrialRepository, TrialScope};
 use crate::ports::{ProjectSort, ProjectSortColumn, RepositoryError, SortDirection, UnitOfWork};
+
+/// Trial から scope が含まないレイヤーを取り除く
+///
+/// `PgTrialRepository` は scope が満たさないレイヤーへ一切アクセスしないのに対し、
+/// モックは常にメモリ上の完全な Trial を扱うため、同じ観測結果になるよう明示的に取り除く。
+///
+/// - find: 取得していないレイヤーは空になる
+/// - save（新規挿入）: INSERT していないレイヤーは保存されない
+fn truncate_to_scope(mut trial: Trial, scope: TrialScope) -> Trial {
+    match scope {
+        TrialScope::TrialOnly => {
+            trial.steps_mut().clear();
+        }
+        TrialScope::WithSteps => {
+            for step in trial.steps_mut() {
+                step.parameters_mut().clear();
+            }
+        }
+        TrialScope::Full => {}
+    }
+    trial
+}
+
+/// scope に応じて `incoming`（呼び出し側が save に渡した Trial）を既存の保存内容
+/// （`existing`）とマージする
+///
+/// `PgTrialRepository::save` は scope が満たさないレイヤーには一切アクセスしないため、
+/// 部分スコープ（下位レイヤーが空）で取得した Trial をそのまま save しても
+/// 既存の Step/Parameter を消失させない。モックでも同じ結果になるよう、
+/// scope が触れないレイヤーは既存の内容をそのまま引き継ぐ。
+fn merge_with_scope(existing: Trial, incoming: Trial, scope: TrialScope) -> Trial {
+    match scope {
+        TrialScope::TrialOnly => {
+            // Trial本体のみ差し替え。Step/Parameterは既存のものをそのまま保持する
+            let mut merged = incoming;
+            *merged.steps_mut() = existing.steps().to_vec();
+            merged
+        }
+        TrialScope::WithSteps => {
+            // Trial+Stepを差し替える。各StepのParameterは既存のものをそのまま保持する
+            // （新規追加されたStepは既存側に存在しないため空のまま）
+            let mut merged = incoming;
+            for step in merged.steps_mut() {
+                let preserved_parameters = existing
+                    .step(step.id())
+                    .map(|s| s.parameters().to_vec())
+                    .unwrap_or_default();
+                *step.parameters_mut() = preserved_parameters;
+            }
+            merged
+        }
+        TrialScope::Full => incoming,
+    }
+}
 
 /// `save()` を失敗させるエラー設定（リポジトリと UnitOfWork で共有する）
 ///
@@ -143,31 +197,48 @@ impl MockTrialRepository {
 
 #[async_trait::async_trait]
 impl TrialRepository for MockTrialRepository {
-    async fn find_by_id(&self, id: &TrialId) -> Result<Option<Trial>, RepositoryError> {
+    async fn find_by_id(
+        &self,
+        id: &TrialId,
+        scope: TrialScope,
+    ) -> Result<Option<Trial>, RepositoryError> {
         let trials = self.trials.lock().await;
-        Ok(trials.iter().find(|t| t.id() == id).cloned())
+        Ok(trials
+            .iter()
+            .find(|t| t.id() == id)
+            .cloned()
+            .map(|t| truncate_to_scope(t, scope)))
     }
 
     async fn find_all_by_project(
         &self,
         project_id: &ProjectId,
+        scope: TrialScope,
     ) -> Result<Vec<Trial>, RepositoryError> {
         let trials = self.trials.lock().await;
         Ok(trials
             .iter()
             .filter(|t| t.project_id() == project_id)
             .cloned()
+            .map(|t| truncate_to_scope(t, scope))
             .collect())
     }
 
-    async fn save(&self, trial: &Trial) -> Result<(), RepositoryError> {
+    async fn save(&self, trial: &Trial, scope: TrialScope) -> Result<(), RepositoryError> {
         if let Some(error) = save_failure(&self.save_failure) {
             return Err(error);
         }
 
         let mut trials = self.trials.lock().await;
+        let merged = match trials.iter().find(|t| t.id() == trial.id()) {
+            Some(existing) => merge_with_scope(existing.clone(), trial.clone(), scope),
+            // 新規挿入。`PgTrialRepository` は scope が満たさないレイヤーを INSERT しないため、
+            // モックでも切り落としてから保持する（切り落とさないとモックだけが寛容になり、
+            // 「部分スコープで下位レイヤー付きの新規 Trial を save する」実装ミスを隠してしまう）
+            None => truncate_to_scope(trial.clone(), scope),
+        };
         trials.retain(|t| t.id() != trial.id());
-        trials.push(trial.clone());
+        trials.push(merged);
         Ok(())
     }
 }
@@ -346,7 +417,7 @@ mod tests {
 
         // pool 相当のリポジトリなので commit 後も利用できる
         assert!(read_repo
-            .find_by_id(&TrialId(Uuid::new_v4()))
+            .find_by_id(&TrialId(Uuid::new_v4()), TrialScope::Full)
             .await
             .unwrap()
             .is_none());
@@ -400,5 +471,183 @@ mod tests {
             RepositoryError::Internal { message } if message == "Transaction is still in use"
         ));
         drop(repo);
+    }
+
+    /// TrialScope に応じたモックの find/save の振る舞いが
+    /// `PgTrialRepository` と同じ観測結果になることを確認する
+    mod trial_scope {
+        use super::*;
+        use crate::domain::models::parameter::{Parameter, ParameterContent};
+        use crate::domain::models::project::ProjectId;
+        use crate::domain::models::step::Step;
+
+        fn trial_with_step_and_parameter() -> (Trial, crate::domain::models::step::StepId) {
+            let mut trial = Trial::new(ProjectId::new(), Some("元の名前".to_string()), None);
+            let mut step = Step::new(trial.id().clone(), "こね".to_string(), 0, None);
+            step.add_parameter(Parameter::new(
+                step.id().clone(),
+                ParameterContent::Text {
+                    value: "打ち粉を追加".to_string(),
+                },
+            ));
+            let step_id = step.id().clone();
+            trial.add_step(step);
+            (trial, step_id)
+        }
+
+        #[tokio::test]
+        async fn test_find_by_id_with_trial_only_scope_returns_empty_steps() {
+            let mut uow = MockUnitOfWork::default();
+            let (trial, _) = trial_with_step_and_parameter();
+            uow.trial_repository()
+                .save(&trial, TrialScope::Full)
+                .await
+                .unwrap();
+
+            let found = uow
+                .trial_repository()
+                .find_by_id(trial.id(), TrialScope::TrialOnly)
+                .await
+                .unwrap()
+                .unwrap();
+
+            assert!(found.steps().is_empty());
+        }
+
+        #[tokio::test]
+        async fn test_find_by_id_with_with_steps_scope_returns_steps_without_parameters() {
+            let mut uow = MockUnitOfWork::default();
+            let (trial, _) = trial_with_step_and_parameter();
+            uow.trial_repository()
+                .save(&trial, TrialScope::Full)
+                .await
+                .unwrap();
+
+            let found = uow
+                .trial_repository()
+                .find_by_id(trial.id(), TrialScope::WithSteps)
+                .await
+                .unwrap()
+                .unwrap();
+
+            assert_eq!(found.steps().len(), 1);
+            assert!(found.steps()[0].parameters().is_empty());
+        }
+
+        #[tokio::test]
+        async fn test_save_with_trial_only_scope_preserves_existing_steps_and_parameters() {
+            let mut uow = MockUnitOfWork::default();
+            let (trial, step_id) = trial_with_step_and_parameter();
+            uow.trial_repository()
+                .save(&trial, TrialScope::Full)
+                .await
+                .unwrap();
+
+            // TrialOnly で取得した（steps が空の）Trial の name だけ変更して save する
+            let mut trial_only_view = uow
+                .trial_repository()
+                .find_by_id(trial.id(), TrialScope::TrialOnly)
+                .await
+                .unwrap()
+                .unwrap();
+            trial_only_view.set_name(Some("新しい名前".to_string()));
+            uow.trial_repository()
+                .save(&trial_only_view, TrialScope::TrialOnly)
+                .await
+                .unwrap();
+
+            let found = uow
+                .trial_repository()
+                .find_by_id(trial.id(), TrialScope::Full)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(found.name(), Some("新しい名前"));
+            assert_eq!(found.steps().len(), 1);
+            assert_eq!(found.steps()[0].id(), &step_id);
+            assert_eq!(found.steps()[0].parameters().len(), 1);
+        }
+
+        #[tokio::test]
+        async fn test_save_with_with_steps_scope_preserves_existing_parameters() {
+            let mut uow = MockUnitOfWork::default();
+            let (trial, step_id) = trial_with_step_and_parameter();
+            uow.trial_repository()
+                .save(&trial, TrialScope::Full)
+                .await
+                .unwrap();
+
+            // WithSteps で取得した（parameters が空の）Trial の Step 名だけ変更して save する
+            let mut with_steps_view = uow
+                .trial_repository()
+                .find_by_id(trial.id(), TrialScope::WithSteps)
+                .await
+                .unwrap()
+                .unwrap();
+            with_steps_view
+                .steps_mut()
+                .iter_mut()
+                .find(|s| s.id() == &step_id)
+                .unwrap()
+                .set_name("発酵".to_string());
+            uow.trial_repository()
+                .save(&with_steps_view, TrialScope::WithSteps)
+                .await
+                .unwrap();
+
+            let found = uow
+                .trial_repository()
+                .find_by_id(trial.id(), TrialScope::Full)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(found.steps()[0].name(), "発酵");
+            assert_eq!(found.steps()[0].parameters().len(), 1);
+        }
+
+        /// 未保存の Trial を `TrialOnly` で save しても Step は保存されない
+        /// （`PgTrialRepository` が steps を INSERT しないことに対応）
+        #[tokio::test]
+        async fn test_save_with_trial_only_scope_does_not_insert_steps_for_new_trial() {
+            let mut uow = MockUnitOfWork::default();
+            let (trial, _) = trial_with_step_and_parameter();
+
+            uow.trial_repository()
+                .save(&trial, TrialScope::TrialOnly)
+                .await
+                .unwrap();
+
+            let found = uow
+                .trial_repository()
+                .find_by_id(trial.id(), TrialScope::Full)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(found.name(), Some("元の名前"));
+            assert!(found.steps().is_empty());
+        }
+
+        /// 未保存の Trial を `WithSteps` で save すると Step は保存されるが
+        /// Parameter は保存されない（`PgTrialRepository` が parameters を INSERT しないことに対応）
+        #[tokio::test]
+        async fn test_save_with_with_steps_scope_does_not_insert_parameters_for_new_trial() {
+            let mut uow = MockUnitOfWork::default();
+            let (trial, step_id) = trial_with_step_and_parameter();
+
+            uow.trial_repository()
+                .save(&trial, TrialScope::WithSteps)
+                .await
+                .unwrap();
+
+            let found = uow
+                .trial_repository()
+                .find_by_id(trial.id(), TrialScope::Full)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(found.steps().len(), 1);
+            assert_eq!(found.steps()[0].id(), &step_id);
+            assert!(found.steps()[0].parameters().is_empty());
+        }
     }
 }

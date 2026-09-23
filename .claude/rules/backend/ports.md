@@ -46,6 +46,28 @@ pub trait ProjectRepository: Send + Sync {
 }
 ```
 
+複数レイヤーを持つ集約のリポジトリでは、fetch / save が触れるレイヤーの深さを表す
+scope enum を同じファイルに定義し、`find_by_id` / `find_all_by_*` / `save` の引数に加える
+（例: `TrialScope`）。各バリアントが含むレイヤーの説明はバリアント側にだけ書き、
+メソッドの引数コメントで繰り返さない。仕様の詳細は `repository.md` の
+「集約スコープによる fetch / save 範囲の制御」を参照。
+
+```rust
+// src/ports/trial_repository.rs
+
+/// find/save が処理対象とする Trial 集約のレイヤー深さ
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum TrialScope {
+    /// Trial本体のみ（Step/Parameterは含まない）
+    TrialOnly,
+    /// Trial + Step（Parameterは含まない）
+    WithSteps,
+    /// Trial + Step + Parameter（従来の全量取得・全量保存と同等）
+    #[default]
+    Full,
+}
+```
+
 ## エラー型
 
 ```rust

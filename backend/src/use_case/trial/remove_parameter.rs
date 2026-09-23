@@ -9,7 +9,7 @@ use crate::domain::actions::trial::remove_parameter;
 use crate::domain::models::parameter::ParameterId;
 use crate::domain::models::step::StepId;
 use crate::domain::models::trial::{Trial, TrialId};
-use crate::ports::trial_repository::TrialRepository;
+use crate::ports::trial_repository::{TrialRepository, TrialScope};
 use crate::ports::{RepositoryError, UnitOfWork};
 
 use super::save_trial;
@@ -43,8 +43,14 @@ pub struct Input {
 
 pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, Error> {
     // 1. Trial取得
+    // Parameter を操作するため Full が必要
+    // （他 Step の Parameter が未取得だと save の差分削除で消失する）
     let trial_id = TrialId(input.trial_id);
-    let trial = match uow.trial_repository().find_by_id(&trial_id).await {
+    let trial = match uow
+        .trial_repository()
+        .find_by_id(&trial_id, TrialScope::Full)
+        .await
+    {
         Ok(Some(trial)) => trial,
         Ok(None) => return Err(Error::NotFound),
         Err(e) => return Err(Error::Infrastructure(format!("{:?}", e))),
@@ -66,7 +72,7 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
 
     // 4. 永続化（失敗時のロールバックはヘルパー側で行う）
-    save_trial(uow, &trial).await?;
+    save_trial(uow, &trial, TrialScope::Full).await?;
 
     // 5. コミット
     uow.commit()
@@ -106,7 +112,10 @@ mod tests {
         let trial_id = trial.id().clone();
 
         let mut uow = MockUnitOfWork::default();
-        uow.trial_repository().save(&trial).await.unwrap();
+        uow.trial_repository()
+            .save(&trial, TrialScope::Full)
+            .await
+            .unwrap();
 
         let input = Input {
             trial_id: trial_id.0,
@@ -123,7 +132,7 @@ mod tests {
 
         let saved = uow
             .trial_repository()
-            .find_by_id(&trial_id)
+            .find_by_id(&trial_id, TrialScope::Full)
             .await
             .unwrap()
             .unwrap();
@@ -152,7 +161,10 @@ mod tests {
         let trial_id = trial.id().clone();
 
         let mut uow = MockUnitOfWork::default();
-        uow.trial_repository().save(&trial).await.unwrap();
+        uow.trial_repository()
+            .save(&trial, TrialScope::Full)
+            .await
+            .unwrap();
 
         let input = Input {
             trial_id: trial_id.0,
@@ -174,7 +186,10 @@ mod tests {
         let trial_id = trial.id().clone();
 
         let mut uow = MockUnitOfWork::default();
-        uow.trial_repository().save(&trial).await.unwrap();
+        uow.trial_repository()
+            .save(&trial, TrialScope::Full)
+            .await
+            .unwrap();
         // テストデータ投入後に永続化だけを失敗させる
         uow.fail_save();
 
