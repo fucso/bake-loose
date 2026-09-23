@@ -194,6 +194,11 @@ GraphQL エラー変換では、実際に発生しうる variant を明示的に
 内部エラーへ倒すフォールバックの `match` アームを用意する（実例は `presentation/graphql/error/trial.rs`
 の `unexpected_domain_error`）。
 
+ただしドメインに Action が1つしかなく、その Action が domain error の全 variant を返しうる場合は
+「残り」が存在しないため、フォールバックアームを置くと `unreachable_patterns` でコンパイルが通らない。
+この場合は全 variant を明示ハンドリングするに留め、返し得ない variant が増えた時点で
+フォールバックアームを追加する（実例は `presentation/graphql/error/project.rs`）。
+
 **テスト方針**:
 - バリデーター側: 条件ごとの詳細なテスト（境界値、各パターン）
 - アクション側: バリデーションが適用されることの確認（最低限）＋アクション固有の分岐
