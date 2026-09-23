@@ -699,4 +699,131 @@ mod tests {
             }
         );
     }
+
+    /// 未保存の Trial を `WithSteps` で save すると Step は INSERT されるが
+    /// Parameter は INSERT されないことを確認する。
+    ///
+    /// モック側の `test_save_with_with_steps_scope_does_not_insert_parameters_for_new_trial`
+    /// と対になるケース。既存行の更新パスだけでなく新規挿入パスでも
+    /// 「scope が満たさないレイヤーへ INSERT を発行しない」ことを保証する。
+    #[sqlx::test(migrations = "./migrations")]
+    async fn test_save_with_with_steps_scope_does_not_insert_parameters_for_new_trial(
+        pool: PgPool,
+    ) {
+        let repo = PgTrialRepository::new(PgExecutor::from_pool(pool.clone()));
+
+        let project_id = ProjectId::new();
+        insert_test_project(&pool, project_id.0).await;
+
+        let mut trial = Trial::new(project_id, None, None);
+        let mut step = Step::new(trial.id().clone(), "こね".to_string(), 0, None);
+        let step_id = step.id().clone();
+        step.add_parameter(Parameter::new(
+            step_id.clone(),
+            ParameterContent::Text {
+                value: "打ち粉を追加".to_string(),
+            },
+        ));
+        trial.add_step(step);
+
+        repo.save(&trial, TrialScope::WithSteps).await.unwrap();
+
+        let found = repo
+            .find_by_id(trial.id(), TrialScope::Full)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(found.steps().len(), 1);
+        assert_eq!(found.steps()[0].id(), &step_id);
+        assert!(found.steps()[0].parameters().is_empty());
+
+        // parameters テーブルへ INSERT が飛んでいないことを直接確認する
+        let parameter_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM parameters")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(parameter_count, 0);
+    }
+
+    /// `test_save_removes_steps_not_in_aggregate` の `WithSteps` 版。
+    /// aggregate から取り除いた Step は `WithSteps` でも Step 本体と、
+    /// 外部キーの ON DELETE CASCADE によりその Parameter ごと削除される。
+    /// 残した Step の Parameter は scope 外のため保持される。
+    #[sqlx::test(migrations = "./migrations")]
+    async fn test_save_with_with_steps_scope_removes_steps_not_in_aggregate(pool: PgPool) {
+        let repo = PgTrialRepository::new(PgExecutor::from_pool(pool.clone()));
+
+        let project_id = ProjectId::new();
+        insert_test_project(&pool, project_id.0).await;
+
+        let mut trial = Trial::new(project_id, None, None);
+
+        let mut kept_step = Step::new(trial.id().clone(), "こね".to_string(), 0, None);
+        let kept_step_id = kept_step.id().clone();
+        kept_step.add_parameter(Parameter::new(
+            kept_step_id.clone(),
+            ParameterContent::Text {
+                value: "打ち粉を追加".to_string(),
+            },
+        ));
+        trial.add_step(kept_step);
+
+        let mut removed_step = Step::new(trial.id().clone(), "発酵".to_string(), 1, None);
+        let removed_step_id = removed_step.id().clone();
+        let removed_parameter = Parameter::new(
+            removed_step_id.clone(),
+            ParameterContent::Text {
+                value: "室温で60分".to_string(),
+            },
+        );
+        let removed_parameter_id = removed_parameter.id().clone();
+        removed_step.add_parameter(removed_parameter);
+        trial.add_step(removed_step);
+
+        repo.save(&trial, TrialScope::Full).await.unwrap();
+
+        // delete_step ユースケース同様、WithSteps で find した（parameters が空の）Trial から Step を取り除く
+        let mut with_steps_view = repo
+            .find_by_id(trial.id(), TrialScope::WithSteps)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(with_steps_view.steps().len(), 2);
+        assert!(with_steps_view
+            .steps()
+            .iter()
+            .all(|s| s.parameters().is_empty()));
+        with_steps_view
+            .steps_mut()
+            .retain(|s| s.id() != &removed_step_id);
+
+        repo.save(&with_steps_view, TrialScope::WithSteps)
+            .await
+            .unwrap();
+
+        let found = repo
+            .find_by_id(trial.id(), TrialScope::Full)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(found.steps().len(), 1);
+        assert_eq!(found.steps()[0].id(), &kept_step_id);
+        // 残した Step の Parameter は scope 外のため削除されない
+        assert_eq!(found.steps()[0].parameters().len(), 1);
+        assert_eq!(
+            found.steps()[0].parameters()[0].content(),
+            &ParameterContent::Text {
+                value: "打ち粉を追加".to_string(),
+            }
+        );
+
+        // 取り除いた Step の Parameter が cascade で削除されていることを直接確認する
+        let removed_parameter_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM parameters WHERE id = $1")
+                .bind(removed_parameter_id.0)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(removed_parameter_count, 0);
+    }
 }
