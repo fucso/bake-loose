@@ -43,7 +43,10 @@ impl From<RepositoryError> for Error {
 pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, Error> {
     // 1. Trial取得
     // 新しい Step の position は既存 Step 数から採番するため Step 一覧は必要だが、
-    // Parameter は不要（WithSteps）
+    // Parameter は不要（WithSteps）。
+    // presentation 層が戻り値として返すのは追加直後の Step（Parameter は元から空）のため
+    // return_scope は受け取らない。既存の集約を返すユースケースでは return_scope が必須
+    // （.claude/rules/backend/repository.md「write ユースケースの戻り値スコープ」参照）
     let trial_id = TrialId(input.trial_id);
     let trial = match uow
         .trial_repository()

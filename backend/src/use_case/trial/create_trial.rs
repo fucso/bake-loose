@@ -61,7 +61,10 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
 
     // 4. 永続化（失敗時のロールバックはヘルパー側で行う）
-    // 新規作成した Trial は Step/Parameter を持たないため TrialOnly で十分
+    // 新規作成した Trial は Step/Parameter を持たないため TrialOnly で十分。
+    // 戻り値も作成直後の Trial（下位レイヤーは元から空）のため return_scope は受け取らない。
+    // 既存の集約を返すユースケースでは return_scope が必須になる点に注意
+    // （.claude/rules/backend/repository.md「write ユースケースの戻り値スコープ」参照）
     save_trial(uow, &trial, TrialScope::TrialOnly).await?;
 
     // 5. コミット

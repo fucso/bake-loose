@@ -243,6 +243,32 @@ save_trial(uow, &updated, TrialScope::TrialOnly).await?;
 Ok(updated)
 ```
 
+**例外: 新規作成した実体のみを返す write ユースケース**
+
+`return_scope` が必要なのは **戻り値に既存の集約（DB に下位レイヤーが存在しうる実体）を含む**
+場合に限る。新規作成した実体だけを返すユースケースは、その実体の下位レイヤーが
+**作成直後で元から空**であり、DB の実データと一致するため `return_scope` を受け取らない。
+
+| ユースケース | 戻り値 | `return_scope` | 理由 |
+|-------------|--------|---------------|------|
+| `create_trial` | 作成直後の Trial | 不要 | 新規 Trial は Step を持たない |
+| `add_step` | 追加直後の Step | 不要 | 新規 Step は Parameter を持たない |
+| `update_trial` / `complete_trial` 等 | 既存の Trial | **必要** | DB に Step/Parameter が存在しうる |
+
+この例外は「作成直後だから空」であることに依存している。既存の集約を返すユースケースを
+`add_step` を前例にして `return_scope` なしで追加すると、戻り値から下位レイヤーが黙って
+消える退行がそのまま再発する。
+
+**不変条件: save scope ≤ find scope**
+
+同一の集約に対して、**save の scope は必ずその集約を find した scope 以下**でなければならない。
+find より深い scope で save すると、find していない（＝集約上は空の）レイヤーが
+「削除された」と解釈され、洗い替えの差分削除で DB 上の実データが消える。
+
+`read_scope_for_write(write_scope, return_scope)` が常に `write_scope` 以上を返し、
+save は `write_scope` のまま行うため、現在の実装ではこの不変条件は構造的に満たされている。
+scope の組み立てを変更する際はこの関係を崩さないこと。
+
 ## スキーマ命名規約
 
 DB のスキーマ名はプロジェクトのルールとして以下に統一する。PostgreSQL がデフォルトで付与する名前は
@@ -305,7 +331,8 @@ let mut tx = self.pool.begin().await?;
 - [ ] 複数レイヤーを持つ集約では、scope が満たさないレイヤーのテーブルにクエリを発行していない
 - [ ] scope の分岐は呼び出し側にあり、レイヤー単位のヘルパーがスコープ外バリアントを処理していない
 - [ ] レイヤー単位のヘルパーはスコープ外で呼ばれたことを `debug_assert!` で検知できる
-- [ ] write ユースケースは `return_scope` を受け取り、find を `read_scope_for_write` で拡張している
+- [ ] 戻り値に既存の集約を含む write ユースケースは `return_scope` を受け取り、find を `read_scope_for_write` で拡張している（新規作成した実体のみを返す場合は下位レイヤーが元から空のため不要）
+- [ ] 同一集約に対する save の scope が find の scope 以下になっている
 - [ ] テスト用モックの save は、新規挿入パスでも scope 外レイヤーを保存しない（本番より寛容にしない）
 - [ ] テーブル名は複数形の snake_case、エンティティ名はその単数形
 - [ ] 主キー・一意制約・外部キーは PostgreSQL のデフォルト名をリネームしない
