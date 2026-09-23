@@ -2,11 +2,14 @@ import { ChevronDown } from "lucide-react"
 import { useState } from "react"
 
 import { ParameterItem } from "@/components/trials/ParameterItem"
+import { StepActions } from "@/components/trials/StepActions"
 import { formatDateTime } from "@/lib/datetime"
 import type { Step } from "@/lib/trial"
 import { cn } from "@/lib/utils"
 
 type StepCardProps = {
+  /** 工程が属する Trial の ID */
+  trialId: string
   /** 表示する工程 */
   step: Step
   /** 記録中の工程（position 順で最初の未完了工程）かどうか */
@@ -16,6 +19,10 @@ type StepCardProps = {
    * 以降の開閉はユーザー操作を優先するため、この値の変化では同期しない。
    */
   defaultExpanded: boolean
+  /** この工程に記録操作（編集・完了）を行えるかどうか */
+  canRecord: boolean
+  /** 記録操作に成功したときのハンドラ */
+  onChanged: () => void
 }
 
 /**
@@ -35,8 +42,18 @@ const stepStateLabel = (step: Step, isCurrent: boolean): string => {
  *
  * 1画面に全工程が並ぶため、本文（パラメーター）は折りたたみ可能にし、
  * 折りたたみ時もヘッダだけで進捗を把握できるようサマリーを常に表示する。
+ *
+ * 記録操作は本文内に置く。記録中の工程は常に展開されるため、
+ * 記録の焦点となる工程の操作は開いた直後から見える状態になる。
  */
-const StepCard = ({ step, isCurrent, defaultExpanded }: StepCardProps) => {
+const StepCard = ({
+  trialId,
+  step,
+  isCurrent,
+  defaultExpanded,
+  canRecord,
+  onChanged,
+}: StepCardProps) => {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
   const contentId = `step-parameters-${step.id}`
 
@@ -92,6 +109,12 @@ const StepCard = ({ step, isCurrent, defaultExpanded }: StepCardProps) => {
               <ParameterItem key={parameter.id} parameter={parameter} />
             ))}
           </ul>
+        )}
+
+        {canRecord && (
+          <div className="mt-3">
+            <StepActions trialId={trialId} step={step} onChanged={onChanged} />
+          </div>
         )}
       </div>
     </div>
