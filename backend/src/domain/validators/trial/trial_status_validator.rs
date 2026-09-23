@@ -1,11 +1,7 @@
 //! Trial のステータス検証
 
+use crate::domain::errors::trial_error::Error;
 use crate::domain::models::trial::{Trial, TrialStatus};
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Error {
-    TrialAlreadyCompleted,
-}
 
 pub fn require_in_progress(trial: &Trial) -> Result<(), Error> {
     if trial.status() == &TrialStatus::Completed {

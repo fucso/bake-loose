@@ -7,37 +7,11 @@ use crate::domain::validators::trial::{
     parameter_validator, step_existence_validator, step_status_validator, trial_status_validator,
 };
 
-pub use parameter_validator::Error as ParameterValidationError;
+pub use crate::domain::errors::trial_error::Error;
 
 pub struct Command {
     pub step_id: StepId,
     pub content: ParameterContent,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Error {
-    TrialAlreadyCompleted,
-    StepNotFound,
-    StepAlreadyCompleted,
-    InvalidParameter(ParameterValidationError),
-}
-
-impl From<trial_status_validator::Error> for Error {
-    fn from(_: trial_status_validator::Error) -> Self {
-        Error::TrialAlreadyCompleted
-    }
-}
-
-impl From<step_existence_validator::Error> for Error {
-    fn from(_: step_existence_validator::Error) -> Self {
-        Error::StepNotFound
-    }
-}
-
-impl From<step_status_validator::Error> for Error {
-    fn from(_: step_status_validator::Error) -> Self {
-        Error::StepAlreadyCompleted
-    }
 }
 
 /// バリデーション
@@ -48,7 +22,7 @@ pub fn validate(state: &Trial, command: &Command) -> Result<(), Error> {
         .step(&command.step_id)
         .expect("step existence already validated");
     step_status_validator::require_in_progress(step)?;
-    parameter_validator::validate(&command.content).map_err(Error::InvalidParameter)?;
+    parameter_validator::validate(&command.content)?;
     Ok(())
 }
 
@@ -169,11 +143,6 @@ mod tests {
         };
 
         let result = run(trial, command);
-        assert_eq!(
-            result,
-            Err(Error::InvalidParameter(
-                ParameterValidationError::EmptyQuantityUnit
-            ))
-        );
+        assert_eq!(result, Err(Error::EmptyQuantityUnit));
     }
 }

@@ -2,7 +2,7 @@ use crate::domain::models::trial::Trial;
 use crate::domain::timezone::JstDateTime;
 use crate::domain::validators::trial::trial_status_validator;
 
-pub use trial_status_validator::Error;
+pub use crate::domain::errors::trial_error::Error;
 
 pub struct Command {
     pub completed_at: Option<JstDateTime>,

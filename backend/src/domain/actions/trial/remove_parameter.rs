@@ -7,35 +7,11 @@ use crate::domain::validators::trial::{
     step_existence_validator, step_status_validator, trial_status_validator,
 };
 
+pub use crate::domain::errors::trial_error::Error;
+
 pub struct Command {
     pub step_id: StepId,
     pub parameter_id: ParameterId,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Error {
-    TrialAlreadyCompleted,
-    StepNotFound,
-    StepAlreadyCompleted,
-    ParameterNotFound,
-}
-
-impl From<trial_status_validator::Error> for Error {
-    fn from(_: trial_status_validator::Error) -> Self {
-        Error::TrialAlreadyCompleted
-    }
-}
-
-impl From<step_existence_validator::Error> for Error {
-    fn from(_: step_existence_validator::Error) -> Self {
-        Error::StepNotFound
-    }
-}
-
-impl From<step_status_validator::Error> for Error {
-    fn from(_: step_status_validator::Error) -> Self {
-        Error::StepAlreadyCompleted
-    }
 }
 
 /// バリデーション

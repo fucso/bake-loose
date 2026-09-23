@@ -202,9 +202,7 @@ mod tests {
 
         assert_eq!(
             result.unwrap_err(),
-            Error::Domain(add_step::Error::InvalidStepName(
-                add_step::StepNameError::EmptyName
-            ))
+            Error::Domain(add_step::Error::EmptyStepName)
         );
     }
 }

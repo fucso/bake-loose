@@ -1,12 +1,8 @@
 //! Step の存在確認
 
+use crate::domain::errors::trial_error::Error;
 use crate::domain::models::step::StepId;
 use crate::domain::models::trial::Trial;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Error {
-    StepNotFound,
-}
 
 /// 判定結果のみを返す。実態が必要な場合は呼び出し側（Action の validate）で
 /// `state.steps()` から取得する。

@@ -3,30 +3,12 @@
 use crate::domain::models::trial::Trial;
 use crate::domain::validators::trial::{trial_name_validator, trial_status_validator};
 
-pub use trial_name_validator::Error as TrialNameError;
+pub use crate::domain::errors::trial_error::Error;
 
 /// 指定したフィールドのみを部分更新する（`None` は未指定＝変更なし）
 pub struct Command {
     pub name: Option<Option<String>>,
     pub memo: Option<Option<String>>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Error {
-    TrialAlreadyCompleted,
-    InvalidTrialName(TrialNameError),
-}
-
-impl From<trial_status_validator::Error> for Error {
-    fn from(_: trial_status_validator::Error) -> Self {
-        Error::TrialAlreadyCompleted
-    }
-}
-
-impl From<trial_name_validator::Error> for Error {
-    fn from(e: trial_name_validator::Error) -> Self {
-        Error::InvalidTrialName(e)
-    }
 }
 
 /// バリデーション
@@ -138,10 +120,7 @@ mod tests {
             memo: None,
         };
 
-        assert_eq!(
-            run(trial, command),
-            Err(Error::InvalidTrialName(TrialNameError::EmptyName))
-        );
+        assert_eq!(run(trial, command), Err(Error::EmptyTrialName));
     }
 
     #[test]
@@ -154,10 +133,10 @@ mod tests {
 
         assert_eq!(
             run(trial, command),
-            Err(Error::InvalidTrialName(TrialNameError::NameTooLong {
+            Err(Error::TrialNameTooLong {
                 max: 100,
                 actual: 101,
-            }))
+            })
         );
     }
 

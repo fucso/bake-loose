@@ -45,6 +45,24 @@ fn project_not_found() -> GraphQLError {
     GraphQLError::new("指定されたProjectが見つかりません", "NOT_FOUND")
 }
 
+/// Action が実際には返し得ない domain error variant を受け取った場合の内部エラー
+///
+/// trial ドメインのエラーは `trial_error::Error` に一元管理されており、各 Action の
+/// `Error` は同じ型を再エクスポートしたものにすぎない。そのため個々の Action が実際に
+/// 返しうる variant を全て網羅しても、型としては他 Action 用の variant も理論上存在する。
+/// ここに来ることは実装上あり得ないが、`match` を網羅させるためのフォールバックとして残す。
+fn unexpected_domain_error(
+    action: &str,
+    error: &crate::domain::errors::trial_error::Error,
+) -> GraphQLError {
+    log::error!(
+        "Unexpected trial domain error variant for {}: {:?}",
+        action,
+        error
+    );
+    GraphQLError::new("内部エラーが発生しました", "INTERNAL_ERROR")
+}
+
 /// 外部キー違反で見つからなかった参照先を、エンティティ名に応じたメッセージへ振り分ける
 ///
 /// 参照先は Trial とは限らず、例えば `parameters_step_id_fkey` の違反なら Step が
@@ -67,15 +85,17 @@ impl UserFacingError for create_trial::Error {
     fn to_user_facing(&self) -> GraphQLError {
         match self {
             create_trial::Error::ProjectNotFound => project_not_found(),
-            create_trial::Error::Domain(create_trial_action::Error::InvalidTrialName(
-                create_trial_action::TrialNameError::EmptyName,
-            )) => GraphQLError::new("Trial名を入力してください", "VALIDATION_ERROR"),
-            create_trial::Error::Domain(create_trial_action::Error::InvalidTrialName(
-                create_trial_action::TrialNameError::NameTooLong { max, .. },
-            )) => GraphQLError::new(
+            create_trial::Error::Domain(create_trial_action::Error::EmptyTrialName) => {
+                GraphQLError::new("Trial名を入力してください", "VALIDATION_ERROR")
+            }
+            create_trial::Error::Domain(create_trial_action::Error::TrialNameTooLong {
+                max,
+                ..
+            }) => GraphQLError::new(
                 format!("Trial名は{}文字以内で入力してください", max),
                 "VALIDATION_ERROR",
             ),
+            create_trial::Error::Domain(other) => unexpected_domain_error("create_trial", other),
             create_trial::Error::Conflict { entity, field } => conflict_error(entity, field),
             create_trial::Error::Infrastructure(e) => internal_error(e),
         }
@@ -95,15 +115,17 @@ impl UserFacingError for update_trial::Error {
             update_trial::Error::Domain(update_trial_action::Error::TrialAlreadyCompleted) => {
                 GraphQLError::new("完了済みのTrialは更新できません", "VALIDATION_ERROR")
             }
-            update_trial::Error::Domain(update_trial_action::Error::InvalidTrialName(
-                update_trial_action::TrialNameError::EmptyName,
-            )) => GraphQLError::new("Trial名を入力してください", "VALIDATION_ERROR"),
-            update_trial::Error::Domain(update_trial_action::Error::InvalidTrialName(
-                update_trial_action::TrialNameError::NameTooLong { max, .. },
-            )) => GraphQLError::new(
+            update_trial::Error::Domain(update_trial_action::Error::EmptyTrialName) => {
+                GraphQLError::new("Trial名を入力してください", "VALIDATION_ERROR")
+            }
+            update_trial::Error::Domain(update_trial_action::Error::TrialNameTooLong {
+                max,
+                ..
+            }) => GraphQLError::new(
                 format!("Trial名は{}文字以内で入力してください", max),
                 "VALIDATION_ERROR",
             ),
+            update_trial::Error::Domain(other) => unexpected_domain_error("update_trial", other),
             update_trial::Error::ReferenceNotFound { entity } => reference_not_found(entity),
             update_trial::Error::Conflict { entity, field } => conflict_error(entity, field),
             update_trial::Error::Infrastructure(e) => internal_error(e),
@@ -123,6 +145,9 @@ impl UserFacingError for complete_trial::Error {
             complete_trial::Error::NotFound => trial_not_found(),
             complete_trial::Error::Domain(complete_trial_action::Error::TrialAlreadyCompleted) => {
                 GraphQLError::new("Trialは既に完了しています", "VALIDATION_ERROR")
+            }
+            complete_trial::Error::Domain(other) => {
+                unexpected_domain_error("complete_trial", other)
             }
             complete_trial::Error::ReferenceNotFound { entity } => reference_not_found(entity),
             complete_trial::Error::Conflict { entity, field } => conflict_error(entity, field),
@@ -147,15 +172,16 @@ impl UserFacingError for add_step::Error {
                     "VALIDATION_ERROR",
                 )
             }
-            add_step::Error::Domain(add_step_action::Error::InvalidStepName(
-                add_step_action::StepNameError::EmptyName,
-            )) => GraphQLError::new("Step名を入力してください", "VALIDATION_ERROR"),
-            add_step::Error::Domain(add_step_action::Error::InvalidStepName(
-                add_step_action::StepNameError::NameTooLong { max, .. },
-            )) => GraphQLError::new(
-                format!("Step名は{}文字以内で入力してください", max),
-                "VALIDATION_ERROR",
-            ),
+            add_step::Error::Domain(add_step_action::Error::EmptyStepName) => {
+                GraphQLError::new("Step名を入力してください", "VALIDATION_ERROR")
+            }
+            add_step::Error::Domain(add_step_action::Error::StepNameTooLong { max, .. }) => {
+                GraphQLError::new(
+                    format!("Step名は{}文字以内で入力してください", max),
+                    "VALIDATION_ERROR",
+                )
+            }
+            add_step::Error::Domain(other) => unexpected_domain_error("add_step", other),
             add_step::Error::ReferenceNotFound { entity } => reference_not_found(entity),
             add_step::Error::Conflict { entity, field } => conflict_error(entity, field),
             add_step::Error::Infrastructure(e) => internal_error(e),
@@ -180,15 +206,16 @@ impl UserFacingError for update_step::Error {
             update_step::Error::Domain(update_step_action::Error::StepAlreadyCompleted) => {
                 GraphQLError::new("完了済みのStepは更新できません", "VALIDATION_ERROR")
             }
-            update_step::Error::Domain(update_step_action::Error::InvalidStepName(
-                update_step_action::StepNameValidationError::EmptyName,
-            )) => GraphQLError::new("Step名を入力してください", "VALIDATION_ERROR"),
-            update_step::Error::Domain(update_step_action::Error::InvalidStepName(
-                update_step_action::StepNameValidationError::NameTooLong { max, .. },
-            )) => GraphQLError::new(
+            update_step::Error::Domain(update_step_action::Error::EmptyStepName) => {
+                GraphQLError::new("Step名を入力してください", "VALIDATION_ERROR")
+            }
+            update_step::Error::Domain(update_step_action::Error::StepNameTooLong {
+                max, ..
+            }) => GraphQLError::new(
                 format!("Step名は{}文字以内で入力してください", max),
                 "VALIDATION_ERROR",
             ),
+            update_step::Error::Domain(other) => unexpected_domain_error("update_step", other),
             update_step::Error::ReferenceNotFound { entity } => reference_not_found(entity),
             update_step::Error::Conflict { entity, field } => conflict_error(entity, field),
             update_step::Error::Infrastructure(e) => internal_error(e),
@@ -221,15 +248,16 @@ impl UserFacingError for add_parameter::Error {
                     "VALIDATION_ERROR",
                 )
             }
-            add_parameter::Error::Domain(add_parameter_action::Error::InvalidParameter(
-                add_parameter_action::ParameterValidationError::NegativeDurationValue,
-            )) => GraphQLError::new("時間は0以上で入力してください", "VALIDATION_ERROR"),
-            add_parameter::Error::Domain(add_parameter_action::Error::InvalidParameter(
-                add_parameter_action::ParameterValidationError::EmptyQuantityUnit,
-            )) => GraphQLError::new("単位を入力してください", "VALIDATION_ERROR"),
-            add_parameter::Error::Domain(add_parameter_action::Error::InvalidParameter(
-                add_parameter_action::ParameterValidationError::NonPositiveQuantityAmount,
-            )) => GraphQLError::new("数値は0より大きい値を入力してください", "VALIDATION_ERROR"),
+            add_parameter::Error::Domain(add_parameter_action::Error::NegativeDurationValue) => {
+                GraphQLError::new("時間は0以上で入力してください", "VALIDATION_ERROR")
+            }
+            add_parameter::Error::Domain(add_parameter_action::Error::EmptyQuantityUnit) => {
+                GraphQLError::new("単位を入力してください", "VALIDATION_ERROR")
+            }
+            add_parameter::Error::Domain(
+                add_parameter_action::Error::NonPositiveQuantityAmount,
+            ) => GraphQLError::new("数値は0より大きい値を入力してください", "VALIDATION_ERROR"),
+            add_parameter::Error::Domain(other) => unexpected_domain_error("add_parameter", other),
             add_parameter::Error::ReferenceNotFound { entity } => reference_not_found(entity),
             add_parameter::Error::Conflict { entity, field } => conflict_error(entity, field),
             add_parameter::Error::Infrastructure(e) => internal_error(e),
@@ -264,6 +292,9 @@ impl UserFacingError for remove_parameter::Error {
             ),
             remove_parameter::Error::Domain(remove_parameter_action::Error::ParameterNotFound) => {
                 parameter_not_found()
+            }
+            remove_parameter::Error::Domain(other) => {
+                unexpected_domain_error("remove_parameter", other)
             }
             remove_parameter::Error::ReferenceNotFound { entity } => reference_not_found(entity),
             remove_parameter::Error::Conflict { entity, field } => conflict_error(entity, field),
@@ -303,15 +334,18 @@ impl UserFacingError for update_parameter::Error {
             update_parameter::Error::Domain(
                 update_parameter_action::Error::ParameterContentTypeMismatch,
             ) => GraphQLError::new("Parameterの種類は変更できません", "VALIDATION_ERROR"),
-            update_parameter::Error::Domain(update_parameter_action::Error::InvalidParameter(
-                update_parameter_action::ParameterValidationError::NegativeDurationValue,
-            )) => GraphQLError::new("時間は0以上で入力してください", "VALIDATION_ERROR"),
-            update_parameter::Error::Domain(update_parameter_action::Error::InvalidParameter(
-                update_parameter_action::ParameterValidationError::EmptyQuantityUnit,
-            )) => GraphQLError::new("単位を入力してください", "VALIDATION_ERROR"),
-            update_parameter::Error::Domain(update_parameter_action::Error::InvalidParameter(
-                update_parameter_action::ParameterValidationError::NonPositiveQuantityAmount,
-            )) => GraphQLError::new("数値は0より大きい値を入力してください", "VALIDATION_ERROR"),
+            update_parameter::Error::Domain(
+                update_parameter_action::Error::NegativeDurationValue,
+            ) => GraphQLError::new("時間は0以上で入力してください", "VALIDATION_ERROR"),
+            update_parameter::Error::Domain(update_parameter_action::Error::EmptyQuantityUnit) => {
+                GraphQLError::new("単位を入力してください", "VALIDATION_ERROR")
+            }
+            update_parameter::Error::Domain(
+                update_parameter_action::Error::NonPositiveQuantityAmount,
+            ) => GraphQLError::new("数値は0より大きい値を入力してください", "VALIDATION_ERROR"),
+            update_parameter::Error::Domain(other) => {
+                unexpected_domain_error("update_parameter", other)
+            }
             update_parameter::Error::ReferenceNotFound { entity } => reference_not_found(entity),
             update_parameter::Error::Conflict { entity, field } => conflict_error(entity, field),
             update_parameter::Error::Infrastructure(e) => internal_error(e),
@@ -338,6 +372,7 @@ impl UserFacingError for complete_step::Error {
             complete_step::Error::Domain(complete_step_action::Error::StepAlreadyCompleted) => {
                 GraphQLError::new("Stepは既に完了しています", "VALIDATION_ERROR")
             }
+            complete_step::Error::Domain(other) => unexpected_domain_error("complete_step", other),
             complete_step::Error::ReferenceNotFound { entity } => reference_not_found(entity),
             complete_step::Error::Conflict { entity, field } => conflict_error(entity, field),
             complete_step::Error::Infrastructure(e) => internal_error(e),

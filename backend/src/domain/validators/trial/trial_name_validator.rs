@@ -1,12 +1,8 @@
 //! Trial の名前検証
 
-const MAX_NAME_LENGTH: usize = 100;
+use crate::domain::errors::trial_error::Error;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Error {
-    EmptyName,
-    NameTooLong { max: usize, actual: usize },
-}
+const MAX_NAME_LENGTH: usize = 100;
 
 /// Trial 名が指定されている場合に、空文字でなく上限文字数以内であることを検証する
 ///
@@ -16,10 +12,10 @@ pub fn validate(name: Option<&str>) -> Result<(), Error> {
         return Ok(());
     };
     if name.trim().is_empty() {
-        return Err(Error::EmptyName);
+        return Err(Error::EmptyTrialName);
     }
     if name.chars().count() > MAX_NAME_LENGTH {
-        return Err(Error::NameTooLong {
+        return Err(Error::TrialNameTooLong {
             max: MAX_NAME_LENGTH,
             actual: name.chars().count(),
         });
@@ -37,11 +33,11 @@ mod tests {
             (None, Ok(())),
             (Some("焼成温度検証".to_string()), Ok(())),
             (Some("a".repeat(MAX_NAME_LENGTH)), Ok(())),
-            (Some("".to_string()), Err(Error::EmptyName)),
-            (Some("   ".to_string()), Err(Error::EmptyName)),
+            (Some("".to_string()), Err(Error::EmptyTrialName)),
+            (Some("   ".to_string()), Err(Error::EmptyTrialName)),
             (
                 Some("a".repeat(MAX_NAME_LENGTH + 1)),
-                Err(Error::NameTooLong {
+                Err(Error::TrialNameTooLong {
                     max: MAX_NAME_LENGTH,
                     actual: MAX_NAME_LENGTH + 1,
                 }),
