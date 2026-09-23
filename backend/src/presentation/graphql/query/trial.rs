@@ -2,32 +2,14 @@
 //!
 //! Trialに関するクエリを処理する。
 
-use async_graphql::{Context, ErrorExtensions, Lookahead, Object, Result, ID};
+use async_graphql::{Context, ErrorExtensions, Object, Result, ID};
 
-use crate::ports::trial_repository::TrialScope;
 use crate::presentation::graphql::common::parse_uuid;
 use crate::presentation::graphql::context::ContextExt;
 use crate::presentation::graphql::error::UserFacingError;
+use crate::presentation::graphql::scope::trial_scope_from_look_ahead;
 use crate::presentation::graphql::types::trial::Trial;
 use crate::use_case::trial::{get_trial, list_trials_by_project};
-
-/// selection set の look-ahead から TrialScope を組み立てる
-///
-/// `steps { parameters { ... } }` まで要求されていれば `Full`、
-/// `steps { ... }` のみ（`parameters` 未選択）なら `WithSteps`、
-/// `steps` 自体が選択されていなければ `TrialOnly` とする。
-fn scope_from_look_ahead(look_ahead: Lookahead<'_>) -> TrialScope {
-    let steps = look_ahead.field("steps");
-    if !steps.exists() {
-        return TrialScope::TrialOnly;
-    }
-
-    if steps.field("parameters").exists() {
-        TrialScope::Full
-    } else {
-        TrialScope::WithSteps
-    }
-}
 
 #[derive(Default)]
 pub struct TrialQuery;
@@ -41,7 +23,7 @@ impl TrialQuery {
         let mut uow = ctx.create_unit_of_work()?;
 
         let trial_id = parse_uuid(&id)?;
-        let scope = scope_from_look_ahead(ctx.look_ahead());
+        let scope = trial_scope_from_look_ahead(ctx.look_ahead());
 
         let result = get_trial::execute(&mut uow, trial_id, scope)
             .await
@@ -55,7 +37,7 @@ impl TrialQuery {
         let mut uow = ctx.create_unit_of_work()?;
 
         let project_id = parse_uuid(&project_id)?;
-        let scope = scope_from_look_ahead(ctx.look_ahead());
+        let scope = trial_scope_from_look_ahead(ctx.look_ahead());
 
         let result = list_trials_by_project::execute(&mut uow, project_id, scope)
             .await

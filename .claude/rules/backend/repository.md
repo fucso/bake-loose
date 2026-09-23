@@ -213,7 +213,35 @@ let steps_by_trial = if scope < TrialScope::WithSteps {
 | 呼び出し側 | 指定方法 |
 |-----------|---------|
 | presentation（read） | GraphQL の selection set から動的に組み立てる |
-| use_case（write） | そのユースケースが読み書きする範囲を静的に指定する |
+| presentation（write） | 戻り値として選択されたレイヤーを selection set から組み立て、`return_scope` としてユースケースへ渡す |
+| use_case（write） | 書き込むレイヤー（`write_scope`）を静的に指定し、find は `write_scope` と `return_scope` の深い方を使う |
+
+**write ユースケースの戻り値スコープ**
+
+書き込みユースケースは find した集約を加工してそのまま呼び出し元へ返すため、
+**書き込みに必要なレイヤーだけで find すると、戻り値から下位レイヤーが黙って消える**。
+たとえば `updateTrial` が `TrialOnly` で find した Trial をそのまま返すと、
+`updateTrial { steps { id } }` は DB に Step があっても常に `steps: []` を返す。
+
+そのため write ユースケースは戻り値に必要なレイヤーを `return_scope` として受け取り、
+find は `read_scope_for_write(write_scope, return_scope)`（= 深い方）で行う。
+save は `write_scope` のまま行うため、戻り値のために読み込んだ下位レイヤーが
+DB へ書き戻されることはない。
+
+```rust
+// ❌ 書き込み範囲だけで find すると戻り値から Step/Parameter が消える
+let trial = repo.find_by_id(&trial_id, TrialScope::TrialOnly).await?;
+// ...
+Ok(updated)
+
+// ✅ 戻り値に必要なレイヤーまで find し、save は書き込み範囲のまま
+let trial = repo
+    .find_by_id(&trial_id, read_scope_for_write(TrialScope::TrialOnly, return_scope))
+    .await?;
+// ...
+save_trial(uow, &updated, TrialScope::TrialOnly).await?;
+Ok(updated)
+```
 
 ## スキーマ命名規約
 
@@ -276,6 +304,9 @@ let mut tx = self.pool.begin().await?;
 - [ ] sqlx エラーは `map_sqlx_error` で変換する（`RepositoryError::Internal` に畳まない）
 - [ ] 複数レイヤーを持つ集約では、scope が満たさないレイヤーのテーブルにクエリを発行していない
 - [ ] scope の分岐は呼び出し側にあり、レイヤー単位のヘルパーがスコープ外バリアントを処理していない
+- [ ] レイヤー単位のヘルパーはスコープ外で呼ばれたことを `debug_assert!` で検知できる
+- [ ] write ユースケースは `return_scope` を受け取り、find を `read_scope_for_write` で拡張している
+- [ ] テスト用モックの save は、新規挿入パスでも scope 外レイヤーを保存しない（本番より寛容にしない）
 - [ ] テーブル名は複数形の snake_case、エンティティ名はその単数形
 - [ ] 主キー・一意制約・外部キーは PostgreSQL のデフォルト名をリネームしない
 - [ ] インデックスは `idx_{table}_{columns}` で明示的に命名し、一意性は `CREATE UNIQUE INDEX` で表現する

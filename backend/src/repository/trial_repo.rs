@@ -218,6 +218,14 @@ impl PgTrialRepository {
         trial_ids: &[Uuid],
         scope: TrialScope,
     ) -> Result<HashMap<Uuid, Vec<Step>>, RepositoryError> {
+        // 呼び出し側での scope 判定漏れを検知する。
+        // `TrialOnly` で到達すると steps テーブルへ SELECT が飛び、
+        // 「scope が満たさないレイヤーにクエリを発行しない」という不変条件が壊れる
+        debug_assert!(
+            scope >= TrialScope::WithSteps,
+            "fetch_steps_by_trial_ids must not be called with a scope that excludes steps: {scope:?}"
+        );
+
         let step_rows = self.fetch_step_rows(trial_ids).await?;
 
         let mut parameters_by_step = if scope < TrialScope::Full {

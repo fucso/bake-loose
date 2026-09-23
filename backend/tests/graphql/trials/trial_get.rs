@@ -100,8 +100,11 @@ async fn test_returns_trial_without_steps_when_steps_not_requested(pool: PgPool)
 async fn test_returns_trial_with_steps_but_without_parameters_when_parameters_not_requested(
     pool: PgPool,
 ) {
-    // Parameter が存在していても、steps 配下で問い合わせていない parameters は
-    // 返らないことを検証する（WithSteps スコープ）
+    // parameters を選択せず steps のみを問い合わせた場合（WithSteps スコープ）でも、
+    // steps が欠落せずに返ることを検証する。
+    // parameters テーブルへ SELECT が飛んでいないこと自体は GraphQL レスポンスからは
+    // 観測できないため、その検証は repository 層の
+    // `test_find_by_id_with_with_steps_scope_fetches_steps_without_parameters` が担う
     let data = execute_graphql(
         pool,
         r#"{

@@ -11,7 +11,7 @@ use crate::domain::timezone::JstDateTime;
 use crate::ports::trial_repository::{TrialRepository, TrialScope};
 use crate::ports::{RepositoryError, UnitOfWork};
 
-use super::save_trial;
+use super::{read_scope_for_write, save_trial};
 
 /// completed_at が未指定の場合は現在時刻が採用される。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,13 +41,22 @@ impl From<RepositoryError> for Error {
     }
 }
 
-pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, Error> {
+/// `return_scope` には呼び出し元が戻り値として必要とする Trial のレイヤーを指定する。
+pub async fn execute<U: UnitOfWork>(
+    uow: &mut U,
+    input: Input,
+    return_scope: TrialScope,
+) -> Result<Trial, Error> {
     // 1. Trial を取得
-    // status/completed_at のみを変更するため Step/Parameter は不要（TrialOnly）
+    // 書き込むのは status/completed_at のみ（TrialOnly）だが、戻り値として
+    // 要求されたレイヤーは併せて取得する
     let trial_id = TrialId(input.trial_id);
     let trial = match uow
         .trial_repository()
-        .find_by_id(&trial_id, TrialScope::TrialOnly)
+        .find_by_id(
+            &trial_id,
+            read_scope_for_write(TrialScope::TrialOnly, return_scope),
+        )
         .await
     {
         Ok(Some(trial)) => trial,
@@ -67,6 +76,7 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
 
     // 4. 永続化（失敗時のロールバックはヘルパー側で行う）
+    // TrialOnly: 戻り値のために下位レイヤーまで取得していても DB へは書き戻さない
     save_trial(uow, &completed, TrialScope::TrialOnly).await?;
 
     // 5. コミット
@@ -103,7 +113,7 @@ mod tests {
             completed_at: None,
         };
 
-        let result = execute(&mut uow, input).await;
+        let result = execute(&mut uow, input, TrialScope::TrialOnly).await;
 
         assert!(result.is_ok());
         let completed = result.unwrap();
@@ -117,6 +127,41 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(saved.status(), &TrialStatus::Completed);
+    }
+
+    /// 戻り値として Step/Parameter が要求された場合、書き込み自体は TrialOnly のまま
+    /// 戻り値には下位レイヤーが含まれることを確認する回帰テスト
+    #[tokio::test]
+    async fn test_execute_returns_requested_layers_when_return_scope_is_full() {
+        use crate::domain::models::parameter::{Parameter, ParameterContent};
+        use crate::domain::models::step::Step;
+
+        let mut uow = MockUnitOfWork::default();
+        let mut trial = in_progress_trial();
+        let mut step = Step::new(trial.id().clone(), "こね".to_string(), 0, None);
+        step.add_parameter(Parameter::new(
+            step.id().clone(),
+            ParameterContent::Text {
+                value: "打ち粉を追加".to_string(),
+            },
+        ));
+        trial.add_step(step);
+        let trial_id = trial.id().clone();
+        uow.trial_repository()
+            .save(&trial, TrialScope::Full)
+            .await
+            .unwrap();
+
+        let input = Input {
+            trial_id: trial_id.0,
+            completed_at: None,
+        };
+
+        let completed = execute(&mut uow, input, TrialScope::Full).await.unwrap();
+
+        assert_eq!(completed.status(), &TrialStatus::Completed);
+        assert_eq!(completed.steps().len(), 1);
+        assert_eq!(completed.steps()[0].parameters().len(), 1);
     }
 
     #[tokio::test]
@@ -135,7 +180,7 @@ mod tests {
             completed_at: Some(completed_at),
         };
 
-        let result = execute(&mut uow, input).await;
+        let result = execute(&mut uow, input, TrialScope::TrialOnly).await;
 
         assert!(result.is_ok());
         let completed = result.unwrap();
@@ -153,7 +198,7 @@ mod tests {
             completed_at: None,
         };
 
-        let result = execute(&mut uow, input).await;
+        let result = execute(&mut uow, input, TrialScope::TrialOnly).await;
 
         assert_eq!(result.unwrap_err(), Error::NotFound);
     }
@@ -174,7 +219,7 @@ mod tests {
             completed_at: None,
         };
 
-        let result = execute(&mut uow, input).await;
+        let result = execute(&mut uow, input, TrialScope::TrialOnly).await;
 
         assert_eq!(
             result.unwrap_err(),
@@ -199,7 +244,7 @@ mod tests {
             completed_at: None,
         };
 
-        let result = execute(&mut uow, input).await;
+        let result = execute(&mut uow, input, TrialScope::TrialOnly).await;
 
         assert!(matches!(result, Err(Error::Infrastructure(_))));
         assert_eq!(uow.rollback_count(), 1);

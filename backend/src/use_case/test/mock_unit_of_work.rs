@@ -11,12 +11,14 @@ use crate::ports::project_repository::ProjectRepository;
 use crate::ports::trial_repository::{TrialRepository, TrialScope};
 use crate::ports::{ProjectSort, ProjectSortColumn, RepositoryError, SortDirection, UnitOfWork};
 
-/// find が返す Trial から、scope が含まないレイヤーを取り除く
+/// Trial から scope が含まないレイヤーを取り除く
 ///
-/// `PgTrialRepository` は scope に応じて取得すら行わないが、モックは常にメモリ上の
-/// 完全な Trial を保持しているため、実際の repository と同じ「取得していない
-/// レイヤーは空になる」という観測結果を返すためにここで明示的に取り除く。
-fn apply_read_scope(mut trial: Trial, scope: TrialScope) -> Trial {
+/// `PgTrialRepository` は scope が満たさないレイヤーへ一切アクセスしないのに対し、
+/// モックは常にメモリ上の完全な Trial を扱うため、同じ観測結果になるよう明示的に取り除く。
+///
+/// - find: 取得していないレイヤーは空になる
+/// - save（新規挿入）: INSERT していないレイヤーは保存されない
+fn truncate_to_scope(mut trial: Trial, scope: TrialScope) -> Trial {
     match scope {
         TrialScope::TrialOnly => {
             trial.steps_mut().clear();
@@ -205,7 +207,7 @@ impl TrialRepository for MockTrialRepository {
             .iter()
             .find(|t| t.id() == id)
             .cloned()
-            .map(|t| apply_read_scope(t, scope)))
+            .map(|t| truncate_to_scope(t, scope)))
     }
 
     async fn find_all_by_project(
@@ -218,7 +220,7 @@ impl TrialRepository for MockTrialRepository {
             .iter()
             .filter(|t| t.project_id() == project_id)
             .cloned()
-            .map(|t| apply_read_scope(t, scope))
+            .map(|t| truncate_to_scope(t, scope))
             .collect())
     }
 
@@ -230,7 +232,10 @@ impl TrialRepository for MockTrialRepository {
         let mut trials = self.trials.lock().await;
         let merged = match trials.iter().find(|t| t.id() == trial.id()) {
             Some(existing) => merge_with_scope(existing.clone(), trial.clone(), scope),
-            None => trial.clone(),
+            // 新規挿入。`PgTrialRepository` は scope が満たさないレイヤーを INSERT しないため、
+            // モックでも切り落としてから保持する（切り落とさないとモックだけが寛容になり、
+            // 「部分スコープで下位レイヤー付きの新規 Trial を save する」実装ミスを隠してしまう）
+            None => truncate_to_scope(trial.clone(), scope),
         };
         trials.retain(|t| t.id() != trial.id());
         trials.push(merged);
@@ -598,6 +603,51 @@ mod tests {
                 .unwrap();
             assert_eq!(found.steps()[0].name(), "発酵");
             assert_eq!(found.steps()[0].parameters().len(), 1);
+        }
+
+        /// 未保存の Trial を `TrialOnly` で save しても Step は保存されない
+        /// （`PgTrialRepository` が steps を INSERT しないことに対応）
+        #[tokio::test]
+        async fn test_save_with_trial_only_scope_does_not_insert_steps_for_new_trial() {
+            let mut uow = MockUnitOfWork::default();
+            let (trial, _) = trial_with_step_and_parameter();
+
+            uow.trial_repository()
+                .save(&trial, TrialScope::TrialOnly)
+                .await
+                .unwrap();
+
+            let found = uow
+                .trial_repository()
+                .find_by_id(trial.id(), TrialScope::Full)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(found.name(), Some("元の名前"));
+            assert!(found.steps().is_empty());
+        }
+
+        /// 未保存の Trial を `WithSteps` で save すると Step は保存されるが
+        /// Parameter は保存されない（`PgTrialRepository` が parameters を INSERT しないことに対応）
+        #[tokio::test]
+        async fn test_save_with_with_steps_scope_does_not_insert_parameters_for_new_trial() {
+            let mut uow = MockUnitOfWork::default();
+            let (trial, step_id) = trial_with_step_and_parameter();
+
+            uow.trial_repository()
+                .save(&trial, TrialScope::WithSteps)
+                .await
+                .unwrap();
+
+            let found = uow
+                .trial_repository()
+                .find_by_id(trial.id(), TrialScope::Full)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(found.steps().len(), 1);
+            assert_eq!(found.steps()[0].id(), &step_id);
+            assert!(found.steps()[0].parameters().is_empty());
         }
     }
 }

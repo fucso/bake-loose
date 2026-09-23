@@ -10,7 +10,7 @@ use crate::domain::timezone::JstDateTime;
 use crate::ports::trial_repository::{TrialRepository, TrialScope};
 use crate::ports::{RepositoryError, UnitOfWork};
 
-use super::save_trial;
+use super::{read_scope_for_write, save_trial};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Input {
@@ -40,13 +40,22 @@ impl From<RepositoryError> for Error {
     }
 }
 
-pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, Error> {
+/// `return_scope` には呼び出し元が戻り値として必要とする Trial のレイヤーを指定する。
+pub async fn execute<U: UnitOfWork>(
+    uow: &mut U,
+    input: Input,
+    return_scope: TrialScope,
+) -> Result<Trial, Error> {
     // 1. Trial取得
-    // Step の completed_at のみを変更するため Parameter は不要（WithSteps）
+    // 書き込むのは Step の completed_at のみ（WithSteps）だが、戻り値として
+    // 要求されたレイヤーは併せて取得する
     let trial_id = TrialId(input.trial_id);
     let trial = match uow
         .trial_repository()
-        .find_by_id(&trial_id, TrialScope::WithSteps)
+        .find_by_id(
+            &trial_id,
+            read_scope_for_write(TrialScope::WithSteps, return_scope),
+        )
         .await
     {
         Ok(Some(trial)) => trial,
@@ -67,7 +76,8 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
 
     // 4. 永続化（失敗時のロールバックはヘルパー側で行う）
-    // WithSteps: Parameterには一切アクセスしないため既存Parameterは消失しない
+    // WithSteps: Parameterには一切アクセスしないため、戻り値のために Parameter まで
+    // 取得していても既存 Parameter は消失せず、書き戻されることもない
     save_trial(uow, &trial, TrialScope::WithSteps).await?;
 
     // 5. コミット
@@ -108,7 +118,7 @@ mod tests {
             completed_at: None,
         };
 
-        let result = execute(&mut uow, input).await;
+        let result = execute(&mut uow, input, TrialScope::WithSteps).await;
 
         assert!(result.is_ok());
         let updated_trial = result.unwrap();
@@ -163,7 +173,7 @@ mod tests {
             completed_at: None,
         };
 
-        let result = execute(&mut uow, input).await;
+        let result = execute(&mut uow, input, TrialScope::WithSteps).await;
         assert!(result.is_ok());
 
         let saved_trial = uow
@@ -181,6 +191,43 @@ mod tests {
         assert_eq!(saved_step.parameters().len(), 1);
     }
 
+    /// 戻り値として Parameter が要求された場合、書き込み自体は WithSteps のまま
+    /// 戻り値には Parameter が含まれることを確認する回帰テスト
+    #[tokio::test]
+    async fn test_execute_returns_requested_layers_when_return_scope_is_full() {
+        use crate::domain::models::parameter::{Parameter, ParameterContent};
+
+        let mut uow = MockUnitOfWork::default();
+        let (mut trial, step_id) = seed_trial_with_step(&mut uow).await;
+        trial
+            .steps_mut()
+            .iter_mut()
+            .find(|s| s.id() == &step_id)
+            .unwrap()
+            .add_parameter(Parameter::new(
+                step_id.clone(),
+                ParameterContent::Text {
+                    value: "打ち粉を追加".to_string(),
+                },
+            ));
+        uow.trial_repository()
+            .save(&trial, TrialScope::Full)
+            .await
+            .unwrap();
+
+        let input = Input {
+            trial_id: trial.id().0,
+            step_id: step_id.0,
+            completed_at: None,
+        };
+
+        let updated = execute(&mut uow, input, TrialScope::Full).await.unwrap();
+
+        let step = updated.steps().iter().find(|s| s.id() == &step_id).unwrap();
+        assert!(step.is_completed());
+        assert_eq!(step.parameters().len(), 1);
+    }
+
     #[tokio::test]
     async fn test_execute_returns_not_found_when_trial_does_not_exist() {
         let mut uow = MockUnitOfWork::default();
@@ -190,7 +237,7 @@ mod tests {
             completed_at: None,
         };
 
-        let result = execute(&mut uow, input).await;
+        let result = execute(&mut uow, input, TrialScope::WithSteps).await;
 
         assert_eq!(result.unwrap_err(), Error::NotFound);
     }
@@ -206,7 +253,7 @@ mod tests {
             completed_at: None,
         };
 
-        let result = execute(&mut uow, input).await;
+        let result = execute(&mut uow, input, TrialScope::WithSteps).await;
 
         assert_eq!(
             result.unwrap_err(),
@@ -224,14 +271,16 @@ mod tests {
             step_id: step_id.0,
             completed_at: None,
         };
-        execute(&mut uow, input).await.unwrap();
+        execute(&mut uow, input, TrialScope::WithSteps)
+            .await
+            .unwrap();
 
         let input = Input {
             trial_id: trial.id().0,
             step_id: step_id.0,
             completed_at: None,
         };
-        let result = execute(&mut uow, input).await;
+        let result = execute(&mut uow, input, TrialScope::WithSteps).await;
 
         assert_eq!(
             result.unwrap_err(),
@@ -255,7 +304,7 @@ mod tests {
             completed_at: None,
         };
 
-        let result = execute(&mut uow, input).await;
+        let result = execute(&mut uow, input, TrialScope::WithSteps).await;
 
         assert_eq!(
             result.unwrap_err(),
@@ -276,7 +325,7 @@ mod tests {
             completed_at: None,
         };
 
-        let result = execute(&mut uow, input).await;
+        let result = execute(&mut uow, input, TrialScope::WithSteps).await;
 
         assert!(matches!(result, Err(Error::Infrastructure(_))));
         assert_eq!(uow.rollback_count(), 1);

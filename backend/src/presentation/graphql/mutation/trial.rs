@@ -12,6 +12,9 @@ use crate::domain::models::trial::Trial as DomainTrial;
 use crate::presentation::graphql::common::parse_uuid;
 use crate::presentation::graphql::context::ContextExt;
 use crate::presentation::graphql::error::{GraphQLError, UserFacingError};
+use crate::presentation::graphql::scope::{
+    step_scope_from_look_ahead, trial_scope_from_look_ahead,
+};
 use crate::presentation::graphql::types::trial::{
     AddStepInput, CreateTrialInput, Parameter, Step, Trial, UpdateStepInput, UpdateTrialInput,
 };
@@ -113,7 +116,11 @@ impl TrialMutation {
             memo: to_double_option(input.memo),
         };
 
-        let trial = update_trial::execute(&mut uow, use_case_input)
+        // 戻り値として選択されたレイヤーを scope に含めないと、DB に Step/Parameter が
+        // あってもレスポンスが空配列になる
+        let return_scope = trial_scope_from_look_ahead(ctx.look_ahead());
+
+        let trial = update_trial::execute(&mut uow, use_case_input, return_scope)
             .await
             .map_err(|e| e.to_user_facing().extend())?;
 
@@ -135,7 +142,9 @@ impl TrialMutation {
             completed_at,
         };
 
-        let trial = complete_trial::execute(&mut uow, use_case_input)
+        let return_scope = trial_scope_from_look_ahead(ctx.look_ahead());
+
+        let trial = complete_trial::execute(&mut uow, use_case_input, return_scope)
             .await
             .map_err(|e| e.to_user_facing().extend())?;
 
@@ -179,7 +188,10 @@ impl TrialMutation {
             started_at: to_double_option(input.started_at),
         };
 
-        let trial = update_step::execute(&mut uow, use_case_input)
+        // 戻り値は Step のため、`parameters` が選択されていれば Parameter まで取得する
+        let return_scope = step_scope_from_look_ahead(ctx.look_ahead());
+
+        let trial = update_step::execute(&mut uow, use_case_input, return_scope)
             .await
             .map_err(|e| e.to_user_facing().extend())?;
 
@@ -289,7 +301,9 @@ impl TrialMutation {
             completed_at,
         };
 
-        let trial = complete_step::execute(&mut uow, use_case_input)
+        let return_scope = step_scope_from_look_ahead(ctx.look_ahead());
+
+        let trial = complete_step::execute(&mut uow, use_case_input, return_scope)
             .await
             .map_err(|e| e.to_user_facing().extend())?;
 
