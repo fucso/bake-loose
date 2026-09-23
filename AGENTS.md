@@ -280,6 +280,38 @@ sqlx migrate run
 sqlx migrate info
 ```
 
+#### マイグレーション作成から適用までの手順
+
+**重要**: マイグレーションファイルは一度適用したら変更できないため、実 DB に適用する前に必ず
+`cargo test` でスキーマ命名規約の検証を通すこと。以下の順序を必ず守る。
+
+```bash
+# 1. マイグレーション SQL を作成する
+docker compose exec backend bash -c "sqlx migrate add <migration_name>"
+
+# 2. 使い捨てDBで検証する（この時点では開発用DBには何も適用されない）
+docker compose exec backend bash -c "cargo test"
+
+# 3. 2 が pass してから開発用DBに適用する
+docker compose exec backend bash -c "sqlx migrate run"
+```
+
+手順 2 の `cargo test` には `backend/tests/schema_naming.rs` が含まれる。このテストは
+`#[sqlx::test]` が生成する**使い捨てデータベース**に全マイグレーションを適用し、
+`pg_constraint` / `pg_index` を走査して主キー・一意制約・外部キー・インデックスの名前が
+スキーマ命名規約に従っているかを検証する。マイグレーションが開発用DB（`compose.yaml` の `db`
+サービス）のスキーマに適用されることはないため、規約違反を**実 DB へ適用する前に**検出できる。
+
+スキーマ命名規約の本文は `.claude/rules/backend/repository.md` の「スキーマ命名規約」、
+Rust 側の定数定義は `backend/src/repository/naming_conventions.rs` を参照。
+
+手順 2 を飛ばした場合でも、CI（`.github/workflows/backend-ci.yml`）の `cargo test` ステップで
+同じテストが実行されるため、マージ前には必ず検出される。
+
+なお `#[sqlx::test]` はコンパイル時にマイグレーション SQL を実行ファイルへ埋め込むため、
+マイグレーションを追加しただけでは cargo が再ビルドを行わず、古いテストバイナリが実行されてしまう。
+これを防ぐために `backend/build.rs` で `migrations` ディレクトリを再ビルドのトリガーに登録している。
+
 #### 注意事項
 
 - マイグレーションファイルは一度適用したら変更しない
