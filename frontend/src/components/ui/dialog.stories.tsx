@@ -4,7 +4,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite'
 import { cn } from '@/lib/utils'
 
 import { Button, buttonVariants } from './button'
-import { Dialog, DialogClose, DialogPopup, DialogTitle } from './dialog'
+import { Dialog, DialogClose, DialogPopup, DialogSheetPopup, DialogTitle } from './dialog'
 
 const meta = {
   title: 'ui/Dialog',
@@ -57,6 +57,20 @@ export const Open: Story = {
           Storybook上で常時表示された状態を確認できます。
         </p>
       </DialogPopup>
+    </Dialog>
+  ),
+}
+
+/** 画面下端から開くボトムシート。モバイルでの入力フォーム向け */
+export const Sheet: Story = {
+  render: () => (
+    <Dialog open>
+      <DialogSheetPopup>
+        <DialogTitle>ボトムシート</DialogTitle>
+        <p className="text-sm text-muted-foreground">
+          親指の届く下端に寄せて表示します。内容が増えた場合はシート内でスクロールします。
+        </p>
+      </DialogSheetPopup>
     </Dialog>
   ),
 }

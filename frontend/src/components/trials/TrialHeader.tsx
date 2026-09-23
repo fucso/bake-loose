@@ -3,6 +3,7 @@ import { useMutation } from "urql"
 
 import { TrialStatusBadge } from "@/components/trials/TrialStatusBadge"
 import { Button } from "@/components/ui/button"
+import { Input, inputClassName } from "@/components/ui/input"
 import { formatDateTime } from "@/lib/datetime"
 import { toUserFacingErrorMessage } from "@/lib/graphql-error"
 import type { Trial, TrialStatus } from "@/lib/trial"
@@ -58,9 +59,6 @@ const COMPLETE_TRIAL_MUTATION = `
     }
   }
 `
-
-const inputClassName =
-  "rounded-md border border-input bg-background px-3 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
 
 type TrialHeaderProps = {
   /** 表示・編集する Trial */
@@ -131,12 +129,11 @@ const TrialHeader = ({ trial, onChanged }: TrialHeaderProps) => {
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
         <label className="flex flex-col gap-1 text-sm">
           <span>試行名</span>
-          <input
+          <Input
             autoFocus
             value={name}
             onChange={(event) => setName(event.target.value)}
             disabled={updating}
-            className={inputClassName}
           />
         </label>
 
