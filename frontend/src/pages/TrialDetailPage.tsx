@@ -45,8 +45,9 @@ const TRIAL_QUERY = `
 /**
  * Trial 詳細（記録ワークベンチ）。
  *
- * 1つの Trial に紐づく工程・パラメーターを時系列で俯瞰し、Trial 自体の編集・完了を行う。
- * 工程・パラメーターの記録操作は本画面の骨格の上に別途実装する。
+ * 1つの Trial に紐づく工程・パラメーターを時系列で俯瞰し、Trial 自体と工程の記録操作を行う。
+ * 記録操作の成功後は本画面で再取得し、タイムライン全体へ反映する。
+ * パラメーターの記録操作は本画面の骨格の上に別途実装する。
  */
 const TrialDetailPage = () => {
   const { id, trialId } = useParams<{ id: string; trialId: string }>()
@@ -99,7 +100,12 @@ const TrialDetailPage = () => {
         {!error && trial && (
           <div className="flex flex-col gap-6">
             <TrialHeader trial={trial} onChanged={refetch} />
-            <StepTimeline steps={trial.steps} trialStatus={trial.status} />
+            <StepTimeline
+              trialId={trial.id}
+              steps={trial.steps}
+              trialStatus={trial.status}
+              onChanged={refetch}
+            />
           </div>
         )}
       </div>
