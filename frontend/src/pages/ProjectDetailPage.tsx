@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router-dom"
 import { useQuery } from "urql"
 
+import { TrialListSection } from "@/components/trials/TrialListSection"
 import { ErrorState } from "@/components/ui-states/ErrorState"
 import { LoadingSpinner } from "@/components/ui-states/LoadingSpinner"
 
@@ -62,7 +63,12 @@ const ProjectDetailPage = () => {
         )}
 
         {!fetching && !error && data?.project && (
-          <h1 className="text-2xl font-bold">{data.project.name}</h1>
+          <>
+            <h1 className="text-2xl font-bold">{data.project.name}</h1>
+            <div className="mt-8">
+              <TrialListSection projectId={data.project.id} />
+            </div>
+          </>
         )}
       </div>
     </div>
