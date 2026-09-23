@@ -3,6 +3,7 @@ import { useMutation } from "urql"
 
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogPopup, DialogTitle } from "@/components/ui/dialog"
+import { toUserFacingErrorMessage } from "@/lib/graphql-error"
 import { cn } from "@/lib/utils"
 
 type CreateProjectData = {
@@ -73,13 +74,8 @@ const CreateProjectModal = ({ open, onOpenChange, onCreated }: CreateProjectModa
     }
   }
 
-  // バックエンドの GraphQL エラーメッセージ（プロジェクト名の重複・文字数超過など）は
-  // presentation層（backend/src/presentation/graphql/error.rs）で既にユーザー向けに
-  // 変換済みのため、そのまま表示する。GraphQL エラーが無い場合（ネットワークエラー等）は
-  // 汎用メッセージにフォールバックする。
   const errorMessage =
-    validationError ??
-    (error ? (error.graphQLErrors[0]?.message ?? "プロジェクトの作成に失敗しました") : null)
+    validationError ?? toUserFacingErrorMessage(error, "プロジェクトの作成に失敗しました")
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
