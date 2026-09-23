@@ -64,9 +64,3 @@ impl TrialQuery {
         Ok(result.into_iter().map(Trial::from).collect())
     }
 }
-
-// `scope_from_look_ahead` は `async_graphql::Context` 経由でしか `Lookahead` を
-// 構築できないため、単体テストではなく backend/tests の GraphQL 統合テスト
-// （trial_get.rs / trial_list.rs）で実際のクエリ実行を通して検証する。
-// steps/parameters の要求有無に応じて正しいレイヤーのみが返ることを
-// 完全な JSON 比較で確認している。

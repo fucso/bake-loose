@@ -35,14 +35,6 @@ pub trait TrialRepository: Send + Sync {
     ) -> Result<Vec<Trial>, RepositoryError>;
 
     /// Trialを保存（新規作成または更新）する
-    ///
-    /// `scope` は洗い替え（差分削除 + upsert）の対象範囲を制御する。
-    /// `TrialOnly` は Trial 本体のみ、`WithSteps` は Trial + Step、
-    /// `Full` は Trial + Step + Parameter を洗い替える。
-    /// scope が満たさないレイヤーには一切アクセスしない
-    /// （例: `TrialOnly` では Step の差分削除すら発行しない）ため、
-    /// 部分スコープで取得した Trial（下位レイヤーが空）をそのまま渡しても
-    /// 既存の Step/Parameter を消失させない。
     async fn save(&self, trial: &Trial, scope: TrialScope) -> Result<(), RepositoryError>;
 }
 

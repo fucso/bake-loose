@@ -23,7 +23,7 @@ use crate::use_case::rollback_on_error;
 ///
 /// 書き込みユースケースの「4. 永続化」は必ずこのヘルパーを経由すること。
 /// `scope` はそのユースケースが実際に読み書きするレイヤーの深さに応じて呼び出し側が指定する
-/// （詳細は `.claude/rules/backend/use-case.md` および Issue #64）。
+/// （詳細は `.claude/rules/backend/repository.md`）。
 ///
 /// リポジトリはトランザクションの `Arc` を clone して保持するため、
 /// `save()` の結果を判定する前にリポジトリを drop させないと

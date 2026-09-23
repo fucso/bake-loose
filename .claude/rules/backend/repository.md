@@ -160,6 +160,61 @@ impl ProjectRepository for PgProjectRepository {
 }
 ```
 
+## 集約スコープによる fetch / save 範囲の制御
+
+複数レイヤーを持つ集約（`Trial` → `Step` → `Parameter` など）のリポジトリは、
+**fetch / save が触れるレイヤーの深さを scope 引数で受け取り、その範囲だけを処理する**。
+これはモデル個別の事情ではなく、リポジトリ層共通の仕様として扱う。
+
+**scope enum の定義**
+
+- scope enum は ports 層の該当リポジトリトレイトと同じファイルに定義する（例: `TrialScope`）
+- 深さの昇順で `PartialOrd` / `Ord` を導出し、`scope < Xxx` で段階を判定できるようにする
+- `Default` は最も深いバリアント（全レイヤー）とし、scope 未指定に相当する呼び出しの後方互換を保つ
+- **各バリアントが含むレイヤーの説明はバリアント側にだけ書く**。
+  トレイトメソッドの引数や実装側のコメントで範囲を繰り返さない
+
+**リポジトリ実装での遵守事項**
+
+| 操作 | scope が満たさないレイヤーに対して |
+|------|--------------------------------|
+| find 系 | SELECT を発行しない |
+| save 系 | DELETE / INSERT / UPDATE を発行しない |
+
+save は「渡された集約のスナップショットを正として DB との差分を洗い替える」方式のため、
+scope の遵守は **部分スコープで取得した集約をそのまま save しても下位レイヤーが消えない**
+ことを支える不変条件になる。scope を判定する早期リターンより前に無条件の
+DELETE / UPSERT を追加しないこと。
+
+**scope を判定する場所**
+
+scope の分岐は「そのレイヤーを扱うかどうか」を決める呼び出し側に置き、
+レイヤー単位のヘルパー関数の中でスコープ外バリアントを処理しない。
+
+```rust
+// ❌ Step を扱う関数が、Step を扱わない scope の分岐まで抱えている
+async fn fetch_steps_by_trial_ids(&self, ids: &[Uuid], scope: TrialScope) -> ... {
+    match scope {
+        TrialScope::TrialOnly => Ok(HashMap::new()),  // この関数の責務外
+        // ...
+    }
+}
+
+// ✅ 呼び出し側で弾き、ヘルパーは自分が扱うレイヤーだけを見る
+let steps_by_trial = if scope < TrialScope::WithSteps {
+    HashMap::new()
+} else {
+    self.fetch_steps_by_trial_ids(&trial_ids, scope).await?
+};
+```
+
+**scope の組み立て**
+
+| 呼び出し側 | 指定方法 |
+|-----------|---------|
+| presentation（read） | GraphQL の selection set から動的に組み立てる |
+| use_case（write） | そのユースケースが読み書きする範囲を静的に指定する |
+
 ## スキーマ命名規約
 
 DB のスキーマ名はプロジェクトのルールとして以下に統一する。PostgreSQL がデフォルトで付与する名前は
@@ -219,6 +274,8 @@ let mut tx = self.pool.begin().await?;
 - [ ] プレースホルダー使用（SQLインジェクション対策）
 - [ ] UPSERT（ON CONFLICT）で冪等性確保
 - [ ] sqlx エラーは `map_sqlx_error` で変換する（`RepositoryError::Internal` に畳まない）
+- [ ] 複数レイヤーを持つ集約では、scope が満たさないレイヤーのテーブルにクエリを発行していない
+- [ ] scope の分岐は呼び出し側にあり、レイヤー単位のヘルパーがスコープ外バリアントを処理していない
 - [ ] テーブル名は複数形の snake_case、エンティティ名はその単数形
 - [ ] 主キー・一意制約・外部キーは PostgreSQL のデフォルト名をリネームしない
 - [ ] インデックスは `idx_{table}_{columns}` で明示的に命名し、一意性は `CREATE UNIQUE INDEX` で表現する

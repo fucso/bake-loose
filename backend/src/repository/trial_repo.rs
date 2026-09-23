@@ -29,110 +29,6 @@ impl PgTrialRepository {
     pub fn new(executor: PgExecutor) -> Self {
         Self { executor }
     }
-
-    /// 指定した Trial ID 群に紐づく StepRow を取得する（trial_id, position 順）
-    ///
-    /// `trial_ids` が空の場合は steps テーブルへのクエリを発行しない。
-    async fn fetch_step_rows(&self, trial_ids: &[Uuid]) -> Result<Vec<StepRow>, RepositoryError> {
-        if trial_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        self.executor
-            .fetch_all(
-                sqlx::query_as::<_, StepRow>(
-                    "SELECT * FROM steps WHERE trial_id = ANY($1) ORDER BY trial_id, position",
-                )
-                .bind(trial_ids),
-            )
-            .await
-            .map_err(|e| map_sqlx_error(e, "step"))
-    }
-
-    /// 指定した Trial ID 群に紐づく Step を Parameter なしで取得する（`WithSteps` 用）
-    ///
-    /// parameters テーブルへのクエリを一切発行しない。
-    async fn fetch_steps_only_by_trial_ids(
-        &self,
-        trial_ids: &[Uuid],
-    ) -> Result<HashMap<Uuid, Vec<Step>>, RepositoryError> {
-        let step_rows = self.fetch_step_rows(trial_ids).await?;
-
-        let mut steps_by_trial: HashMap<Uuid, Vec<Step>> = HashMap::new();
-        for row in step_rows {
-            let trial_id = row.trial_id;
-            steps_by_trial
-                .entry(trial_id)
-                .or_default()
-                .push(row.into_domain(Vec::new()));
-        }
-
-        Ok(steps_by_trial)
-    }
-
-    /// 指定した Trial ID 群に紐づく Step を Parameter込みで取得する（`Full` 用）
-    ///
-    /// Step・Parameter をそれぞれ一括取得してから Rust 側で組み立てることで、
-    /// Trial 件数・Step 件数に対する N+1 クエリを避ける。
-    async fn fetch_steps_by_trial_ids(
-        &self,
-        trial_ids: &[Uuid],
-    ) -> Result<HashMap<Uuid, Vec<Step>>, RepositoryError> {
-        let step_rows = self.fetch_step_rows(trial_ids).await?;
-
-        let step_ids: Vec<Uuid> = step_rows.iter().map(|row| row.id).collect();
-
-        let mut parameters_by_step: HashMap<Uuid, Vec<Parameter>> = HashMap::new();
-        if !step_ids.is_empty() {
-            let parameter_rows = self
-                .executor
-                .fetch_all(
-                    sqlx::query_as::<_, ParameterRow>(
-                        // Parameter には順序を表すカラムがないため、登録順（created_at）で
-                        // 決定的に整列する。同一トランザクションで投入され created_at が
-                        // 同値になる場合に備えて id を tie-break に用いる。
-                        "SELECT * FROM parameters WHERE step_id = ANY($1) ORDER BY step_id, created_at, id",
-                    )
-                    .bind(&step_ids),
-                )
-                .await
-                .map_err(|e| map_sqlx_error(e, "parameter"))?;
-
-            for row in parameter_rows {
-                parameters_by_step
-                    .entry(row.step_id)
-                    .or_default()
-                    .push(row.into());
-            }
-        }
-
-        let mut steps_by_trial: HashMap<Uuid, Vec<Step>> = HashMap::new();
-        for row in step_rows {
-            let trial_id = row.trial_id;
-            let parameters = parameters_by_step.remove(&row.id).unwrap_or_default();
-            steps_by_trial
-                .entry(trial_id)
-                .or_default()
-                .push(row.into_domain(parameters));
-        }
-
-        Ok(steps_by_trial)
-    }
-
-    /// scope に応じて Step（+ Parameter）を取得する
-    ///
-    /// `TrialOnly` は steps テーブルへのクエリを一切発行せず空を返す。
-    async fn fetch_steps_for_scope(
-        &self,
-        trial_ids: &[Uuid],
-        scope: TrialScope,
-    ) -> Result<HashMap<Uuid, Vec<Step>>, RepositoryError> {
-        match scope {
-            TrialScope::TrialOnly => Ok(HashMap::new()),
-            TrialScope::WithSteps => self.fetch_steps_only_by_trial_ids(trial_ids).await,
-            TrialScope::Full => self.fetch_steps_by_trial_ids(trial_ids).await,
-        }
-    }
 }
 
 #[async_trait]
@@ -154,8 +50,14 @@ impl TrialRepository for PgTrialRepository {
             return Ok(None);
         };
 
-        let mut steps_by_trial = self.fetch_steps_for_scope(&[trial_row.id], scope).await?;
-        let steps = steps_by_trial.remove(&trial_row.id).unwrap_or_default();
+        let steps = if scope < TrialScope::WithSteps {
+            Vec::new()
+        } else {
+            self.fetch_steps_by_trial_ids(&[trial_row.id], scope)
+                .await?
+                .remove(&trial_row.id)
+                .unwrap_or_default()
+        };
 
         Ok(Some(trial_row.into_domain(steps)?))
     }
@@ -177,8 +79,12 @@ impl TrialRepository for PgTrialRepository {
             .await
             .map_err(|e| map_sqlx_error(e, "trial"))?;
 
-        let trial_ids: Vec<Uuid> = trial_rows.iter().map(|row| row.id).collect();
-        let mut steps_by_trial = self.fetch_steps_for_scope(&trial_ids, scope).await?;
+        let mut steps_by_trial = if scope < TrialScope::WithSteps {
+            HashMap::new()
+        } else {
+            let trial_ids: Vec<Uuid> = trial_rows.iter().map(|row| row.id).collect();
+            self.fetch_steps_by_trial_ids(&trial_ids, scope).await?
+        };
 
         trial_rows
             .into_iter()
@@ -216,9 +122,6 @@ impl TrialRepository for PgTrialRepository {
             .await
             .map_err(|e| map_sqlx_error(e, "trial"))?;
 
-        // `TrialOnly` は Trial 本体のみを対象とし、Step/Parameter には一切アクセスしない。
-        // 部分スコープ（steps が空）で取得した Trial をそのまま渡しても、
-        // 既存の Step/Parameter を差分削除で消失させないための安全弁。
         if scope < TrialScope::WithSteps {
             return Ok(());
         }
@@ -260,8 +163,6 @@ impl TrialRepository for PgTrialRepository {
                 .await
                 .map_err(|e| map_sqlx_error(e, "step"))?;
 
-            // `WithSteps` は Trial + Step のみを対象とし、Parameter には一切アクセスしない
-            // （部分スコープで取得した Step の parameters が空でも消失させない）。
             if scope < TrialScope::Full {
                 continue;
             }
@@ -301,6 +202,97 @@ impl TrialRepository for PgTrialRepository {
         }
 
         Ok(())
+    }
+}
+
+impl PgTrialRepository {
+    /// 指定した Trial ID 群に紐づく Step を取得する
+    ///
+    /// Parameter を併せて取得するのは `Full` のときのみ。
+    /// Step を取得しない scope での呼び出しは呼び出し側で弾くこと。
+    ///
+    /// Step・Parameter をそれぞれ一括取得してから Rust 側で組み立てることで、
+    /// Trial 件数・Step 件数に対する N+1 クエリを避ける。
+    async fn fetch_steps_by_trial_ids(
+        &self,
+        trial_ids: &[Uuid],
+        scope: TrialScope,
+    ) -> Result<HashMap<Uuid, Vec<Step>>, RepositoryError> {
+        let step_rows = self.fetch_step_rows(trial_ids).await?;
+
+        let mut parameters_by_step = if scope < TrialScope::Full {
+            HashMap::new()
+        } else {
+            let step_ids: Vec<Uuid> = step_rows.iter().map(|row| row.id).collect();
+            self.fetch_parameters_by_step_ids(&step_ids).await?
+        };
+
+        let mut steps_by_trial: HashMap<Uuid, Vec<Step>> = HashMap::new();
+        for row in step_rows {
+            let trial_id = row.trial_id;
+            let parameters = parameters_by_step.remove(&row.id).unwrap_or_default();
+            steps_by_trial
+                .entry(trial_id)
+                .or_default()
+                .push(row.into_domain(parameters));
+        }
+
+        Ok(steps_by_trial)
+    }
+
+    /// 指定した Trial ID 群に紐づく StepRow を取得する（trial_id, position 順）
+    ///
+    /// `trial_ids` が空の場合は steps テーブルへのクエリを発行しない。
+    async fn fetch_step_rows(&self, trial_ids: &[Uuid]) -> Result<Vec<StepRow>, RepositoryError> {
+        if trial_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        self.executor
+            .fetch_all(
+                sqlx::query_as::<_, StepRow>(
+                    "SELECT * FROM steps WHERE trial_id = ANY($1) ORDER BY trial_id, position",
+                )
+                .bind(trial_ids),
+            )
+            .await
+            .map_err(|e| map_sqlx_error(e, "step"))
+    }
+
+    /// 指定した Step ID 群に紐づく Parameter を step_id ごとにまとめて取得する
+    ///
+    /// `step_ids` が空の場合は parameters テーブルへのクエリを発行しない。
+    async fn fetch_parameters_by_step_ids(
+        &self,
+        step_ids: &[Uuid],
+    ) -> Result<HashMap<Uuid, Vec<Parameter>>, RepositoryError> {
+        if step_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let parameter_rows = self
+            .executor
+            .fetch_all(
+                sqlx::query_as::<_, ParameterRow>(
+                    // Parameter には順序を表すカラムがないため、登録順（created_at）で
+                    // 決定的に整列する。同一トランザクションで投入され created_at が
+                    // 同値になる場合に備えて id を tie-break に用いる。
+                    "SELECT * FROM parameters WHERE step_id = ANY($1) ORDER BY step_id, created_at, id",
+                )
+                .bind(step_ids),
+            )
+            .await
+            .map_err(|e| map_sqlx_error(e, "parameter"))?;
+
+        let mut parameters_by_step: HashMap<Uuid, Vec<Parameter>> = HashMap::new();
+        for row in parameter_rows {
+            parameters_by_step
+                .entry(row.step_id)
+                .or_default()
+                .push(row.into());
+        }
+
+        Ok(parameters_by_step)
     }
 }
 
