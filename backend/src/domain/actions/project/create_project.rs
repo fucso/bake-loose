@@ -1,27 +1,14 @@
 use crate::domain::models::project::Project;
+use crate::domain::validators::project::project_name_validator;
 
-const MAX_NAME_LENGTH: usize = 100;
+pub use crate::domain::errors::project_error::Error;
 
 pub struct Command {
     pub name: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Error {
-    EmptyName,
-    NameTooLong { max: usize, actual: usize },
-}
-
 pub fn validate(command: &Command) -> Result<(), Error> {
-    if command.name.trim().is_empty() {
-        return Err(Error::EmptyName);
-    }
-    if command.name.chars().count() > MAX_NAME_LENGTH {
-        return Err(Error::NameTooLong {
-            max: MAX_NAME_LENGTH,
-            actual: command.name.chars().count(),
-        });
-    }
+    project_name_validator::validate(&command.name)?;
     Ok(())
 }
 
@@ -61,26 +48,26 @@ mod tests {
     }
 
     #[test]
-    fn test_name_validation() {
-        let cases = vec![
-            ("a".repeat(MAX_NAME_LENGTH), Ok(())),
-            ("".to_string(), Err(Error::EmptyName)),
-            ("   ".to_string(), Err(Error::EmptyName)),
-            (
-                "a".repeat(MAX_NAME_LENGTH + 1),
-                Err(Error::NameTooLong {
-                    max: MAX_NAME_LENGTH,
-                    actual: MAX_NAME_LENGTH + 1,
-                }),
-            ),
-        ];
+    fn test_run_err_when_name_is_empty() {
+        let command = Command {
+            name: "".to_string(),
+        };
 
-        for (name, expected) in cases {
-            let command = Command {
-                name: name.to_string(),
-            };
-            let result = validate(&command);
-            assert_eq!(result, expected);
-        }
+        assert_eq!(run(command), Err(Error::EmptyName));
+    }
+
+    #[test]
+    fn test_run_err_when_name_too_long() {
+        let command = Command {
+            name: "a".repeat(101),
+        };
+
+        assert_eq!(
+            run(command),
+            Err(Error::NameTooLong {
+                max: 100,
+                actual: 101,
+            })
+        );
     }
 }
