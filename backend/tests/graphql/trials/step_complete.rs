@@ -1,9 +1,52 @@
 //! `completeStep` mutation のテスト
 
+use serde_json::json;
 use sqlx::PgPool;
 
 use crate::graphql::schema::{execute_graphql, execute_graphql_with_errors};
 use crate::graphql::trials::helpers::{add_step, TRIAL_ID};
+
+/// steps.sql の未完了 Step（Parameter を2件持つ）
+const IN_PROGRESS_STEP_ID: &str = "88888888-8888-8888-8888-888888888888";
+
+/// `updateStep` と同様、書き込み範囲（`WithSteps`）だけで find すると
+/// `parameters` が空配列で返る退行の回帰テスト
+#[sqlx::test(
+    migrations = "./migrations",
+    fixtures(
+        "../../fixtures/projects.sql",
+        "../../fixtures/trials.sql",
+        "../../fixtures/steps.sql"
+    )
+)]
+async fn test_complete_step_returns_parameters_when_selected(pool: PgPool) {
+    let query = format!(
+        r#"
+        mutation {{
+            completeStep(trialId: "{TRIAL_ID}", stepId: "{IN_PROGRESS_STEP_ID}") {{
+                id
+                isCompleted
+                parameters {{ id }}
+            }}
+        }}
+        "#
+    );
+    let data = execute_graphql(pool, &query).await;
+
+    assert_eq!(
+        data,
+        json!({
+            "completeStep": {
+                "id": IN_PROGRESS_STEP_ID,
+                "isCompleted": true,
+                "parameters": [
+                    { "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1" },
+                    { "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2" }
+                ]
+            }
+        })
+    );
+}
 
 #[sqlx::test(
     migrations = "./migrations",

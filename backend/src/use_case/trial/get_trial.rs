@@ -5,7 +5,7 @@
 use uuid::Uuid;
 
 use crate::domain::models::trial::{Trial, TrialId};
-use crate::ports::trial_repository::TrialRepository;
+use crate::ports::trial_repository::{TrialRepository, TrialScope};
 use crate::ports::UnitOfWork;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -13,9 +13,13 @@ pub enum Error {
     Infrastructure(String),
 }
 
-pub async fn execute<U: UnitOfWork>(uow: &mut U, id: Uuid) -> Result<Option<Trial>, Error> {
+pub async fn execute<U: UnitOfWork>(
+    uow: &mut U,
+    id: Uuid,
+    scope: TrialScope,
+) -> Result<Option<Trial>, Error> {
     uow.trial_repository()
-        .find_by_id(&TrialId(id))
+        .find_by_id(&TrialId(id), scope)
         .await
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))
 }
@@ -34,10 +38,16 @@ mod tests {
         let other = Trial::new(project_id.clone(), Some("別".to_string()), None);
         let target_id = target.id().clone();
 
-        uow.trial_repository().save(&other).await.unwrap();
-        uow.trial_repository().save(&target).await.unwrap();
+        uow.trial_repository()
+            .save(&other, TrialScope::Full)
+            .await
+            .unwrap();
+        uow.trial_repository()
+            .save(&target, TrialScope::Full)
+            .await
+            .unwrap();
 
-        let result = execute(&mut uow, target_id.0).await;
+        let result = execute(&mut uow, target_id.0, TrialScope::Full).await;
 
         assert!(result.is_ok());
         let found = result.unwrap().unwrap();
@@ -48,7 +58,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_trial_not_found() {
         let mut uow = MockUnitOfWork::default();
-        let result = execute(&mut uow, Uuid::new_v4()).await;
+        let result = execute(&mut uow, Uuid::new_v4(), TrialScope::Full).await;
 
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());

@@ -8,7 +8,7 @@ use crate::domain::actions::trial::update_parameter;
 use crate::domain::models::parameter::{ParameterContent, ParameterId};
 use crate::domain::models::step::StepId;
 use crate::domain::models::trial::{Trial, TrialId};
-use crate::ports::trial_repository::TrialRepository;
+use crate::ports::trial_repository::{TrialRepository, TrialScope};
 use crate::ports::{RepositoryError, UnitOfWork};
 
 use super::save_trial;
@@ -44,8 +44,14 @@ impl From<RepositoryError> for Error {
 
 pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, Error> {
     // 1. Trial を取得
+    // Parameter を操作するため Full が必要
+    // （他 Step の Parameter が未取得だと save の差分削除で消失する）
     let trial_id = TrialId(input.trial_id);
-    let trial = match uow.trial_repository().find_by_id(&trial_id).await {
+    let trial = match uow
+        .trial_repository()
+        .find_by_id(&trial_id, TrialScope::Full)
+        .await
+    {
         Ok(Some(trial)) => trial,
         Ok(None) => return Err(Error::NotFound),
         Err(e) => return Err(Error::Infrastructure(format!("{:?}", e))),
@@ -65,7 +71,7 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
 
     // 4. 永続化（失敗時のロールバックはヘルパー側で行う）
-    save_trial(uow, &updated).await?;
+    save_trial(uow, &updated, TrialScope::Full).await?;
 
     // 5. コミット
     uow.commit()
@@ -94,7 +100,10 @@ mod tests {
         let parameter_id = parameter.id().clone();
         step.add_parameter(parameter);
         trial.add_step(step);
-        uow.trial_repository().save(&trial).await.unwrap();
+        uow.trial_repository()
+            .save(&trial, TrialScope::Full)
+            .await
+            .unwrap();
         (trial, step_id, parameter_id)
     }
 
@@ -132,7 +141,7 @@ mod tests {
 
         let saved = uow
             .trial_repository()
-            .find_by_id(trial.id())
+            .find_by_id(trial.id(), TrialScope::Full)
             .await
             .unwrap()
             .unwrap();
@@ -202,7 +211,10 @@ mod tests {
         )
         .await;
         trial.complete(None);
-        uow.trial_repository().save(&trial).await.unwrap();
+        uow.trial_repository()
+            .save(&trial, TrialScope::Full)
+            .await
+            .unwrap();
 
         let input = Input {
             trial_id: trial.id().0,

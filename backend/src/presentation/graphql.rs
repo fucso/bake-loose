@@ -6,6 +6,7 @@ pub mod error;
 pub mod mutation;
 pub mod query;
 pub mod schema;
+pub mod scope;
 pub mod types;
 
 pub use self::error::GraphQLError;

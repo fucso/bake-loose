@@ -11,10 +11,10 @@ use crate::domain::actions::trial::update_step;
 use crate::domain::models::step::StepId;
 use crate::domain::models::trial::{Trial, TrialId};
 use crate::domain::timezone::JstDateTime;
-use crate::ports::trial_repository::TrialRepository;
+use crate::ports::trial_repository::{TrialRepository, TrialScope};
 use crate::ports::{RepositoryError, UnitOfWork};
 
-use super::save_trial;
+use super::{read_scope_for_write, save_trial};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
@@ -46,10 +46,24 @@ pub struct Input {
     pub started_at: Option<Option<DateTime<FixedOffset>>>,
 }
 
-pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, Error> {
+/// `return_scope` には呼び出し元が戻り値として必要とする Trial のレイヤーを指定する。
+pub async fn execute<U: UnitOfWork>(
+    uow: &mut U,
+    input: Input,
+    return_scope: TrialScope,
+) -> Result<Trial, Error> {
     // 1. Trial取得
+    // 書き込むのは Step の name/started_at のみ（WithSteps）だが、戻り値として
+    // 要求されたレイヤーは併せて取得する
     let trial_id = TrialId(input.trial_id);
-    let trial = match uow.trial_repository().find_by_id(&trial_id).await {
+    let trial = match uow
+        .trial_repository()
+        .find_by_id(
+            &trial_id,
+            read_scope_for_write(TrialScope::WithSteps, return_scope),
+        )
+        .await
+    {
         Ok(Some(trial)) => trial,
         Ok(None) => return Err(Error::NotFound),
         Err(e) => return Err(Error::Infrastructure(format!("{:?}", e))),
@@ -74,7 +88,9 @@ pub async fn execute<U: UnitOfWork>(uow: &mut U, input: Input) -> Result<Trial, 
         .map_err(|e| Error::Infrastructure(format!("{:?}", e)))?;
 
     // 4. 永続化（失敗時のロールバックはヘルパー側で行う）
-    save_trial(uow, &trial).await?;
+    // WithSteps: Parameterには一切アクセスしないため、戻り値のために Parameter まで
+    // 取得していても既存 Parameter は消失せず、書き戻されることもない
+    save_trial(uow, &trial, TrialScope::WithSteps).await?;
 
     // 5. コミット
     uow.commit()
@@ -114,14 +130,17 @@ mod tests {
         let trial_id = trial.id().clone();
 
         let mut uow = MockUnitOfWork::default();
-        uow.trial_repository().save(&trial).await.unwrap();
+        uow.trial_repository()
+            .save(&trial, TrialScope::Full)
+            .await
+            .unwrap();
 
         let input = Input {
             name: Some("新名称".to_string()),
             ..base_input(trial_id.0, step_id.0)
         };
 
-        let result = execute(&mut uow, input).await;
+        let result = execute(&mut uow, input, TrialScope::WithSteps).await;
 
         assert!(result.is_ok());
         let updated = result.unwrap();
@@ -130,7 +149,7 @@ mod tests {
 
         let saved = uow
             .trial_repository()
-            .find_by_id(&trial_id)
+            .find_by_id(&trial_id, TrialScope::Full)
             .await
             .unwrap()
             .unwrap();
@@ -144,14 +163,17 @@ mod tests {
         let trial_id = trial.id().clone();
 
         let mut uow = MockUnitOfWork::default();
-        uow.trial_repository().save(&trial).await.unwrap();
+        uow.trial_repository()
+            .save(&trial, TrialScope::Full)
+            .await
+            .unwrap();
 
         let started_at = DateTime::parse_from_rfc3339("2026-01-01T09:00:00+09:00").unwrap();
         let input = Input {
             started_at: Some(Some(started_at)),
             ..base_input(trial_id.0, step_id.0)
         };
-        let result = execute(&mut uow, input).await;
+        let result = execute(&mut uow, input, TrialScope::WithSteps).await;
         assert!(result.is_ok());
         let updated = result.unwrap();
         let step = updated.steps().iter().find(|s| s.id() == &step_id).unwrap();
@@ -161,11 +183,94 @@ mod tests {
             started_at: Some(None),
             ..base_input(updated.id().0, step_id.0)
         };
-        let result = execute(&mut uow, input).await;
+        let result = execute(&mut uow, input, TrialScope::WithSteps).await;
         assert!(result.is_ok());
         let updated = result.unwrap();
         let step = updated.steps().iter().find(|s| s.id() == &step_id).unwrap();
         assert!(step.started_at().is_none());
+    }
+
+    /// WithSteps で find/save しても、更新対象 Step に紐づく既存の Parameter が
+    /// 消えないことを確認する回帰テスト
+    #[tokio::test]
+    async fn test_execute_with_with_steps_scope_does_not_lose_existing_parameters() {
+        use crate::domain::models::parameter::{Parameter, ParameterContent};
+
+        let (mut trial, step_id) = trial_with_step();
+        trial
+            .steps_mut()
+            .iter_mut()
+            .find(|s| s.id() == &step_id)
+            .unwrap()
+            .add_parameter(Parameter::new(
+                step_id.clone(),
+                ParameterContent::Text {
+                    value: "打ち粉を追加".to_string(),
+                },
+            ));
+        let trial_id = trial.id().clone();
+
+        let mut uow = MockUnitOfWork::default();
+        uow.trial_repository()
+            .save(&trial, TrialScope::Full)
+            .await
+            .unwrap();
+
+        let input = Input {
+            name: Some("新名称".to_string()),
+            ..base_input(trial_id.0, step_id.0)
+        };
+
+        let result = execute(&mut uow, input, TrialScope::WithSteps).await;
+        assert!(result.is_ok());
+
+        let saved = uow
+            .trial_repository()
+            .find_by_id(&trial_id, TrialScope::Full)
+            .await
+            .unwrap()
+            .unwrap();
+        let saved_step = saved.steps().iter().find(|s| s.id() == &step_id).unwrap();
+        assert_eq!(saved_step.name(), "新名称");
+        assert_eq!(saved_step.parameters().len(), 1);
+    }
+
+    /// 戻り値として Parameter が要求された場合、書き込み自体は WithSteps のまま
+    /// 戻り値には Parameter が含まれることを確認する回帰テスト
+    #[tokio::test]
+    async fn test_execute_returns_requested_layers_when_return_scope_is_full() {
+        use crate::domain::models::parameter::{Parameter, ParameterContent};
+
+        let (mut trial, step_id) = trial_with_step();
+        trial
+            .steps_mut()
+            .iter_mut()
+            .find(|s| s.id() == &step_id)
+            .unwrap()
+            .add_parameter(Parameter::new(
+                step_id.clone(),
+                ParameterContent::Text {
+                    value: "打ち粉を追加".to_string(),
+                },
+            ));
+        let trial_id = trial.id().clone();
+
+        let mut uow = MockUnitOfWork::default();
+        uow.trial_repository()
+            .save(&trial, TrialScope::Full)
+            .await
+            .unwrap();
+
+        let input = Input {
+            name: Some("新名称".to_string()),
+            ..base_input(trial_id.0, step_id.0)
+        };
+
+        let updated = execute(&mut uow, input, TrialScope::Full).await.unwrap();
+
+        let step = updated.steps().iter().find(|s| s.id() == &step_id).unwrap();
+        assert_eq!(step.name(), "新名称");
+        assert_eq!(step.parameters().len(), 1);
     }
 
     #[tokio::test]
@@ -174,7 +279,7 @@ mod tests {
 
         let input = base_input(Uuid::new_v4(), Uuid::new_v4());
 
-        let result = execute(&mut uow, input).await;
+        let result = execute(&mut uow, input, TrialScope::WithSteps).await;
 
         assert_eq!(result, Err(Error::NotFound));
     }
@@ -185,20 +290,23 @@ mod tests {
         let trial_id = trial.id().clone();
 
         let mut uow = MockUnitOfWork::default();
-        uow.trial_repository().save(&trial).await.unwrap();
+        uow.trial_repository()
+            .save(&trial, TrialScope::Full)
+            .await
+            .unwrap();
 
         let input = Input {
             name: Some("新名称".to_string()),
             ..base_input(trial_id.0, Uuid::new_v4())
         };
 
-        let result = execute(&mut uow, input).await;
+        let result = execute(&mut uow, input, TrialScope::WithSteps).await;
 
         assert_eq!(result, Err(Error::Domain(update_step::Error::StepNotFound)));
 
         let saved = uow
             .trial_repository()
-            .find_by_id(&trial_id)
+            .find_by_id(&trial_id, TrialScope::Full)
             .await
             .unwrap()
             .unwrap();
@@ -212,14 +320,17 @@ mod tests {
         let trial_id = trial.id().clone();
 
         let mut uow = MockUnitOfWork::default();
-        uow.trial_repository().save(&trial).await.unwrap();
+        uow.trial_repository()
+            .save(&trial, TrialScope::Full)
+            .await
+            .unwrap();
 
         let input = Input {
             name: Some("新名称".to_string()),
             ..base_input(trial_id.0, step_id.0)
         };
 
-        let result = execute(&mut uow, input).await;
+        let result = execute(&mut uow, input, TrialScope::WithSteps).await;
 
         assert_eq!(
             result,
@@ -233,7 +344,10 @@ mod tests {
         let trial_id = trial.id().clone();
 
         let mut uow = MockUnitOfWork::default();
-        uow.trial_repository().save(&trial).await.unwrap();
+        uow.trial_repository()
+            .save(&trial, TrialScope::Full)
+            .await
+            .unwrap();
         // テストデータ投入後に永続化だけを失敗させる
         uow.fail_save();
 
@@ -242,7 +356,7 @@ mod tests {
             ..base_input(trial_id.0, step_id.0)
         };
 
-        let result = execute(&mut uow, input).await;
+        let result = execute(&mut uow, input, TrialScope::WithSteps).await;
 
         assert!(matches!(result, Err(Error::Infrastructure(_))));
         assert_eq!(uow.rollback_count(), 1);

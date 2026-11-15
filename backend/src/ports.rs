@@ -12,5 +12,5 @@ pub mod unit_of_work;
 pub use error::RepositoryError;
 pub use project_repository::{ProjectRepository, ProjectSort, ProjectSortColumn};
 pub use sort::SortDirection;
-pub use trial_repository::TrialRepository;
+pub use trial_repository::{TrialRepository, TrialScope};
 pub use unit_of_work::UnitOfWork;
