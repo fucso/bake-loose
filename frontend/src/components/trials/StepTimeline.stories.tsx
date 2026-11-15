@@ -1,6 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
+import { fn } from 'storybook/test'
+import { Provider } from 'urql'
 
 import { StepTimeline } from './StepTimeline'
+import { createMockClient } from '../../../test/mocks/urql'
 import type { Step } from '@/lib/trial'
 
 const steps: Step[] = [
@@ -57,19 +60,28 @@ const meta = {
   },
   tags: ['autodocs'],
   args: {
+    trialId: 'trial-1',
     steps,
     trialStatus: 'IN_PROGRESS',
+    onChanged: fn(),
   },
+  decorators: [
+    (Story) => (
+      <Provider value={createMockClient({})}>
+        <Story />
+      </Provider>
+    ),
+  ],
 } satisfies Meta<typeof StepTimeline>
 
 export default meta
 
 type Story = StoryObj<typeof meta>
 
-/** 記録中の工程だけを展開し、完了済みの工程は畳む */
+/** 記録中の工程だけを展開し、完了済みの工程は畳む。末尾に工程の追加操作が並ぶ */
 export const InProgress: Story = {}
 
-/** 完了済みTrialは記録中の工程を持たず、全工程を畳んだ俯瞰表示になる */
+/** 完了済みTrialは記録中の工程を持たず、全工程を畳んだ俯瞰表示になる。記録操作も出さない */
 export const CompletedTrial: Story = {
   args: {
     steps: steps.map((step) => ({ ...step, isCompleted: true })),
@@ -77,7 +89,7 @@ export const CompletedTrial: Story = {
   },
 }
 
-/** 工程がまだ記録されていない状態 */
+/** 工程がまだ記録されていない状態。空状態でも追加操作は表示する */
 export const Empty: Story = {
   args: {
     steps: [],

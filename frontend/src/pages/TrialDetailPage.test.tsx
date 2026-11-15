@@ -6,7 +6,11 @@ import { describe, expect, it } from 'vitest'
 import { delay, map, pipe } from 'wonka'
 
 import TrialDetailPage from './TrialDetailPage'
-import { createMockClient, MockGraphQLError } from '../../test/mocks/urql'
+import {
+  createMockClient,
+  MockGraphQLError,
+  type MockQueryResponses,
+} from '../../test/mocks/urql'
 
 const trialResponse = {
   trial: {
@@ -158,6 +162,46 @@ describe('TrialDetailPage', () => {
         'href',
         '/projects/project-1',
       )
+    })
+  })
+
+  it('工程を追加すると再取得でタイムラインの末尾に反映される', async () => {
+    // createMockClient はレスポンスを実行時に参照するため、追加後の再取得だけ別の内容を返せる
+    const responses: MockQueryResponses = {
+      Trial: trialResponse,
+      AddStep: { addStep: { id: 'step-3', name: '焼成', position: 2, startedAt: null } },
+    }
+    renderPage(createMockClient(responses))
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: '加水率70%' })).toBeInTheDocument()
+    })
+
+    responses.Trial = {
+      trial: {
+        ...trialResponse.trial,
+        steps: [
+          ...trialResponse.trial.steps,
+          {
+            id: 'step-3',
+            name: '焼成',
+            position: 2,
+            startedAt: null,
+            completedAt: null,
+            isCompleted: false,
+            parameters: [],
+          },
+        ],
+      },
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: '+ 工程を追加' }))
+    fireEvent.change(screen.getByLabelText('工程名'), { target: { value: '焼成' } })
+    fireEvent.click(screen.getByRole('button', { name: '追加' }))
+
+    await waitFor(() => {
+      const items = screen.getAllByRole('listitem')
+      expect(items[items.length - 1]).toHaveTextContent('焼成')
     })
   })
 
