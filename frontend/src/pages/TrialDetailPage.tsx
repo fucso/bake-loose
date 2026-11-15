@@ -121,8 +121,9 @@ const TrialDetailPage = () => {
 
         {isNotFound && <ErrorState message="指定された試行が見つかりません" />}
 
+        {/* key で Trial ごとに作り直し、編集中のフォームや完了済みフラグを別の Trial へ持ち越さない */}
         {trial && (
-          <div className="flex flex-col gap-6">
+          <div key={trial.id} className="flex flex-col gap-6">
             <TrialHeader trial={trial} onChanged={refetch} />
             <StepTimeline steps={trial.steps} trialStatus={trial.status} />
           </div>

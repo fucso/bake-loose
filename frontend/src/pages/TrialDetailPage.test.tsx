@@ -295,4 +295,46 @@ describe('TrialDetailPage', () => {
     expect(screen.queryByRole('heading', { name: '試行A' })).not.toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: '試行B' })).toBeInTheDocument()
   })
+
+  it('編集中に別のTrialへ遷移しても編集フォームを持ち越さない', async () => {
+    // 遅延のない（キャッシュ済み相当の）クライアント。ローディングを挟まず遷移する
+    const exchange: Exchange = () => (ops$) =>
+      pipe(
+        ops$,
+        map((operation) => {
+          const id = (operation.variables as { id: string }).id
+          return {
+            operation,
+            data: { trial: { ...trialResponse.trial, id, name: id === TRIAL_ID ? '試行A' : '試行B' } },
+            stale: false,
+            hasNext: false,
+          }
+        }),
+      )
+    const GoToOther = () => {
+      const navigate = useNavigate()
+      return (
+        <button type="button" onClick={() => navigate(`/projects/project-1/trials/${OTHER_TRIAL_ID}`)}>
+          別の試行へ
+        </button>
+      )
+    }
+    render(
+      <Provider value={new Client({ url: 'http://mock.test/graphql', exchanges: [exchange] })}>
+        <MemoryRouter initialEntries={[`/projects/project-1/trials/${TRIAL_ID}`]}>
+          <GoToOther />
+          <Routes>
+            <Route path="/projects/:id/trials/:trialId" element={<TrialDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>,
+    )
+
+    await screen.findByRole('heading', { name: '試行A' })
+    fireEvent.click(screen.getByRole('button', { name: '編集' }))
+    fireEvent.click(screen.getByRole('button', { name: '別の試行へ' }))
+
+    expect(await screen.findByRole('heading', { name: '試行B' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '保存' })).not.toBeInTheDocument()
+  })
 })
