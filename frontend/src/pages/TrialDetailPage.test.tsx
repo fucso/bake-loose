@@ -348,4 +348,15 @@ describe('TrialDetailPage', () => {
 
     expect(await screen.findByRole('heading', { name: '加水率70%' })).toBeInTheDocument()
   })
+
+  it.each([
+    ['ハイフンの位置が不正', '1111-11111111-4111-8111-111111111111'],
+    ['urn接頭辞が大文字', `URN:UUID:${TRIAL_ID}`],
+    ['urnと波括弧の併用', `urn:uuid:{${TRIAL_ID}}`],
+    ['波括弧つきハイフンなし', `{${TRIAL_ID.replace(/-/g, '')}}`],
+  ])('バックエンドが拒否する表記（%s）は見つからない扱いにする', (_label, trialId) => {
+    renderPage(createMockClient({ Trial: trialResponse }), 'project-1', trialId)
+
+    expect(screen.getByText('指定された試行が見つかりません')).toBeInTheDocument()
+  })
 })

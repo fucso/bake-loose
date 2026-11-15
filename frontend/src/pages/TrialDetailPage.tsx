@@ -43,19 +43,35 @@ const TRIAL_QUERY = `
   }
 `
 
+const HYPHENATED = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+// バックエンド（uuid クレートの parse_str）が受け付ける表記: ハイフン区切り・ハイフンなし・
+// 波括弧つき・`urn:uuid:` つき（urn の接頭辞は小文字のみ）。それ以外は UUID として扱わない
+const UUID_FORMS = [
+  new RegExp(`^(${HYPHENATED})$`),
+  new RegExp(`^\\{(${HYPHENATED})\\}$`),
+  new RegExp(`^urn:uuid:(${HYPHENATED})$`),
+]
+const SIMPLE_UUID = /^[0-9a-fA-F]{32}$/
+
 /**
  * URL の trialId をバックエンドが返す正規形（小文字・ハイフン区切り）へそろえる。
- *
- * バックエンドの UUID パースはハイフンなし・波括弧・`urn:uuid:` 形式も受け付けるため、
- * それらも同じ Trial として扱う。UUID として解釈できない値は null を返す。
+ * UUID として解釈できない値は null を返す。
  */
 const normalizeTrialId = (raw: string | undefined): string | null => {
-  const hex = raw?.replace(/^urn:uuid:/i, "").replace(/^\{(.*)\}$/, "$1").replace(/-/g, "")
-  if (!hex || !/^[0-9a-f]{32}$/i.test(hex)) {
+  if (raw === undefined) {
     return null
   }
-  const h = hex.toLowerCase()
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`
+  if (SIMPLE_UUID.test(raw)) {
+    const h = raw.toLowerCase()
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`
+  }
+  for (const form of UUID_FORMS) {
+    const match = form.exec(raw)
+    if (match) {
+      return match[1].toLowerCase()
+    }
+  }
+  return null
 }
 
 /**

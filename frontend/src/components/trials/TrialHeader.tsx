@@ -235,9 +235,12 @@ const TrialHeader = ({ trial, onChanged }: TrialHeaderProps) => {
         {/* 完了済みの Trial はバックエンドが更新を拒否するため、編集操作を出さない */}
         {trial.status === "IN_PROGRESS" && (
           <>
-            <Button variant="outline" size="sm" onClick={startEditing}>
-              編集
-            </Button>
+            {/* 完了に成功した後は、再取得で status が反映されるまでの間も編集させない */}
+            {!completeRequested && (
+              <Button variant="outline" size="sm" onClick={startEditing}>
+                編集
+              </Button>
+            )}
             <Button size="sm" disabled={completing || completeRequested} onClick={handleComplete}>
               完了にする
             </Button>

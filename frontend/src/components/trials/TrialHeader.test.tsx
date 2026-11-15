@@ -160,5 +160,7 @@ describe('TrialHeader', () => {
     })
 
     expect(screen.getByRole('button', { name: '完了にする' })).toBeDisabled()
+    // 再取得が終わるまでの間も、完了済みになる Trial の編集は出さない
+    expect(screen.queryByRole('button', { name: '編集' })).not.toBeInTheDocument()
   })
 })
