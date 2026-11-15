@@ -25,17 +25,23 @@ impl From<get_project::Error> for async_graphql::Error {
 }
 
 impl UserFacingError for create_project::Error {
+    /// `project_error::Error` の variant は現時点で create_project が返しうるものだけのため、
+    /// trial 側の `unexpected_domain_error` に相当するフォールバックアームは置いていない。
+    /// 全 variant を明示ハンドリングした状態で `Domain(other)` を足すと `unreachable_patterns`
+    /// になる。project ドメインに他の Action が加わり、create_project が返し得ない variant が
+    /// `project_error::Error` に増えた時点でフォールバックアームを追加する。
     fn to_user_facing(&self) -> GraphQLError {
         match self {
-            create_project::Error::Domain(e) => match e {
-                create_project_action::Error::EmptyName => {
-                    GraphQLError::new("プロジェクト名を入力してください", "VALIDATION_ERROR")
-                }
-                create_project_action::Error::NameTooLong { max, .. } => GraphQLError::new(
-                    format!("{}文字以内で入力してください", max),
-                    "VALIDATION_ERROR",
-                ),
-            },
+            create_project::Error::Domain(create_project_action::Error::EmptyName) => {
+                GraphQLError::new("プロジェクト名を入力してください", "VALIDATION_ERROR")
+            }
+            create_project::Error::Domain(create_project_action::Error::NameTooLong {
+                max,
+                ..
+            }) => GraphQLError::new(
+                format!("{}文字以内で入力してください", max),
+                "VALIDATION_ERROR",
+            ),
             create_project::Error::DuplicateName => {
                 GraphQLError::new("同じ名前のプロジェクトが既に存在します", "DUPLICATE_ERROR")
             }
