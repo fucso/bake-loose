@@ -105,8 +105,9 @@ Parameter の記録操作（追加・編集・削除）は本画面のスコー�
 | 開始日時 | 任意 | `<input type="datetime-local">`。空欄は未設定 |
 
 `updateStep` の `startedAt` は未指定（undefined）で変更なし、`null` でクリアされる。
-編集フォームは常に現在値を表示し `name` / `startedAt` の両方を送るため、
-**開始日時の空欄は「未設定に戻す」意図として `null` を送る**（Trial の name / memo と同じ方針）。
+編集フォームは常に現在値を表示するため、`name` は常に送り、`startedAt` は分単位で変更があった場合のみ送る
+（入力欄は秒を持たず、送ると既存の秒以下が丸められるため）。
+変更した結果が空欄の場合は、**「未設定に戻す」意図として `null` を送る**（Trial の name / memo と同じ方針）。
 
 `completeStep` の `completedAt` は送らない。完了操作は「今この工程を終えた」という意味であり、
 バックエンドが現在時刻を設定する（`completeTrial` と同じ方針）。

@@ -62,6 +62,53 @@ describe('StepActions', () => {
     expect(screen.queryByLabelText('工程名')).not.toBeInTheDocument()
   })
 
+  it('開始日時を変更していない編集では startedAt を送らず秒以下の値を保つ', async () => {
+    const client = createMockClient({
+      UpdateStep: {
+        updateStep: { id: 'step-1', name: 'こね直し', startedAt: '2026-01-01T09:00:30+09:00' },
+      },
+    })
+    const executeMutation = vi.spyOn(client, 'executeMutation')
+    const { onChanged } = renderActions(
+      client,
+      buildStep({ startedAt: '2026-01-01T09:00:30+09:00' }),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '工程を編集' }))
+    fireEvent.change(screen.getByLabelText('工程名'), { target: { value: 'こね直し' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+
+    await waitFor(() => {
+      expect(onChanged).toHaveBeenCalledTimes(1)
+    })
+    expect(executeMutation.mock.calls[0][0].variables).toEqual({
+      trialId: 'trial-1',
+      stepId: 'step-1',
+      input: { name: 'こね直し' },
+    })
+  })
+
+  it('開始日時を変更した編集では startedAt を JST オフセット付きで送る', async () => {
+    const client = createMockClient({
+      UpdateStep: {
+        updateStep: { id: 'step-1', name: 'こね', startedAt: '2026-01-01T10:15:00+09:00' },
+      },
+    })
+    const executeMutation = vi.spyOn(client, 'executeMutation')
+    const { onChanged } = renderActions(client)
+
+    fireEvent.click(screen.getByRole('button', { name: '工程を編集' }))
+    fireEvent.change(screen.getByLabelText('開始日時'), { target: { value: '2026-01-01T10:15' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+
+    await waitFor(() => {
+      expect(onChanged).toHaveBeenCalledTimes(1)
+    })
+    expect(executeMutation.mock.calls[0][0].variables).toMatchObject({
+      input: { name: 'こね', startedAt: '2026-01-01T10:15:00+09:00' },
+    })
+  })
+
   it('編集に失敗した場合はエラーメッセージを表示しonChangedは呼ばれない', async () => {
     const client = createMockClient({
       UpdateStep: new MockGraphQLError('工程名が長すぎます'),

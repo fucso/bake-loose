@@ -4,6 +4,7 @@ import { useMutation } from "urql"
 import { StepFormModal, type StepFormValues } from "@/components/trials/StepFormModal"
 import { Button } from "@/components/ui/button"
 import { toUserFacingErrorMessage } from "@/lib/graphql-error"
+import { fromDateTimeLocalValue, toDateTimeLocalValue } from "@/lib/datetime"
 import type { Step } from "@/lib/trial"
 
 type UpdateStepData = {
@@ -19,7 +20,8 @@ type UpdateStepVariables = {
   stepId: string
   input: {
     name: string
-    startedAt: string | null
+    // 省略するとバックエンドの値を変更しない。null は未設定に戻す
+    startedAt?: string | null
   }
 }
 
@@ -99,9 +101,16 @@ const StepActions = ({ trialId, step, onChanged }: StepActionsProps) => {
   }
 
   const handleSubmit = async ({ name, startedAt }: StepFormValues) => {
-    // フォームは常に現在値を表示するため name / startedAt をともに送る。
     // startedAt の空欄は「未設定に戻す」意図として null を送り、バックエンド側の値をクリアする。
-    const result = await updateStep({ trialId, stepId: step.id, input: { name, startedAt } })
+    // 入力欄は分単位のため、分まで同じ値は変更なしとみなして送らない。
+    // 送ると秒以下を持つ既存の開始日時が、名前だけの編集で :00 秒に丸められてしまう。
+    const isStartedAtUnchanged =
+      startedAt === fromDateTimeLocalValue(toDateTimeLocalValue(step.startedAt))
+    const result = await updateStep({
+      trialId,
+      stepId: step.id,
+      input: isStartedAtUnchanged ? { name } : { name, startedAt },
+    })
     if (result.error) {
       setUpdateErrorMessage(toUserFacingErrorMessage(result.error, "工程の更新に失敗しました"))
       return
