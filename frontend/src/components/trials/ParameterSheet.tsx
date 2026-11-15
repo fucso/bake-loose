@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from "react"
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react"
 import { useMutation } from "urql"
 
 import { Button, buttonVariants } from "@/components/ui/button"
@@ -145,6 +145,16 @@ const ParameterSheet = ({
   const [validationError, setValidationError] = useState<string | null>(null)
   const [serverErrorVisible, setServerErrorVisible] = useState(false)
 
+  // 応答のない保存から抜けられるよう保存中も閉じられる。閉じた後に完了した保存が
+  // 後から開いた別のシートを閉じないよう、アンマウント後は onOpenChange を呼ばない
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
   const [{ fetching: adding, error: addError }, addParameter] = useMutation<
     AddParameterData,
     AddParameterVariables
@@ -188,7 +198,9 @@ const ParameterSheet = ({
 
     if (!result.error) {
       onSaved()
-      onOpenChange(false)
+      if (mountedRef.current) {
+        onOpenChange(false)
+      }
     }
   }
 
@@ -201,18 +213,10 @@ const ParameterSheet = ({
         )
       : null)
 
-  // 保存中に閉じると結果を見られず、完了後の onOpenChange が別のシートを閉じてしまう
-  const handleOpenChange = (next: boolean) => {
-    if (saving && !next) {
-      return
-    }
-    onOpenChange(next)
-  }
-
   const timeFieldLabel = form.parameterType === "DURATION" ? "時間" : "経過時点"
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogSheetPopup>
         <DialogTitle>
           {isEditing ? "パラメーターを編集" : "パラメーターを追加"}

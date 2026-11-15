@@ -56,7 +56,6 @@ describe('buildParameterContent', () => {
       ['数値でない', 'たくさん'],
       ['16進表記', '0x10'],
       ['2進表記', '0b11'],
-      ['指数表記', '1e3'],
     ])('数量が%sの場合はエラーを返す', (_case, amount) => {
       const result = buildParameterContent(
         formWith({ key: '強力粉', valueKind: 'quantity', amount, unit: 'g' }),
@@ -185,6 +184,30 @@ describe('buildParameterContent', () => {
 })
 
 describe('toFormState', () => {
+  it.each([1e-7, 5e-7, 1e21, 1.5e22])('数量 %s は指数表記でも編集フォームから再び組み立てられる', (amount) => {
+    const parameter: Parameter = {
+      id: 'p1',
+      parameterType: 'KEY_VALUE',
+      content: {
+        type: 'key_value',
+        key: '微量',
+        value: { type: 'quantity', amount, unit: 'g' },
+      },
+    }
+
+    expect(buildParameterContent(toFormState(parameter)).ok).toBe(true)
+  })
+
+  it('時間 1e-7 は指数表記でも編集フォームから再び組み立てられる', () => {
+    const parameter: Parameter = {
+      id: 'p2',
+      parameterType: 'DURATION',
+      content: { type: 'duration', duration: { value: 1e-7, unit: 'minute' }, note: '一次発酵' },
+    }
+
+    expect(buildParameterContent(toFormState(parameter)).ok).toBe(true)
+  })
+
   it.each<[string, Parameter, Partial<ParameterFormState>]>([
     [
       '数量のKeyValue',

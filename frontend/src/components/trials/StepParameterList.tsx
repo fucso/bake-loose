@@ -76,7 +76,7 @@ const StepParameterList = ({ trialId, step, editable, onChanged }: StepParameter
     if (result.error) {
       setFailedRemoveId(parameterId)
     } else {
-      setConfirmingId(null)
+      setConfirmingId((current) => (current === parameterId ? null : current))
       onChanged()
     }
   }

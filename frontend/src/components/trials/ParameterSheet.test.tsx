@@ -1,11 +1,12 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Client, Provider } from 'urql'
 import { describe, expect, it, vi } from 'vitest'
-import { never } from 'wonka'
+import { delay, never, pipe } from 'wonka'
 
 import { ParameterSheet } from './ParameterSheet'
 import {
   createMockClient,
+  createMockExchange,
   createRecordingClient,
   MockGraphQLError,
   type RecordedOperation,
@@ -232,16 +233,33 @@ describe('ParameterSheet', () => {
       expect(screen.queryByText('工程は完了済みです')).not.toBeInTheDocument()
     })
 
-    it('保存中は Escape でシートを閉じない', async () => {
+    it('応答のない保存中でも Escape でシートを閉じられる', async () => {
       const { onOpenChange } = renderSheet(createPendingClient())
 
       fillValidQuantity()
       save()
-      await waitFor(() => expect(screen.getByRole('button', { name: 'キャンセル' })).toBeDisabled())
+      await waitFor(() => expect(screen.getByRole('button', { name: '保存' })).toBeDisabled())
 
       fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
 
-      expect(onOpenChange).not.toHaveBeenCalled()
+      expect(onOpenChange).toHaveBeenCalledWith(false, expect.anything())
+    })
+
+    it('シートを閉じた後に保存が完了しても、記録は反映し他のシートは閉じない', async () => {
+      const delayedClient = new Client({
+        url: 'http://mock.test/graphql',
+        exchanges: [
+          (input) => (ops$) => pipe(createMockExchange(addResponse)(input)(ops$), delay(30)),
+        ],
+      })
+      const { unmount, onOpenChange, onSaved } = renderSheet(delayedClient)
+
+      fillValidQuantity()
+      save()
+      unmount()
+
+      await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1))
+      expect(onOpenChange).not.toHaveBeenCalledWith(false)
     })
   })
 

@@ -1,9 +1,15 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { Provider, type Client } from 'urql'
+import { Client, Provider } from 'urql'
 import { describe, expect, it, vi } from 'vitest'
+import { delay, pipe } from 'wonka'
 
 import { StepParameterList } from './StepParameterList'
-import { createMockClient, createRecordingClient, MockGraphQLError } from '../../../test/mocks/urql'
+import {
+  createMockClient,
+  createMockExchange,
+  createRecordingClient,
+  MockGraphQLError,
+} from '../../../test/mocks/urql'
 import type { Step } from '@/lib/trial'
 
 const step: Step = {
@@ -162,5 +168,21 @@ describe('StepParameterList', () => {
 
     expect(screen.getByText('削除しますか？')).toBeInTheDocument()
     expect(screen.queryByText('試行は完了済みです')).not.toBeInTheDocument()
+  })
+
+  it('削除の完了を待つ間に開いた別の行の確認は、完了しても閉じない', async () => {
+    const responses = { RemoveParameter: { removeParameter: { id: 'step-1' } } }
+    const delayedClient = new Client({
+      url: 'http://mock.test/graphql',
+      exchanges: [(input) => (ops$) => pipe(createMockExchange(responses)(input)(ops$), delay(30))],
+    })
+    const { onChanged } = renderList(delayedClient)
+
+    fireEvent.click(screen.getByRole('button', { name: '強力粉 を削除' }))
+    fireEvent.click(screen.getByRole('button', { name: '削除' }))
+    fireEvent.click(screen.getByRole('button', { name: '打ち粉を追加 を削除' }))
+
+    await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1))
+    expect(screen.getByText('削除しますか？')).toBeInTheDocument()
   })
 })
