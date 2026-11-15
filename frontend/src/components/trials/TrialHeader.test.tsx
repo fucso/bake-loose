@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { Provider } from 'urql'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { Provider, type Client } from 'urql'
 import { describe, expect, it, vi } from 'vitest'
+import { fromPromise } from 'wonka'
 
 import { TrialHeader } from './TrialHeader'
 import { createMockClient, MockGraphQLError } from '../../../test/mocks/urql'
@@ -162,5 +163,34 @@ describe('TrialHeader', () => {
     expect(screen.getByRole('button', { name: '完了にする' })).toBeDisabled()
     // 再取得が終わるまでの間も、完了済みになる Trial の編集は出さない
     expect(screen.queryByRole('button', { name: '編集' })).not.toBeInTheDocument()
+  })
+
+  it('完了処理中は編集を開けず、完了後に編集フォームが残らない', async () => {
+    let resolveResponse!: (data: unknown) => void
+    const response = new Promise((resolve) => {
+      resolveResponse = resolve
+    })
+    const client = {
+      executeMutation: vi.fn((operation) =>
+        fromPromise(
+          response.then((data) => ({ operation, data, stale: false, hasNext: false })),
+        ),
+      ),
+      executeQuery: vi.fn(),
+      executeSubscription: vi.fn(),
+    } as unknown as Client
+    renderHeader(client)
+
+    fireEvent.click(screen.getByRole('button', { name: '完了にする' }))
+
+    expect(screen.getByRole('button', { name: '編集' })).toBeDisabled()
+
+    await act(async () => {
+      resolveResponse({
+        completeTrial: { id: 'trial-1', status: 'COMPLETED', completedAt: '2026-01-01T10:00:00+09:00' },
+      })
+      await response
+    })
+    expect(screen.queryByRole('button', { name: '保存' })).not.toBeInTheDocument()
   })
 })
