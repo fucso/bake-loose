@@ -15,7 +15,8 @@
 //!
 //! `#[sqlx::test]` は呼び出しごとに使い捨てのデータベースを生成し、
 //! `migrations = "./migrations"` の全マイグレーションを適用してからテスト関数に渡す。
-//! 開発者の永続的なローカル DB（`compose.yaml` の `db` サービス）には一切触れないため、
+//! 開発者の永続的なローカル DB（`compose.yaml` の `db` サービス）のスキーマにはマイグレーションを
+//! 適用しない（`DATABASE_URL` の DB には sqlx が管理用の `_sqlx_test` スキーマだけを作る）ため、
 //! 「`cargo test` で検証 → pass 後に `sqlx migrate run` で実 DB へ適用」の順序を守れば、
 //! 規約違反のマイグレーションが実 DB に適用される前に検出できる。
 //! 運用手順は `AGENTS.md` 4 章を参照。
@@ -29,6 +30,15 @@
 //!
 //! CHECK 制約は規約が定義されていない（`naming_conventions.rs` に対応する定数がない）ため
 //! 検査対象に含めない。規約を定める場合はここに検査を追加すること。
+//!
+//! # 検査対象外（既知の限界）
+//!
+//! - `public` 以外のスキーマのテーブル、マテリアライズドビューのインデックス
+//! - 排他制約（`EXCLUDE`）: 規約が定義されていない
+//! - 式インデックス: カラム名が定まらないため `idx_{table}_` の接頭辞のみ検査する
+//! - テーブル名が既存テーブル名の接頭辞になっていないか（`repository.md` のルール）
+//! - 同名衝突で PostgreSQL が連番（`_key1`）を付けた制約は、規約違反として報告される
+//! - パーティションの子テーブルの制約・インデックス（PostgreSQL が自動命名するため親側のみ検査する）
 //!
 //! 例外リストは設けず、`public` スキーマのテーブルをすべて検査する。
 //! ただし `_sqlx_migrations` は sqlx がマイグレーション管理のために自動生成するテーブルであり、
@@ -53,6 +63,12 @@ const MAX_IDENTIFIER_LENGTH: usize = 63;
 ///
 /// `conkey` は制約を構成するカラムの属性番号の配列で、並び順が
 /// PostgreSQL のデフォルト制約名に現れるカラムの順序と一致する。
+/// ただし一意制約のデフォルト名には `INCLUDE` したカラムも現れ、`conkey` はキー列のみのため、
+/// 一意制約は裏の一意インデックス（`conindid`）の全カラムから組み立てる。
+///
+/// パーティションに由来する行は、マイグレーション SQL の作者が名付けたものではないため除外する。
+/// 子パーティション自身の制約（`relispartition`）と、パーティションテーブルを参照する外部キーが
+/// パーティションごとに内部で持つ制約（`conparentid <> 0`、名前は `..._fkey1` のように連番になる）である。
 const CONSTRAINTS_QUERY: &str = r#"
 SELECT
     rel.relname::text AS table_name,
@@ -60,7 +76,16 @@ SELECT
     con.contype::text AS constraint_type,
     ARRAY(
         SELECT att.attname::text
-        FROM unnest(con.conkey) WITH ORDINALITY AS k(attnum, ord)
+        FROM unnest(
+            CASE
+                WHEN con.contype = 'u' THEN (
+                    SELECT idx.indkey::smallint[]
+                    FROM pg_index idx
+                    WHERE idx.indexrelid = con.conindid
+                )
+                ELSE con.conkey
+            END
+        ) WITH ORDINALITY AS k(attnum, ord)
         JOIN pg_attribute att
             ON att.attrelid = con.conrelid AND att.attnum = k.attnum
         ORDER BY k.ord
@@ -70,6 +95,8 @@ JOIN pg_class rel ON rel.oid = con.conrelid
 JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
 WHERE nsp.nspname = 'public'
   AND con.contype IN ('p', 'u', 'f')
+  AND con.conparentid = 0
+  AND NOT rel.relispartition
   AND rel.relname <> $1
 ORDER BY rel.relname, con.conname
 "#;
@@ -82,6 +109,8 @@ ORDER BY rel.relname, con.conname
 /// インデックスを指す。除外条件を `contype` で絞らないと、外部キーから参照された
 /// 一意インデックス（本プロジェクトが `CREATE UNIQUE INDEX` で作るもの）が
 /// 検査対象から静かに外れてしまうため、`p` / `u` / `x` に限定する。
+///
+/// 子パーティションのインデックスは PostgreSQL が自動命名するため、親テーブル側だけを検査する。
 ///
 /// `indkey` は `INCLUDE` で指定した非キーカラムも含むが、インデックス名に現れるのはキーカラムのみ
 /// のため、`indnkeyatts` 件目までに限定する。`indkey` は添字が 0 始まりの `int2vector` であり
@@ -113,6 +142,7 @@ LEFT JOIN pg_constraint con
    AND con.contype IN ('p', 'u', 'x')
 WHERE nsp.nspname = 'public'
   AND rel.relkind IN ('r', 'p')
+  AND NOT rel.relispartition
   AND con.oid IS NULL
   AND rel.relname <> $1
 ORDER BY rel.relname, idx_cls.relname
@@ -521,6 +551,97 @@ async fn test_accepts_postgres_truncated_default_names(pool: PgPool) {
     assert!(
         detected.is_empty(),
         "PostgreSQL のデフォルト名を違反と誤判定しました:\n{}",
+        detected.join("\n")
+    );
+}
+
+/// パーティションの子テーブルを違反と誤判定しないこと
+///
+/// 子パーティションの外部キーは親の制約名を引き継ぎ、インデックスは PostgreSQL が
+/// `{table}_{columns}_idx` と自動で命名する。どちらもマイグレーション SQL の作者が決めた名前ではないため、
+/// 親が規約どおりなら全体として違反ではない。
+#[sqlx::test(migrations = "./migrations")]
+async fn test_ignores_partition_children_and_referenced_partition_constraints(pool: PgPool) {
+    sqlx::query(
+        r#"
+        CREATE TABLE part_events (
+            id UUID NOT NULL,
+            project_id UUID NOT NULL REFERENCES projects(id),
+            occurred_on DATE NOT NULL,
+            PRIMARY KEY (id, occurred_on)
+        ) PARTITION BY RANGE (occurred_on)
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("検証用のパーティションテーブルの作成に失敗しました");
+
+    sqlx::query(
+        "CREATE TABLE part_events_2026 PARTITION OF part_events \
+         FOR VALUES FROM ('2026-01-01') TO ('2027-01-01')",
+    )
+    .execute(&pool)
+    .await
+    .expect("検証用のパーティションの作成に失敗しました");
+
+    sqlx::query("CREATE INDEX idx_part_events_project_id ON part_events(project_id)")
+        .execute(&pool)
+        .await
+        .expect("検証用のインデックスの作成に失敗しました");
+
+    // パーティションテーブルを参照すると、パーティションごとに内部的な制約行が追加される
+    sqlx::query(
+        "CREATE TABLE part_notes (
+             id UUID PRIMARY KEY,
+             event_id UUID NOT NULL,
+             occurred_on DATE NOT NULL,
+             FOREIGN KEY (event_id, occurred_on) REFERENCES part_events(id, occurred_on)
+         )",
+    )
+    .execute(&pool)
+    .await
+    .expect("検証用の参照元テーブルの作成に失敗しました");
+
+    let detected: Vec<String> = collect_violations(&pool)
+        .await
+        .into_iter()
+        .filter(|v| v.starts_with("part_"))
+        .collect();
+
+    assert!(
+        detected.is_empty(),
+        "パーティション由来の名前を違反と誤判定しました:\n{}",
+        detected.join("\n")
+    );
+}
+
+/// `UNIQUE (...) INCLUDE (...)` のデフォルト名を違反と誤判定しないこと
+///
+/// PostgreSQL は INCLUDE したカラムも含めてデフォルト名を組み立てる
+/// （`{table}_{key列}_{include列}_key`）ため、キー列だけで期待値を作ると偽陽性になる。
+#[sqlx::test(migrations = "./migrations")]
+async fn test_accepts_default_unique_name_with_include_columns(pool: PgPool) {
+    sqlx::query(
+        "CREATE TABLE include_probe (
+             id UUID PRIMARY KEY,
+             code TEXT NOT NULL,
+             label TEXT,
+             UNIQUE (code) INCLUDE (label)
+         )",
+    )
+    .execute(&pool)
+    .await
+    .expect("検証用テーブルの作成に失敗しました");
+
+    let detected: Vec<String> = collect_violations(&pool)
+        .await
+        .into_iter()
+        .filter(|v| v.starts_with("include_probe: "))
+        .collect();
+
+    assert!(
+        detected.is_empty(),
+        "INCLUDE 付き一意制約のデフォルト名を違反と誤判定しました:\n{}",
         detected.join("\n")
     );
 }

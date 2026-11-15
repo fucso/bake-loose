@@ -300,7 +300,8 @@ docker compose exec backend bash -c "sqlx migrate run"
 `#[sqlx::test]` が生成する**使い捨てデータベース**に全マイグレーションを適用し、
 `pg_constraint` / `pg_index` を走査して主キー・一意制約・外部キー・インデックスの名前が
 スキーマ命名規約に従っているかを検証する。マイグレーションが開発用DB（`compose.yaml` の `db`
-サービス）のスキーマに適用されることはないため、規約違反を**実 DB へ適用する前に**検出できる。
+サービス）のスキーマに適用されることはないため、規約違反を**実 DB へ適用する前に**検出できる
+（`DATABASE_URL` の DB には、sqlx が使い捨てDBの管理用に `_sqlx_test` スキーマだけを作る）。
 
 スキーマ命名規約の本文は `.claude/rules/backend/repository.md` の「スキーマ命名規約」、
 Rust 側の定数定義は `backend/src/repository/naming_conventions.rs` を参照。
