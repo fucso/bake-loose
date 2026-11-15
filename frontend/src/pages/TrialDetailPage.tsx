@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { Link, useParams } from "react-router-dom"
 import { useQuery } from "urql"
 
@@ -42,6 +43,8 @@ const TRIAL_QUERY = `
   }
 `
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 /**
  * Trial 詳細（記録ワークベンチ）。
  *
@@ -50,6 +53,9 @@ const TRIAL_QUERY = `
  */
 const TrialDetailPage = () => {
   const { id, trialId } = useParams<{ id: string; trialId: string }>()
+  // URL は手で書き換えられる。UUID でない値はバックエンドが GraphQL エラーを返すだけで
+  // 再試行しても成功しないため、クエリを送らず「見つからない」として扱う
+  const isValidTrialId = trialId !== undefined && UUID_PATTERN.test(trialId)
 
   const [{ data, fetching, error }, reexecuteQuery] = useQuery<
     TrialQueryData,
@@ -57,16 +63,36 @@ const TrialDetailPage = () => {
   >({
     query: TRIAL_QUERY,
     variables: { id: trialId ?? "" },
-    pause: !trialId,
+    pause: !isValidTrialId,
   })
 
   const refetch = () => {
     reexecuteQuery({ requestPolicy: "network-only" })
   }
 
-  const trial = data?.trial ?? null
-  // trialId が無い場合はクエリを実行していないため、応答を待たずに見つからない扱いにする
-  const isNotFound = !trialId || (!fetching && !error && data !== undefined && trial === null)
+  // 別の Trial の URL へ遷移した直後は前の Trial のデータが残るため、表示対象の ID と
+  // 一致するものだけを使う。一致しない間は初回取得と同じくスピナーを出す
+  const isCurrentTrial = (candidate: Trial | null | undefined): candidate is Trial =>
+    candidate?.id.toLowerCase() === trialId?.toLowerCase()
+
+  // urql はエラー結果を受け取ると data を空にする。再取得に失敗しても表示済みの内容と
+  // 工程カードの開閉状態を保てるよう、直近に取得できた Trial を保持しておく
+  const [lastTrial, setLastTrial] = useState<Trial | null>(null)
+  if (isCurrentTrial(data?.trial) && data.trial !== lastTrial) {
+    setLastTrial(data.trial)
+  }
+
+  // data.trial が null（削除された等）の場合は保持している内容を使わない
+  const trial = isCurrentTrial(data?.trial)
+    ? data.trial
+    : data?.trial === null
+      ? null
+      : isCurrentTrial(lastTrial)
+        ? lastTrial
+        : null
+  // 不正な trialId の場合はクエリを実行していないため、応答を待たずに見つからない扱いにする
+  const isNotFound =
+    !isValidTrialId || (!fetching && !error && data !== undefined && data.trial === null)
 
   // Trial を取得できている場合は Trial 自身の projectId を戻り先にする。
   // URL の :id が実際の所属プロジェクトと食い違っていても正しい一覧へ戻れる。
@@ -88,15 +114,14 @@ const TrialDetailPage = () => {
         */}
         {fetching && !trial && <LoadingSpinner message="読み込み中..." />}
 
+        {/* 表示済みの内容があっても再取得に失敗した場合は、内容を残したまま失敗を知らせる */}
         {!fetching && error && (
           <ErrorState message="試行の取得に失敗しました" onRetry={refetch} />
         )}
 
-        {!fetching && !error && isNotFound && (
-          <ErrorState message="指定された試行が見つかりません" />
-        )}
+        {isNotFound && <ErrorState message="指定された試行が見つかりません" />}
 
-        {!error && trial && (
+        {trial && (
           <div className="flex flex-col gap-6">
             <TrialHeader trial={trial} onChanged={refetch} />
             <StepTimeline steps={trial.steps} trialStatus={trial.status} />

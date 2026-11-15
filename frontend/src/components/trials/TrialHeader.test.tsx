@@ -124,4 +124,41 @@ describe('TrialHeader', () => {
     expect(screen.getByText('完了日時: 2026/01/01 12:00')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '完了にする' })).not.toBeInTheDocument()
   })
+
+  it('完了済みのTrialには編集と完了の操作を出さない', () => {
+    renderHeader(createMockClient({}), buildTrial({ status: 'COMPLETED', completedAt: '2026-01-01T10:00:00+09:00' }))
+
+    expect(screen.queryByRole('button', { name: '編集' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '完了にする' })).not.toBeInTheDocument()
+  })
+
+  it('更新失敗後にキャンセルして開き直すと前回のエラーを表示しない', async () => {
+    const client = createMockClient({
+      UpdateTrial: new MockGraphQLError('名称が重複しています'),
+    })
+    renderHeader(client)
+
+    fireEvent.click(screen.getByRole('button', { name: '編集' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('名称が重複しています')
+
+    fireEvent.click(screen.getByRole('button', { name: 'キャンセル' }))
+    fireEvent.click(screen.getByRole('button', { name: '編集' }))
+
+    expect(screen.queryByText('名称が重複しています')).not.toBeInTheDocument()
+  })
+
+  it('完了に成功した後は再取得を待つ間も完了操作を押せない', async () => {
+    const client = createMockClient({
+      CompleteTrial: { completeTrial: { id: 'trial-1', status: 'COMPLETED', completedAt: '2026-01-01T10:00:00+09:00' } },
+    })
+    const { onChanged } = renderHeader(client)
+
+    fireEvent.click(screen.getByRole('button', { name: '完了にする' }))
+    await waitFor(() => {
+      expect(onChanged).toHaveBeenCalledTimes(1)
+    })
+
+    expect(screen.getByRole('button', { name: '完了にする' })).toBeDisabled()
+  })
 })
