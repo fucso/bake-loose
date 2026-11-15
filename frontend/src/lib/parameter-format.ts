@@ -19,8 +19,9 @@ const DURATION_UNIT_LABELS: Record<DurationUnit, string> = {
 const DURATION_FALLBACK_LABEL = "経過時間"
 const TIME_MARKER_FALLBACK_LABEL = "時間マーカー"
 
+// バックエンドが単位を追加した場合に備え、未知の単位は値をそのまま表示する
 const formatDurationValue = (duration: DurationValue): string =>
-  `${duration.value}${DURATION_UNIT_LABELS[duration.unit]}`
+  `${duration.value}${DURATION_UNIT_LABELS[duration.unit] ?? duration.unit}`
 
 /**
  * 型で網羅しているはずの分岐に未知の値が来た場合のフォールバック。

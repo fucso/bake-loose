@@ -237,7 +237,7 @@ const TrialHeader = ({ trial, onChanged }: TrialHeaderProps) => {
           <>
             {/* 完了に成功した後は、再取得で status が反映されるまでの間も編集させない */}
             {!completeRequested && (
-              <Button variant="outline" size="sm" onClick={startEditing}>
+              <Button variant="outline" size="sm" disabled={completing} onClick={startEditing}>
                 編集
               </Button>
             )}

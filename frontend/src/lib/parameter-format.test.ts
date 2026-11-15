@@ -102,4 +102,14 @@ describe('formatParameter', () => {
     expect(formatParameter(duration)).toEqual({ label: '経過時間', value: '2時間' })
     expect(formatParameter(timeMarker)).toEqual({ label: '時間マーカー', value: '1日時点' })
   })
+
+  it('未知の時間単位はundefinedを出さず単位の値をそのまま表示する', () => {
+    const result = formatParameter({
+      id: 'p',
+      parameterType: 'DURATION',
+      content: { type: 'duration', duration: { value: 2, unit: 'week' }, note: '' },
+    } as never)
+
+    expect(result.value).toBe('2week')
+  })
 })
