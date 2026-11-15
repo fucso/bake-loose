@@ -48,7 +48,7 @@ type CreateTrialSheetProps = {
   projectId: string
   /** シートの開閉状態 */
   open: boolean
-  /** 開閉状態が変化したときのハンドラ（キャンセル・背景クリック・Escキー押下時にも呼ばれる） */
+  /** 開閉状態が変化したときのハンドラ（キャンセル・背景クリック・Escキー押下時にも呼ばれる。作成中は閉じる操作では呼ばれない） */
   onOpenChange: (open: boolean) => void
   /** Trial の作成に成功したときのハンドラ */
   onCreated: () => void
@@ -82,6 +82,10 @@ const CreateTrialSheet = ({
   }
 
   const handleOpenChange = (nextOpen: boolean) => {
+    // 作成中に閉じると失敗時のエラーを表示する先が無くなるため、Escキーや背景クリックでも閉じさせない
+    if (!nextOpen && fetching) {
+      return
+    }
     if (!nextOpen) {
       resetForm()
     }
