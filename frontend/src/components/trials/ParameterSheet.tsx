@@ -143,6 +143,7 @@ const ParameterSheet = ({
     parameter ? toFormState(parameter) : createEmptyFormState()
   )
   const [validationError, setValidationError] = useState<string | null>(null)
+  const [serverErrorVisible, setServerErrorVisible] = useState(false)
 
   const [{ fetching: adding, error: addError }, addParameter] = useMutation<
     AddParameterData,
@@ -162,6 +163,7 @@ const ParameterSheet = ({
     setForm((current) => ({ ...current, [key]: value }))
     // 指摘された項目を直したのにメッセージが残ると、何が未解決か分からなくなるため入力時に消す
     setValidationError(null)
+    setServerErrorVisible(false)
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -173,6 +175,7 @@ const ParameterSheet = ({
       return
     }
     setValidationError(null)
+    setServerErrorVisible(true)
 
     const result = parameter
       ? await updateParameter({
@@ -191,15 +194,25 @@ const ParameterSheet = ({
 
   const errorMessage =
     validationError ??
-    toUserFacingErrorMessage(
-      isEditing ? updateError : addError,
-      isEditing ? "パラメーターの更新に失敗しました" : "パラメーターの追加に失敗しました"
-    )
+    (serverErrorVisible
+      ? toUserFacingErrorMessage(
+          isEditing ? updateError : addError,
+          isEditing ? "パラメーターの更新に失敗しました" : "パラメーターの追加に失敗しました"
+        )
+      : null)
+
+  // 保存中に閉じると結果を見られず、完了後の onOpenChange が別のシートを閉じてしまう
+  const handleOpenChange = (next: boolean) => {
+    if (saving && !next) {
+      return
+    }
+    onOpenChange(next)
+  }
 
   const timeFieldLabel = form.parameterType === "DURATION" ? "時間" : "経過時点"
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogSheetPopup>
         <DialogTitle>
           {isEditing ? "パラメーターを編集" : "パラメーターを追加"}

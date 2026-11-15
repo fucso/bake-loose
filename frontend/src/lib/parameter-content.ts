@@ -135,10 +135,13 @@ const toFormState = (parameter: Parameter): ParameterFormState => {
  *
  * 空文字を `Number` は 0 と解釈するため、未入力と 0 の入力を区別できるよう
  * 数値として解釈できない場合は null を返す。NaN・Infinity も不正な値として扱う。
+ * `Number` は 0x10 や 1e3 も受け付けるが、入力欄は 10 進表記を前提にするため弾く。
  */
+const DECIMAL_PATTERN = /^[+-]?(\d+\.?\d*|\.\d+)$/
+
 const toNumber = (raw: string): number | null => {
   const trimmed = raw.trim()
-  if (trimmed === "") {
+  if (!DECIMAL_PATTERN.test(trimmed)) {
     return null
   }
   const parsed = Number(trimmed)

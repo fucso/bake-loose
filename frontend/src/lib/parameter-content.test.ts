@@ -54,6 +54,9 @@ describe('buildParameterContent', () => {
       ['0', '0'],
       ['負の値', '-1'],
       ['数値でない', 'たくさん'],
+      ['16進表記', '0x10'],
+      ['2進表記', '0b11'],
+      ['指数表記', '1e3'],
     ])('数量が%sの場合はエラーを返す', (_case, amount) => {
       const result = buildParameterContent(
         formWith({ key: '強力粉', valueKind: 'quantity', amount, unit: 'g' }),

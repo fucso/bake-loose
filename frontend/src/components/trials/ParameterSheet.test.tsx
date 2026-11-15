@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { Provider, type Client } from 'urql'
+import { Client, Provider } from 'urql'
 import { describe, expect, it, vi } from 'vitest'
+import { never } from 'wonka'
 
 import { ParameterSheet } from './ParameterSheet'
 import {
@@ -37,6 +38,18 @@ const lastVariables = (operations: RecordedOperation[]) =>
 
 const selectType = (label: string) => {
   fireEvent.click(screen.getByRole('radio', { name: label }))
+}
+
+const createPendingClient = () =>
+  new Client({
+    url: 'http://mock.test/graphql',
+    exchanges: [() => () => never],
+  })
+
+const fillValidQuantity = () => {
+  fireEvent.change(screen.getByLabelText('項目名'), { target: { value: '強力粉' } })
+  fireEvent.change(screen.getByLabelText('数量'), { target: { value: '300' } })
+  fireEvent.change(screen.getByLabelText('単位'), { target: { value: 'g' } })
 }
 
 const save = () => {
@@ -205,6 +218,30 @@ describe('ParameterSheet', () => {
       expect(await screen.findByText('工程は完了済みです')).toBeInTheDocument()
       expect(onSaved).not.toHaveBeenCalled()
       expect(onOpenChange).not.toHaveBeenCalledWith(false)
+    })
+
+    it('入力を直すとサーバーエラーの表示を消す', async () => {
+      renderSheet(createMockClient({ AddParameter: new MockGraphQLError('工程は完了済みです') }))
+
+      fillValidQuantity()
+      save()
+      expect(await screen.findByText('工程は完了済みです')).toBeInTheDocument()
+
+      fireEvent.change(screen.getByLabelText('数量'), { target: { value: '250' } })
+
+      expect(screen.queryByText('工程は完了済みです')).not.toBeInTheDocument()
+    })
+
+    it('保存中は Escape でシートを閉じない', async () => {
+      const { onOpenChange } = renderSheet(createPendingClient())
+
+      fillValidQuantity()
+      save()
+      await waitFor(() => expect(screen.getByRole('button', { name: 'キャンセル' })).toBeDisabled())
+
+      fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+
+      expect(onOpenChange).not.toHaveBeenCalled()
     })
   })
 

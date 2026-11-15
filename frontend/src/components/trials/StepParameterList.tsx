@@ -64,6 +64,7 @@ type StepParameterListProps = {
 const StepParameterList = ({ trialId, step, editable, onChanged }: StepParameterListProps) => {
   const [sheetTarget, setSheetTarget] = useState<SheetTarget | null>(null)
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
+  const [failedRemoveId, setFailedRemoveId] = useState<string | null>(null)
 
   const [{ fetching: removing, error: removeError }, removeParameter] = useMutation<
     RemoveParameterData,
@@ -72,10 +73,17 @@ const StepParameterList = ({ trialId, step, editable, onChanged }: StepParameter
 
   const handleRemove = async (parameterId: string) => {
     const result = await removeParameter({ trialId, stepId: step.id, parameterId })
-    if (!result.error) {
+    if (result.error) {
+      setFailedRemoveId(parameterId)
+    } else {
       setConfirmingId(null)
       onChanged()
     }
+  }
+
+  const startConfirming = (parameterId: string) => {
+    setFailedRemoveId(null)
+    setConfirmingId(parameterId)
   }
 
   const removeErrorMessage = toUserFacingErrorMessage(
@@ -135,7 +143,7 @@ const StepParameterList = ({ trialId, step, editable, onChanged }: StepParameter
           size="icon-xs"
           variant="ghost"
           aria-label={`${name} を削除`}
-          onClick={() => setConfirmingId(parameter.id)}
+          onClick={() => startConfirming(parameter.id)}
         >
           <Trash2 aria-hidden="true" />
         </Button>
@@ -159,8 +167,8 @@ const StepParameterList = ({ trialId, step, editable, onChanged }: StepParameter
         </ul>
       )}
 
-      {/* 削除の確認をやめた時点で用済みになるため、確認中の間だけ出す */}
-      {confirmingId !== null && removeErrorMessage && (
+      {/* 失敗した行の確認中だけ出す。確認をやめた後や別の行の確認には持ち越さない */}
+      {confirmingId !== null && confirmingId === failedRemoveId && removeErrorMessage && (
         <p className="text-sm text-destructive">{removeErrorMessage}</p>
       )}
 

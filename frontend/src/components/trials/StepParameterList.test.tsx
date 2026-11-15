@@ -147,4 +147,20 @@ describe('StepParameterList', () => {
 
     expect(screen.queryByText('試行は完了済みです')).not.toBeInTheDocument()
   })
+
+  it('削除に失敗した行とは別の行の確認にエラーを持ち越さない', async () => {
+    renderList(
+      createMockClient({ RemoveParameter: new MockGraphQLError('試行は完了済みです') }),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '強力粉 を削除' }))
+    fireEvent.click(screen.getByRole('button', { name: '削除' }))
+    expect(await screen.findByText('試行は完了済みです')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'やめる' }))
+
+    fireEvent.click(screen.getByRole('button', { name: '打ち粉を追加 を削除' }))
+
+    expect(screen.getByText('削除しますか？')).toBeInTheDocument()
+    expect(screen.queryByText('試行は完了済みです')).not.toBeInTheDocument()
+  })
 })
