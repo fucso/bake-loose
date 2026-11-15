@@ -20,21 +20,28 @@
 //!
 //! `map_sqlx_error` はこの規約を前提に制約名からエンティティ名・フィールド名を復元する。
 //! 規約から外れた名前を付けてもコンパイルは通るため、エラー分類だけが静かに劣化する点に注意。
+//!
+//! # 接頭辞・接尾辞の定数が `pub` である理由
+//!
+//! 接頭辞・接尾辞の定数は、マイグレーション適用後のスキーマを走査して規約違反を検出する
+//! 統合テスト `backend/tests/schema_naming.rs` から参照される。
+//! 統合テストは本クレートとは別クレートとして扱われるため `pub(crate)` では参照できない。
+//! 規約の値をテスト側に二重定義せず、本モジュールを唯一の定義元に保つための公開である。
 
 /// インデックス名の接頭辞
 ///
 /// 一意性は `CREATE UNIQUE INDEX` で表現するため、
 /// 一意インデックス専用の接頭辞（`uq_` / `unique_` など）は用いない。
-pub(crate) const INDEX_PREFIX: &str = "idx_";
+pub const INDEX_PREFIX: &str = "idx_";
 
 /// 主キー制約名の接尾辞（PostgreSQL のデフォルト）
-pub(crate) const PRIMARY_KEY_SUFFIX: &str = "_pkey";
+pub const PRIMARY_KEY_SUFFIX: &str = "_pkey";
 
 /// 一意制約名の接尾辞（PostgreSQL のデフォルト）
-pub(crate) const UNIQUE_CONSTRAINT_SUFFIX: &str = "_key";
+pub const UNIQUE_CONSTRAINT_SUFFIX: &str = "_key";
 
 /// 外部キー制約名の接尾辞（PostgreSQL のデフォルト）
-pub(crate) const FOREIGN_KEY_SUFFIX: &str = "_fkey";
+pub const FOREIGN_KEY_SUFFIX: &str = "_fkey";
 
 /// 外部キーのカラム名の接尾辞
 ///
