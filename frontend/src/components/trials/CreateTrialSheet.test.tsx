@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { Client, Provider, type Exchange } from 'urql'
-import { map, pipe } from 'wonka'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { useState } from 'react'
+import { Client, CombinedError, Provider, type Exchange } from 'urql'
+import { fromPromise, map, mergeMap, pipe } from 'wonka'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
@@ -37,6 +38,56 @@ const createRecordingClient = (responses: MockQueryResponses, recorded: unknown[
     url: 'http://mock.test/graphql',
     exchanges: [recordExchange, createMockExchange(responses)],
   })
+}
+
+/**
+ * fail() を呼ぶまでレスポンスを保留し、呼ばれた時点で GraphQL エラーを返す Client を生成する。
+ * mutation の送信中に行われたユーザー操作を検証するために使用する。
+ */
+const createPendingFailureClient = (message: string) => {
+  let fail!: () => void
+  const released = new Promise<void>((resolve) => {
+    fail = resolve
+  })
+  const pendingExchange: Exchange = () => (ops$) =>
+    pipe(
+      ops$,
+      mergeMap((operation) =>
+        fromPromise(
+          released.then(() => ({
+            operation,
+            data: undefined,
+            error: new CombinedError({ graphQLErrors: [message] }),
+            extensions: undefined,
+            hasNext: false,
+            stale: false,
+          })),
+        ),
+      ),
+    )
+
+  return {
+    client: new Client({ url: 'http://mock.test/graphql', exchanges: [pendingExchange] }),
+    fail,
+  }
+}
+
+/** 呼び出し元と同様に onOpenChange を open に反映し、開閉を実際に切り替える */
+const StatefulSheet = () => {
+  const [open, setOpen] = useState(true)
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)}>
+        開く
+      </button>
+      <CreateTrialSheet
+        projectId="project-1"
+        open={open}
+        onOpenChange={setOpen}
+        onCreated={() => setOpen(false)}
+      />
+    </>
+  )
 }
 
 const renderSheet = (client: Client, open = true) => {
@@ -127,6 +178,41 @@ describe('CreateTrialSheet', () => {
     setOpen(true)
 
     expect(await screen.findByRole('button', { name: '作成' })).toBeInTheDocument()
+    expect(
+      screen.queryByText('指定されたプロジェクトが見つかりません'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('作成中にEscキーを押してもシートは閉じず、失敗時のエラーをシート内に表示する', async () => {
+    const { client, fail } = createPendingFailureClient('指定されたプロジェクトが見つかりません')
+    render(
+      <Provider value={client}>
+        <StatefulSheet />
+      </Provider>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '作成' }))
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '作成' })).toBeDisabled()
+    })
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+
+    await act(async () => {
+      fail()
+    })
+
+    expect(
+      await screen.findByText('指定されたプロジェクトが見つかりません'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'キャンセル' }))
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByRole('button', { name: '開く' }))
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
     expect(
       screen.queryByText('指定されたプロジェクトが見つかりません'),
     ).not.toBeInTheDocument()
