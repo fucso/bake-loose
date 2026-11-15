@@ -269,6 +269,20 @@ find より深い scope で save すると、find していない（＝集約上
 save は `write_scope` のまま行うため、現在の実装ではこの不変条件は構造的に満たされている。
 scope の組み立てを変更する際はこの関係を崩さないこと。
 
+**保証の範囲（同時書き込みは対象外）**
+
+この保証は「1 リクエスト内で find した scope 以下で save する」ことだけを担保する。
+use case は find をトランザクション開始（`uow.begin()`）の前に行い、行ロックもバージョン
+チェックも持たないため、find と save の間に別リクエストが commit した変更は防げない。
+
+- `WithSteps` 以上の save: find 後に別リクエストが追加した Step が洗い替えの差分削除で
+  消える（その Step の Parameter も cascade で消える）
+- 全 scope の save: Trial 本体の upsert が `status` 等を find 時点の値で上書きする
+
+どちらも scope 導入前から存在する lost update で、scope 段階化では解消しない。
+解消するには find をトランザクション内に移して `SELECT ... FOR UPDATE` で Trial 行を
+ロックするか、楽観ロック（version 列）を導入する。
+
 ## スキーマ命名規約
 
 DB のスキーマ名はプロジェクトのルールとして以下に統一する。PostgreSQL がデフォルトで付与する名前は
