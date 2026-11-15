@@ -76,7 +76,7 @@ const StepParameterList = ({ trialId, step, editable, onChanged }: StepParameter
     if (result.error) {
       setFailedRemoveId(parameterId)
     } else {
-      setConfirmingId((current) => (current === parameterId ? null : current))
+      setConfirmingId(null)
       onChanged()
     }
   }
@@ -143,6 +143,7 @@ const StepParameterList = ({ trialId, step, editable, onChanged }: StepParameter
           size="icon-xs"
           variant="ghost"
           aria-label={`${name} を削除`}
+          disabled={removing}
           onClick={() => startConfirming(parameter.id)}
         >
           <Trash2 aria-hidden="true" />

@@ -170,7 +170,7 @@ describe('StepParameterList', () => {
     expect(screen.queryByText('試行は完了済みです')).not.toBeInTheDocument()
   })
 
-  it('削除の完了を待つ間に開いた別の行の確認は、完了しても閉じない', async () => {
+  it('削除の完了を待つ間は別の行の削除確認を開けない', async () => {
     const responses = { RemoveParameter: { removeParameter: { id: 'step-1' } } }
     const delayedClient = new Client({
       url: 'http://mock.test/graphql',
@@ -180,9 +180,11 @@ describe('StepParameterList', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '強力粉 を削除' }))
     fireEvent.click(screen.getByRole('button', { name: '削除' }))
-    fireEvent.click(screen.getByRole('button', { name: '打ち粉を追加 を削除' }))
 
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '打ち粉を追加 を削除' })).toBeDisabled(),
+    )
     await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1))
-    expect(screen.getByText('削除しますか？')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '打ち粉を追加 を削除' })).toBeEnabled()
   })
 })
