@@ -195,7 +195,7 @@ GraphQL エラー変換では、実際に発生しうる variant を明示的に
 の `unexpected_domain_error`）。
 
 ただしドメインに Action が1つしかなく、その Action が domain error の全 variant を返しうる場合は
-「残り」が存在しないため、フォールバックアームを置くと `unreachable_patterns` でコンパイルが通らない。
+「残り」が存在しないため、フォールバックアームを置くと `unreachable_patterns` 警告になり、CI の `cargo clippy -- -D warnings` が失敗する。
 この場合は全 variant を明示ハンドリングするに留め、返し得ない variant が増えた時点で
 フォールバックアームを追加する（実例は `presentation/graphql/error/project.rs`）。
 
