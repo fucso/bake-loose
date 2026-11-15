@@ -34,6 +34,10 @@ Trial 自体の編集・完了を行う画面。Trial 機能の中心となる�
 | Parameter の編集 | `updateParameter(trialId, stepId, parameterId, content)` |
 | Parameter の削除 | `removeParameter(trialId, stepId, parameterId)` |
 
+完了済み（`COMPLETED`）の Trial はバックエンドが更新を拒否するため、「編集」「完了にする」は表示しない。
+操作の失敗メッセージは `role="alert"` で通知し、編集をキャンセルして開き直したときは前回のエラーを持ち越さない。
+更新・完了の二重送信は防ぐ（完了に成功したら再取得で status が変わるまで完了操作を無効にする）。
+
 Step 自体の記録操作（追加・編集・完了）は本画面のスコープ外で、
 このワークベンチの骨格の上に別途実装する。
 
@@ -67,7 +71,8 @@ Step カードの中で、配下の Parameter を追加・編集・削除でき�
 |------|------|
 | 取得中 | `LoadingSpinner` |
 | 取得失敗 | `ErrorState`（再試行ボタンあり） |
-| `trial(id)` が null / `trialId` 不在 | `ErrorState`「指定された試行が見つかりません」 |
+| `trial(id)` が null / `trialId` が UUID 形式でない | `ErrorState`「指定された試行が見つかりません」（UUID でない場合はクエリを送らない） |
+| 再取得の失敗（表示済みの内容がある） | `ErrorState`（再試行ボタンあり）を出しつつ、直近に取得した内容と工程カードの開閉状態は残す |
 | Step が 0 件 | `EmptyState`「まだ工程が記録されていません」 |
 
 ## アーキテクチャ設計・実装方針

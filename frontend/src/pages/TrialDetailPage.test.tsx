@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Kind, type OperationDefinitionNode } from 'graphql'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { Client, Provider, type Exchange } from 'urql'
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
+import { Client, CombinedError, Provider, type Exchange } from 'urql'
 import { describe, expect, it } from 'vitest'
 import { delay, map, pipe } from 'wonka'
 
@@ -12,9 +12,12 @@ import {
   type MockQueryResponses,
 } from '../../test/mocks/urql'
 
+const TRIAL_ID = '11111111-1111-4111-8111-111111111111'
+const OTHER_TRIAL_ID = '22222222-2222-4222-8222-222222222222'
+
 const trialResponse = {
   trial: {
-    id: 'trial-1',
+    id: TRIAL_ID,
     projectId: 'project-1',
     name: '加水率70%',
     memo: '室温24度',
@@ -92,7 +95,7 @@ const createDelayedClient = (responses: Record<string, unknown>) => {
 const renderPage = (
   client: ReturnType<typeof createMockClient>,
   projectId = 'project-1',
-  trialId = 'trial-1',
+  trialId = TRIAL_ID,
 ) =>
   render(
     <Provider value={client}>
@@ -168,7 +171,7 @@ describe('TrialDetailPage', () => {
   it('Trialの更新後の再取得で内容を表示し続け、工程カードの開閉状態を維持する', async () => {
     const client = createDelayedClient({
       Trial: trialResponse,
-      UpdateTrial: { updateTrial: { id: 'trial-1', name: '加水率70%', memo: '室温24度' } },
+      UpdateTrial: { updateTrial: { id: TRIAL_ID, name: '加水率70%', memo: '室温24度' } },
     })
     renderPage(client)
 
@@ -192,6 +195,173 @@ describe('TrialDetailPage', () => {
     })
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
     expect(screen.getByText('300g')).toBeVisible()
+  })
+
+  it('UUIDでないtrialIdの場合はクエリを送らず見つからない状態を表示する', () => {
+    renderPage(createMockClient({ Trial: new MockGraphQLError('Invalid UUID format') }), 'project-1', 'abc')
+
+    expect(screen.getByText('指定された試行が見つかりません')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '再試行' })).not.toBeInTheDocument()
+  })
+
+  it('保存後の再取得に失敗しても内容と工程カードの開閉状態を残し、再試行で復帰する', async () => {
+    let refetchCalls = 0
+    const exchange: Exchange = () => (ops$) =>
+      pipe(
+        ops$,
+        map((operation) => {
+          const definition = operation.query.definitions.find(
+            (def): def is OperationDefinitionNode => def.kind === Kind.OPERATION_DEFINITION,
+          )
+          const name = definition?.name?.value ?? ''
+          if (name === 'Trial') {
+            // 保存後の再取得（network-only）の1回目だけ失敗させ、再試行は成功させる
+            if (operation.context.requestPolicy === 'network-only') {
+              refetchCalls += 1
+            }
+            if (refetchCalls === 1) {
+              return {
+                operation,
+                error: new CombinedError({ networkError: new Error('offline') }),
+                data: undefined,
+                stale: false,
+                hasNext: false,
+              }
+            }
+            return { operation, data: trialResponse, stale: false, hasNext: false }
+          }
+          return {
+            operation,
+            data: { updateTrial: { id: TRIAL_ID, name: '加水率70%', memo: '室温24度' } },
+            stale: false,
+            hasNext: false,
+          }
+        }),
+        delay(0),
+      )
+    renderPage(new Client({ url: 'http://localhost/graphql', exchanges: [exchange] }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: '加水率70%' })).toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByRole('button', { name: /こね/ }))
+    fireEvent.click(screen.getByRole('button', { name: '編集' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+
+    expect(await screen.findByText('試行の取得に失敗しました')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '加水率70%' })).toBeInTheDocument()
+    expect(screen.getByText('300g')).toBeVisible()
+
+    fireEvent.click(screen.getByRole('button', { name: '再試行' }))
+    await waitFor(() => {
+      expect(screen.queryByText('試行の取得に失敗しました')).not.toBeInTheDocument()
+    })
+    expect(screen.getByText('300g')).toBeVisible()
+  })
+
+  it('別のtrialIdへ遷移した直後は前のTrialを表示せずスピナーを出す', async () => {
+    const exchange: Exchange = () => (ops$) =>
+      pipe(
+        ops$,
+        map((operation) => {
+          const id = (operation.variables as { id: string }).id
+          return {
+            operation,
+            data: { trial: { ...trialResponse.trial, id, name: id === TRIAL_ID ? '試行A' : '試行B' } },
+            stale: false,
+            hasNext: false,
+          }
+        }),
+        delay(10),
+      )
+    const GoToOther = () => {
+      const navigate = useNavigate()
+      return (
+        <button type="button" onClick={() => navigate(`/projects/project-1/trials/${OTHER_TRIAL_ID}`)}>
+          別の試行へ
+        </button>
+      )
+    }
+    render(
+      <Provider value={new Client({ url: 'http://mock.test/graphql', exchanges: [exchange] })}>
+        <MemoryRouter initialEntries={[`/projects/project-1/trials/${TRIAL_ID}`]}>
+          <GoToOther />
+          <Routes>
+            <Route path="/projects/:id/trials/:trialId" element={<TrialDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>,
+    )
+
+    expect(await screen.findByRole('heading', { name: '試行A' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '別の試行へ' }))
+
+    expect(screen.queryByRole('heading', { name: '試行A' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '試行B' })).toBeInTheDocument()
+  })
+
+  it('編集中に別のTrialへ遷移しても編集フォームを持ち越さない', async () => {
+    // 遅延のない（キャッシュ済み相当の）クライアント。ローディングを挟まず遷移する
+    const exchange: Exchange = () => (ops$) =>
+      pipe(
+        ops$,
+        map((operation) => {
+          const id = (operation.variables as { id: string }).id
+          return {
+            operation,
+            data: { trial: { ...trialResponse.trial, id, name: id === TRIAL_ID ? '試行A' : '試行B' } },
+            stale: false,
+            hasNext: false,
+          }
+        }),
+      )
+    const GoToOther = () => {
+      const navigate = useNavigate()
+      return (
+        <button type="button" onClick={() => navigate(`/projects/project-1/trials/${OTHER_TRIAL_ID}`)}>
+          別の試行へ
+        </button>
+      )
+    }
+    render(
+      <Provider value={new Client({ url: 'http://mock.test/graphql', exchanges: [exchange] })}>
+        <MemoryRouter initialEntries={[`/projects/project-1/trials/${TRIAL_ID}`]}>
+          <GoToOther />
+          <Routes>
+            <Route path="/projects/:id/trials/:trialId" element={<TrialDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>,
+    )
+
+    await screen.findByRole('heading', { name: '試行A' })
+    fireEvent.click(screen.getByRole('button', { name: '編集' }))
+    fireEvent.click(screen.getByRole('button', { name: '別の試行へ' }))
+
+    expect(await screen.findByRole('heading', { name: '試行B' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '保存' })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['ハイフンなし', TRIAL_ID.replace(/-/g, '')],
+    ['波括弧', `{${TRIAL_ID}}`],
+    ['urn形式', `urn:uuid:${TRIAL_ID}`],
+    ['大文字', TRIAL_ID.toUpperCase()],
+  ])('バックエンドが受け付ける%sのtrialIdでもTrialを表示する', async (_label, trialId) => {
+    renderPage(createMockClient({ Trial: trialResponse }), 'project-1', trialId)
+
+    expect(await screen.findByRole('heading', { name: '加水率70%' })).toBeInTheDocument()
+  })
+
+  it.each([
+    ['ハイフンの位置が不正', '1111-11111111-4111-8111-111111111111'],
+    ['urn接頭辞が大文字', `URN:UUID:${TRIAL_ID}`],
+    ['urnと波括弧の併用', `urn:uuid:{${TRIAL_ID}}`],
+    ['波括弧つきハイフンなし', `{${TRIAL_ID.replace(/-/g, '')}}`],
+  ])('バックエンドが拒否する表記（%s）は見つからない扱いにする', (_label, trialId) => {
+    renderPage(createMockClient({ Trial: trialResponse }), 'project-1', trialId)
+
+    expect(screen.getByText('指定された試行が見つかりません')).toBeInTheDocument()
   })
 
   it('記録中の工程にパラメーターを追加すると再取得してタイムラインに反映する', async () => {
