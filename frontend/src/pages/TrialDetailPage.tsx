@@ -43,7 +43,20 @@ const TRIAL_QUERY = `
   }
 `
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+/**
+ * URL の trialId をバックエンドが返す正規形（小文字・ハイフン区切り）へそろえる。
+ *
+ * バックエンドの UUID パースはハイフンなし・波括弧・`urn:uuid:` 形式も受け付けるため、
+ * それらも同じ Trial として扱う。UUID として解釈できない値は null を返す。
+ */
+const normalizeTrialId = (raw: string | undefined): string | null => {
+  const hex = raw?.replace(/^urn:uuid:/i, "").replace(/^\{(.*)\}$/, "$1").replace(/-/g, "")
+  if (!hex || !/^[0-9a-f]{32}$/i.test(hex)) {
+    return null
+  }
+  const h = hex.toLowerCase()
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`
+}
 
 /**
  * Trial 詳細（記録ワークベンチ）。
@@ -55,14 +68,15 @@ const TrialDetailPage = () => {
   const { id, trialId } = useParams<{ id: string; trialId: string }>()
   // URL は手で書き換えられる。UUID でない値はバックエンドが GraphQL エラーを返すだけで
   // 再試行しても成功しないため、クエリを送らず「見つからない」として扱う
-  const isValidTrialId = trialId !== undefined && UUID_PATTERN.test(trialId)
+  const normalizedTrialId = normalizeTrialId(trialId)
+  const isValidTrialId = normalizedTrialId !== null
 
   const [{ data, fetching, error }, reexecuteQuery] = useQuery<
     TrialQueryData,
     TrialQueryVariables
   >({
     query: TRIAL_QUERY,
-    variables: { id: trialId ?? "" },
+    variables: { id: normalizedTrialId ?? "" },
     pause: !isValidTrialId,
   })
 
@@ -73,7 +87,7 @@ const TrialDetailPage = () => {
   // 別の Trial の URL へ遷移した直後は前の Trial のデータが残るため、表示対象の ID と
   // 一致するものだけを使う。一致しない間は初回取得と同じくスピナーを出す
   const isCurrentTrial = (candidate: Trial | null | undefined): candidate is Trial =>
-    candidate?.id.toLowerCase() === trialId?.toLowerCase()
+    candidate?.id.toLowerCase() === normalizedTrialId
 
   // urql はエラー結果を受け取ると data を空にする。再取得に失敗しても表示済みの内容と
   // 工程カードの開閉状態を保てるよう、直近に取得できた Trial を保持しておく

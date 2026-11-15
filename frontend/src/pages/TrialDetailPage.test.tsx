@@ -337,4 +337,15 @@ describe('TrialDetailPage', () => {
     expect(await screen.findByRole('heading', { name: '試行B' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '保存' })).not.toBeInTheDocument()
   })
+
+  it.each([
+    ['ハイフンなし', TRIAL_ID.replace(/-/g, '')],
+    ['波括弧', `{${TRIAL_ID}}`],
+    ['urn形式', `urn:uuid:${TRIAL_ID}`],
+    ['大文字', TRIAL_ID.toUpperCase()],
+  ])('バックエンドが受け付ける%sのtrialIdでもTrialを表示する', async (_label, trialId) => {
+    renderPage(createMockClient({ Trial: trialResponse }), 'project-1', trialId)
+
+    expect(await screen.findByRole('heading', { name: '加水率70%' })).toBeInTheDocument()
+  })
 })
