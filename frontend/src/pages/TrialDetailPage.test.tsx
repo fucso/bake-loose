@@ -6,7 +6,11 @@ import { describe, expect, it } from 'vitest'
 import { delay, map, pipe } from 'wonka'
 
 import TrialDetailPage from './TrialDetailPage'
-import { createMockClient, MockGraphQLError } from '../../test/mocks/urql'
+import {
+  createMockClient,
+  MockGraphQLError,
+  type MockQueryResponses,
+} from '../../test/mocks/urql'
 
 const TRIAL_ID = '11111111-1111-4111-8111-111111111111'
 const OTHER_TRIAL_ID = '22222222-2222-4222-8222-222222222222'
@@ -358,5 +362,53 @@ describe('TrialDetailPage', () => {
     renderPage(createMockClient({ Trial: trialResponse }), 'project-1', trialId)
 
     expect(screen.getByText('指定された試行が見つかりません')).toBeInTheDocument()
+  })
+
+  it('記録中の工程にパラメーターを追加すると再取得してタイムラインに反映する', async () => {
+    // 再取得で返す内容を後から差し替えられるよう、レスポンスは同じオブジェクトを使い回す
+    const responses: MockQueryResponses = {
+      Trial: trialResponse,
+      AddParameter: { addParameter: { id: 'param-3' } },
+    }
+    renderPage(createMockClient(responses))
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: '加水率70%' })).toBeInTheDocument()
+    })
+
+    // 記録中の工程（一次発酵）にだけ追加操作が出る
+    fireEvent.click(screen.getByRole('button', { name: 'パラメーター追加' }))
+    fireEvent.change(screen.getByLabelText('項目名'), { target: { value: '水' } })
+    fireEvent.change(screen.getByLabelText('数量'), { target: { value: '210' } })
+    fireEvent.change(screen.getByLabelText('単位'), { target: { value: 'g' } })
+
+    const [inProgressStep, completedStep] = trialResponse.trial.steps
+    responses.Trial = {
+      trial: {
+        ...trialResponse.trial,
+        steps: [
+          {
+            ...inProgressStep,
+            parameters: [
+              ...inProgressStep.parameters,
+              {
+                id: 'param-3',
+                parameterType: 'KEY_VALUE',
+                content: {
+                  type: 'key_value',
+                  key: '水',
+                  value: { type: 'quantity', amount: 210, unit: 'g' },
+                },
+              },
+            ],
+          },
+          completedStep,
+        ],
+      },
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+
+    expect(await screen.findByText('210g')).toBeVisible()
   })
 })

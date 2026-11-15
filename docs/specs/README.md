@@ -9,4 +9,4 @@
 
 | ドキュメント | 概要 | 関連 Issue |
 |-------------|------|-----------|
-| [trial-workbench.md](trial-workbench.md) | Trial 詳細（記録ワークベンチ）画面の情報設計と仕様 | #83 |
+| [trial-workbench.md](trial-workbench.md) | Trial 詳細（記録ワークベンチ）画面の情報設計と仕様 | #83, #85 |

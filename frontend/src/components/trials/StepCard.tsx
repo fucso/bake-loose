@@ -1,12 +1,14 @@
 import { ChevronDown } from "lucide-react"
 import { useState } from "react"
 
-import { ParameterItem } from "@/components/trials/ParameterItem"
+import { StepParameterList } from "@/components/trials/StepParameterList"
 import { formatDateTime } from "@/lib/datetime"
 import type { Step } from "@/lib/trial"
 import { cn } from "@/lib/utils"
 
 type StepCardProps = {
+  /** 対象の Trial ID */
+  trialId: string
   /** 表示する工程 */
   step: Step
   /** 記録中の工程（position 順で最初の未完了工程）かどうか */
@@ -16,6 +18,10 @@ type StepCardProps = {
    * 以降の開閉はユーザー操作を優先するため、この値の変化では同期しない。
    */
   defaultExpanded: boolean
+  /** この工程にパラメーターを記録できるか */
+  editable: boolean
+  /** パラメーターの記録操作に成功したときのハンドラ */
+  onChanged: () => void
 }
 
 /**
@@ -36,7 +42,14 @@ const stepStateLabel = (step: Step, isCurrent: boolean): string => {
  * 1画面に全工程が並ぶため、本文（パラメーター）は折りたたみ可能にし、
  * 折りたたみ時もヘッダだけで進捗を把握できるようサマリーを常に表示する。
  */
-const StepCard = ({ step, isCurrent, defaultExpanded }: StepCardProps) => {
+const StepCard = ({
+  trialId,
+  step,
+  isCurrent,
+  defaultExpanded,
+  editable,
+  onChanged,
+}: StepCardProps) => {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
   const contentId = `step-parameters-${step.id}`
 
@@ -84,15 +97,12 @@ const StepCard = ({ step, isCurrent, defaultExpanded }: StepCardProps) => {
       </button>
 
       <div id={contentId} hidden={!isExpanded} className="border-t border-border px-4 py-3 pl-13">
-        {step.parameters.length === 0 ? (
-          <p className="text-sm text-muted-foreground">パラメーターは記録されていません</p>
-        ) : (
-          <ul>
-            {step.parameters.map((parameter) => (
-              <ParameterItem key={parameter.id} parameter={parameter} />
-            ))}
-          </ul>
-        )}
+        <StepParameterList
+          trialId={trialId}
+          step={step}
+          editable={editable}
+          onChanged={onChanged}
+        />
       </div>
     </div>
   )

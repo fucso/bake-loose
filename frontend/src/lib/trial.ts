@@ -64,6 +64,16 @@ type Parameter =
   | { id: string; parameterType: "TIME_MARKER"; content: TimeMarkerContent }
   | { id: string; parameterType: "TEXT"; content: TextContent }
 
+/** Parameter の種別 */
+type ParameterType = Parameter["parameterType"]
+
+/**
+ * Parameter の内容。
+ *
+ * 記録操作の mutation（`addParameter` / `updateParameter`）に JSON スカラーとして渡す値でもある。
+ */
+type ParameterContent = KeyValueContent | DurationContent | TimeMarkerContent | TextContent
+
 /** Trial 内の工程 */
 type Step = {
   id: string
@@ -87,4 +97,14 @@ type Trial = {
   steps: Step[]
 }
 
-export type { DurationUnit, DurationValue, Parameter, ParameterValue, Step, Trial, TrialStatus }
+export type {
+  DurationUnit,
+  DurationValue,
+  Parameter,
+  ParameterContent,
+  ParameterType,
+  ParameterValue,
+  Step,
+  Trial,
+  TrialStatus,
+}

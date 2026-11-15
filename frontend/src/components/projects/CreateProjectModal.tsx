@@ -3,6 +3,7 @@ import { useMutation } from "urql"
 
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogPopup, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { toUserFacingErrorMessage } from "@/lib/graphql-error"
 import { cn } from "@/lib/utils"
 
@@ -84,12 +85,11 @@ const CreateProjectModal = ({ open, onOpenChange, onCreated }: CreateProjectModa
         <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-3">
           <label className="flex flex-col gap-1 text-sm">
             <span>プロジェクト名</span>
-            <input
+            <Input
               autoFocus
               value={name}
               onChange={(event) => setName(event.target.value)}
               disabled={fetching}
-              className="rounded-md border border-input bg-background px-3 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
             />
           </label>
           {errorMessage && <p className="text-sm text-destructive">{errorMessage}</p>}

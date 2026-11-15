@@ -1,6 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
+import { fn } from 'storybook/test'
+import { Provider } from 'urql'
 
 import { StepTimeline } from './StepTimeline'
+import { createMockClient } from '../../../test/mocks/urql'
 import type { Step } from '@/lib/trial'
 
 const steps: Step[] = [
@@ -57,9 +60,18 @@ const meta = {
   },
   tags: ['autodocs'],
   args: {
+    trialId: 'trial-1',
     steps,
     trialStatus: 'IN_PROGRESS',
+    onChanged: fn(),
   },
+  decorators: [
+    (Story) => (
+      <Provider value={createMockClient({})}>
+        <Story />
+      </Provider>
+    ),
+  ],
 } satisfies Meta<typeof StepTimeline>
 
 export default meta
